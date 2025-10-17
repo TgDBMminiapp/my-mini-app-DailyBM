@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DailyBookimix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#ff4500">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script> <!-- Интеграция Telegram Mini App -->
+    <style>
+        html, body {
+            height: 100%;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            box-sizing: border-box;
+            background: linear-gradient(135deg, #ff4500 0%, #ff6b35 25%, #f7931e 50%, #ff8c42 75%, #ff5722 100%);
+            background-size: cover;
+            background-attachment: fixed;
+        }
+        
+        .glass-effect {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .note-card {
+            transition: all 0.3s ease;
+            transform: translateY(0);
+        }
+        
+        .note-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .security-badge {
+            background: linear-gradient(45deg, #10b981, #059669);
+        }
+        
+        .tab-button {
+            background: rgba(0, 0, 0, 0.3);
+            flex: 1 1 0;
+            min-width: 0;
+        }
+        
+        .tab-button.active {
+            background: rgba(255, 255, 255, 0.9);
+            color: #1f2937;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 16px;
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .status-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            color: white;
+            font-size: 12px;
+            z-index: 100;
+            background-color: green;
+        }
+
+        @media (max-width: 640px) {
+            .header-buttons {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .grid-cols-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            animation: fadeIn 0.3s;
+        }
+
+        .notification.success {
+            background-color: #4caf50;
+        }
+
+        .notification.error {
+            background-color: #f44336;
+        }
+
+        .notification.info {
+            background-color: #2196f3;
+        }
+    </style>
+</head>
+<body class="font-sans">
+    <div id="statusIndicator" class="status-indicator">Готово</div>
+    <div class="min-h-screen p-4 flex flex-col">
+        <!-- Header -->
+        <header class="glass-effect rounded-2xl p-6 mb-6 fade-in">
+            <div class="flex items-center justify-between flex-wrap">
+                <div class="flex items-center space-x-3 mb-4 sm:mb-0">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">DailyBookimix</h1>
+                        <p class="text-orange-100 text-sm">Защищённый ежедневник</p>
+                    </div>
+                </div>
+                <div class="security-badge px-4 py-2 rounded-full mb-4 sm:mb-0">
+                    <span class="text-white text-sm font-medium flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        Облачно
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="glass-effect rounded-2xl p-2 mb-6 fade-in">
+            <div class="flex space-x-2">
+                <button id="notesTab" class="tab-button active py-3 px-4 rounded-xl text-white font-medium transition-all duration-200">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    Записи
+                </button>
+                <button id="habitsTab" class="tab-button py-3 px-4 rounded-xl text-purple-200 font-medium transition-all duration-200">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Привычки
+                </button>
+                <button id="memoryTab" class="tab-button py-3 px-4 rounded-xl text-purple-200 font-medium transition-all duration-200">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                    </svg>
+                    Архив
+                </button>
+            </div>
+        </div>
+
+        <!-- Notes Section -->
+        <div id="notesSection" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Add Note Form -->
+            <div class="md:col-span-1">
+                <div class="glass-effect rounded-2xl p-6 fade-in">
+                    <h2 class="text-xl font-semibold text-white mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Новая запись
+                    </h2>
+                    
+                    <form id="noteForm" class="space-y-4">
+                        <div>
+                            <label class="block text-purple-100 text-sm font-medium mb-2">Заголовок</label>
+                            <input type="text" id="noteTitle" required 
+                                   class="w-full px-4 py-3 bg-white/90 border border-white/50 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-purple-100 text-sm font-medium mb-2">Категория</label>
+                            <select id="noteCategory" 
+                                    class="w-full px-4 py-3 bg-white/90 border border-white/50 rounded-xl text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+                                <option value="personal">Личное</option>
+                                <option value="work">Работа</option>
+                                <option value="ideas">Идеи</option>
+                                <option value="tasks">Задачи</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-purple-100 text-sm font-medium mb-2">Содержание</label>
+                            <textarea id="noteContent" required rows="4"
+                                      class="w-full px-4 py-3 bg-white/90 border border-white/50 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-y">
+                            </textarea>
+                        </div>
+                        
+                        <button type="submit" 
+                                class="w-full bg-white text-orange-600 font-semibold py-3 px-6 rounded-xl hover:bg-orange-50 transition-colors duration-200 flex items-center justify-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Сохранить
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Notes List -->
+            <div class="md:col-span-2">
+                <div class="glass-effect rounded-2xl p-6 fade-in">
+                    <div class="flex items-center justify-between mb-6 flex-wrap">
+                        <h2 class="text-xl font-semibold text-white flex items-center mb-4 sm:mb-0">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                            </svg>
+                            Мои записи
+                        </h2>
+                        
+                        <div class="flex space-x-2">
+                            <input type="text" id="notesSearch" class="px-3 py-2 bg-white/90 border border-white/50 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="Поиск..." style="width: 150px;">
+                            <select id="filterCategory" 
+                                    class="px-3 py-2 bg-white/90 border border-white/50 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                <option value="all">Все</option>
+                                <option value="personal">Личное</option>
+                                <option value="work">Работа</option>
+                                <option value="ideas">Идеи</option>
+                                <option value="tasks">Задачи</option>
+                            </select>
+                            
+                            <button id="clearAll" 
+                                    class="px-4 py-2 bg-red-500/80 text-white rounded-lg hover:bg-red-600/80 transition-colors duration-200 text-sm">
+                                Очистить
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="notesList" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                        <div id="emptyState" class="text-center py-12">
+                            <svg class="w-16 h-16 text-purple-200 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <p class="text-purple-200 text-lg">Нет записей</p>
+                            <p class="text-purple-300 text-sm mt-2">Создайте первую</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Habits Section -->
+        <div id="habitsSection" class="grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
+            <div class="md:col-span-1">
+                <div class="glass-effect rounded-2xl p-6 fade-in">
+                    <h2 class="text-xl font-semibold text-white mb-4">Новая привычка</h2>
+                    <form id="habitForm" class="space-y-4">
+                        <input type="text" id="habitName" required placeholder="Название" class="w-full px-4 py-3 bg-white/90 rounded-xl">
+                        <input type="date" id="habitStartDate" required class="w-full px-4 py-3 bg-white/90 rounded-xl">
+                        <input type="number" id="habitGoal" min="1" value="30" required placeholder="Цель (дней)" class="w-full px-4 py-3 bg-white/90 rounded-xl">
+                        <textarea id="habitDescription" rows="3" placeholder="Описание" class="w-full px-4 py-3 bg-white/90 rounded-xl"></textarea>
+                        <button type="submit" class="w-full bg-white text-orange-600 font-semibold py-3 px-6 rounded-xl">Начать</button>
+                    </form>
+                </div>
+            </div>
+            <div class="md:col-span-2">
+                <div class="glass-effect rounded-2xl p-6 fade-in">
+                    <h2 class="text-xl font-semibold text-white mb-6">Мои привычки</h2>
+                    <div id="habitsList" class="space-y-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory Section -->
+        <div id="memorySection" class="grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
+            <div class="md:col-span-1">
+                <div class="glass-effect rounded-2xl p-6 fade-in">
+                    <h2 class="text-xl font-semibold text-white mb-4">Новое воспоминание</h2>
+                    <form id="memoryForm" class="space-y-4">
+                        <input type="text" id="memoryTitle" required placeholder="Название" class="w-full px-4 py-3 bg-white/90 rounded-xl">
+                        <select id="memoryType" class="w-full px-4 py-3 bg-white/90 rounded-xl">
+                            <option value="book">📚 Книга</option>
+                            <option value="movie">🎬 Фильм</option>
+                            <option value="series">📺 Сериал</option>
+                            <option value="game">🎮 Игра</option>
+                        </select>
+                        <input type="date" id="memoryStartDate" required class="w-full px-4 py-3 bg-white/90 rounded-xl">
+                        <textarea id="memoryNotes" rows="4" placeholder="Заметки" class="w-full px-4 py-3 bg-white/90 rounded-xl"></textarea>
+                        <button type="submit" class="w-full bg-white text-orange-600 font-semibold py-3 px-6 rounded-xl">Сохранить</button>
+                    </form>
+                </div>
+            </div>
+            <div class="md:col-span-2">
+                <div class="glass-effect rounded-2xl p-6 fade-in">
+                    <h2 class="text-xl font-semibold text-white mb-6">Архив воспоминаний</h2>
+                    <div id="memoriesList" class="space-y-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-auto glass-effect rounded-2xl p-4 fade-in">
+            <div class="flex flex-wrap justify-center space-x-4 text-purple-100 text-sm">
+                <span>📊 Записей: <span id="notesCount">0</span></span>
+                <span>⏰ Привычек: <span id="habitsCount">0</span></span>
+                <span>📖 Воспоминаний: <span id="memoriesCount">0</span></span>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Обёртки для CloudStorage (callback to promise)
+        function cloudSetItem(key, value) {
+            return new Promise((resolve, reject) => {
+                Telegram.WebApp.CloudStorage.setItem(key, value, (err, success) => {
+                    if (err) reject(err);
+                    else resolve(success);
+                });
+            });
+        }
+
+        function cloudGetItem(key) {
+            return new Promise((resolve, reject) => {
+                Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
+                    if (err) reject(err);
+                    else resolve(value || null);
+                });
+            });
+        }
+
+        function cloudGetItems(keys) {
+            return new Promise((resolve, reject) => {
+                Telegram.WebApp.CloudStorage.getItems(keys, (err, values) => {
+                    if (err) reject(err);
+                    else resolve(values || {});
+                });
+            });
+        }
+
+        function cloudRemoveItem(key) {
+            return new Promise((resolve, reject) => {
+                Telegram.WebApp.CloudStorage.removeItem(key, (err, success) => {
+                    if (err) reject(err);
+                    else resolve(success);
+                });
+            });
+        }
+
+        // Cloud-based storage
+        const CloudStorageManager = {
+            async get(key, defaultValue) {
+                try {
+                    const value = await cloudGetItem(key);
+                    return value !== null ? value : defaultValue;
+                } catch (e) {
+                    console.error('Cloud get error:', e);
+                    return defaultValue;
+                }
+            },
+
+            async set(key, value) {
+                try {
+                    await cloudSetItem(key, value);
+                    return true;
+                } catch (e) {
+                    console.error('Cloud set error:', e);
+                    return false;
+                }
+            }
+        };
+
+        class SimpleDiary {
+            constructor() {
+                this.notes = [];
+                this.habits = [];
+                this.memories = [];
+                this.currentTab = 'notes';
+            }
+
+            async loadAll() {
+                try {
+                    const data = await cloudGetItems(['notes', 'habits', 'memories']);
+                    this.notes = JSON.parse(data.notes || '[]');
+                    this.habits = JSON.parse(data.habits || '[]');
+                    this.memories = JSON.parse(data.memories || '[]');
+                    
+                    this.renderNotes();
+                    this.renderHabits();
+                    this.renderMemories();
+                    this.updateCounts();
+                } catch (e) {
+                    console.error('Load error:', e);
+                }
+            }
+
+            async saveNotes() {
+                await CloudStorageManager.set('notes', JSON.stringify(this.notes));
+                this.updateCounts();
+            }
+
+            async saveHabits() {
+                await CloudStorageManager.set('habits', JSON.stringify(this.habits));
+                this.updateCounts();
+            }
+
+            async saveMemories() {
+                await CloudStorageManager.set('memories', JSON.stringify(this.memories));
+                this.updateCounts();
+            }
+
+            async addNote() {
+                const title = document.getElementById('noteTitle').value.trim();
+                const category = document.getElementById('noteCategory').value;
+                const content = document.getElementById('noteContent').value.trim();
+                
+                if (!title || !content) {
+                    alert('Заполните все поля');
+                    return;
+                }
+
+                const note = {
+                    id: Date.now(),
+                    title: title,
+                    category: category,
+                    content: content,
+                    date: new Date().toLocaleString('ru-RU')
+                };
+
+                this.notes.unshift(note);
+                await this.saveNotes();
+                this.renderNotes();
+                document.getElementById('noteForm').reset();
+                this.showNotification('Запись сохранена', 'success');
+            }
+
+            async deleteNote(id) {
+                if (confirm('Удалить запись?')) {
+                    this.notes = this.notes.filter(n => n.id !== id);
+                    await this.saveNotes();
+                    this.renderNotes();
+                    this.showNotification('Запись удалена', 'info');
+                }
+            }
+
+            renderNotes() {
+                const list = document.getElementById('notesList');
+                const empty = document.getElementById('emptyState');
+                
+                if (this.notes.length === 0) {
+                    empty.style.display = 'block';
+                    list.innerHTML = '';
+                    list.appendChild(empty);
+                    return;
+                }
+
+                empty.style.display = 'none';
+                
+                const categoryColors = {
+                    personal: 'bg-pink-500',
+                    work: 'bg-blue-500',
+                    ideas: 'bg-yellow-500',
+                    tasks: 'bg-green-500'
+                };
+
+                const categoryNames = {
+                    personal: 'Личное',
+                    work: 'Работа',
+                    ideas: 'Идеи',
+                    tasks: 'Задачи'
+                };
+
+                list.innerHTML = this.notes.map(note => `
+                    <div class="note-card bg-black/30 backdrop-blur-sm border border-white/30 rounded-xl p-4">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex items-center space-x-3">
+                                <span class="${categoryColors[note.category]} px-3 py-1 rounded-full text-white text-xs font-medium">
+                                    ${categoryNames[note.category]}
+                                </span>
+                                <span class="text-orange-200 text-xs">${note.date}</span>
+                            </div>
+                            <button onclick="diary.deleteNote(${note.id})" class="text-red-300 hover:text-red-200">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <h3 class="text-white font-semibold text-lg mb-2">${note.title}</h3>
+                        <p class="text-orange-100 leading-relaxed">${note.content}</p>
+                    </div>
+                `).join('');
+            }
+
+            async addHabit() {
+                const name = document.getElementById('habitName').value.trim();
+                const startDate = document.getElementById('habitStartDate').value;
+                const goal = parseInt(document.getElementById('habitGoal').value);
+                const description = document.getElementById('habitDescription').value.trim();
+
+                if (!name || !startDate) {
+                    alert('Заполните все поля');
+                    return;
+                }
+
+                const habit = {
+                    id: Date.now(),
+                    name: name,
+                    startDate: startDate,
+                    goal: goal,
+                    description: description,
+                    completedDays: []
+                };
+
+                this.habits.unshift(habit);
+                await this.saveHabits();
+                this.renderHabits();
+                document.getElementById('habitForm').reset();
+                document.getElementById('habitStartDate').value = new Date().toISOString().split('T')[0];
+                this.showNotification('Привычка добавлена', 'success');
+            }
+
+            async deleteHabit(id) {
+                if (confirm('Удалить привычку?')) {
+                    this.habits = this.habits.filter(h => h.id !== id);
+                    await this.saveHabits();
+                    this.renderHabits();
+                    this.showNotification('Привычка удалена', 'info');
+                }
+            }
+
+            async toggleHabitDay(id) {
+                const habit = this.habits.find(h => h.id === id);
+                if (!habit) return;
+
+                const today = new Date().toISOString().split('T')[0];
+                const index = habit.completedDays.indexOf(today);
+
+                if (index > -1) {
+                    habit.completedDays.splice(index, 1);
+                } else {
+                    habit.completedDays.push(today);
+                }
+
+                await this.saveHabits();
+                this.renderHabits();
+            }
+
+            renderHabits() {
+                const list = document.getElementById('habitsList');
+                
+                if (this.habits.length === 0) {
+                    list.innerHTML = '<p class="text-purple-200 text-center">Нет привычек</p>';
+                    return;
+                }
+
+                list.innerHTML = this.habits.map(habit => {
+                    const progress = Math.min((habit.completedDays.length / habit.goal) * 100, 100);
+                    const isCompletedToday = habit.completedDays.includes(new Date().toISOString().split('T')[0]);
+
+                    return `
+                        <div class="note-card bg-black/30 backdrop-blur-sm border border-white/30 rounded-xl p-6">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex-1">
+                                    <h3 class="text-white font-semibold text-xl mb-2">${habit.name}</h3>
+                                    <p class="text-purple-200 text-sm">${habit.description || ''}</p>
+                                </div>
+                                <button onclick="diary.deleteHabit(${habit.id})" class="text-red-300 hover:text-red-200">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <div class="grid grid-cols-3 gap-4 mb-4">
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold text-green-400">${habit.completedDays.length}</div>
+                                    <div class="text-purple-200 text-sm">Выполнено</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold text-blue-400">${habit.goal}</div>
+                                    <div class="text-purple-200 text-sm">Цель</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl font-bold text-yellow-400">${Math.round(progress)}%</div>
+                                    <div class="text-purple-200 text-sm">Прогресс</div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <div class="w-full bg-white/20 rounded-full h-3">
+                                    <div class="bg-gradient-to-r from-green-400 to-blue-500 h-3 rounded-full transition-all duration-500" style="width: ${progress}%"></div>
+                                </div>
+                            </div>
+                            
+                            <button onclick="diary.toggleHabitDay(${habit.id})" class="w-full px-4 py-2 rounded-lg transition-colors duration-200 ${isCompletedToday ? 'bg-green-500 text-white' : 'bg-white/20 text-purple-200'}">
+                                ${isCompletedToday ? '✓ Выполнено' : 'Отметить'}
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            async addMemory() {
+                const title = document.getElementById('memoryTitle').value.trim();
+                const type = document.getElementById('memoryType').value;
+                const startDate = document.getElementById('memoryStartDate').value;
+                const notes = document.getElementById('memoryNotes').value.trim();
+
+                if (!title || !startDate) {
+                    alert('Заполните все поля');
+                    return;
+                }
+
+                const memory = {
+                    id: Date.now(),
+                    title: title,
+                    type: type,
+                    startDate: startDate,
+                    notes: notes,
+                    date: new Date().toLocaleString('ru-RU')
+                };
+
+                this.memories.unshift(memory);
+                await this.saveMemories();
+                this.renderMemories();
+                document.getElementById('memoryForm').reset();
+                document.getElementById('memoryStartDate').value = new Date().toISOString().split('T')[0];
+                this.showNotification('Воспоминание добавлено', 'success');
+            }
+
+            async deleteMemory(id) {
+                if (confirm('Удалить воспоминание?')) {
+                    this.memories = this.memories.filter(m => m.id !== id);
+                    await this.saveMemories();
+                    this.renderMemories();
+                    this.showNotification('Воспоминание удалено', 'info');
+                }
+            }
+
+            renderMemories() {
+                const list = document.getElementById('memoriesList');
+                
+                if (this.memories.length === 0) {
+                    list.innerHTML = '<p class="text-purple-200 text-center">Нет воспоминаний</p>';
+                    return;
+                }
+
+                const typeEmojis = {
+                    book: '📚',
+                    movie: '🎬',
+                    series: '📺',
+                    game: '🎮'
+                };
+
+                const typeNames = {
+                    book: 'Книга',
+                    movie: 'Фильм',
+                    series: 'Сериал',
+                    game: 'Игра'
+                };
+
+                list.innerHTML = this.memories.map(memory => `
+                    <div class="note-card bg-black/30 backdrop-blur-sm border border-white/30 rounded-xl p-6">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-2xl">${typeEmojis[memory.type]}</span>
+                                <div>
+                                    <h3 class="text-white font-semibold text-xl">${memory.title}</h3>
+                                    <p class="text-orange-200 text-sm">${typeNames[memory.type]}</p>
+                                </div>
+                            </div>
+                            <button onclick="diary.deleteMemory(${memory.id})" class="text-red-300 hover:text-red-200">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <div class="text-purple-200 text-sm">Начало: ${new Date(memory.startDate).toLocaleDateString('ru-RU')}</div>
+                        </div>
+                        
+                        ${memory.notes ? `
+                            <div class="mb-4">
+                                <p class="text-orange-100 leading-relaxed bg-black/20 rounded-lg p-3">${memory.notes}</p>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="text-purple-300 text-xs">
+                            Добавлено: ${memory.date}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            switchTab(tab) {
+                this.currentTab = tab;
+                
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.getElementById(tab + 'Tab').classList.add('active');
+                
+                document.getElementById('notesSection').classList.add('hidden');
+                document.getElementById('habitsSection').classList.add('hidden');
+                document.getElementById('memorySection').classList.add('hidden');
+                document.getElementById(tab + 'Section').classList.remove('hidden');
+            }
+
+            updateCounts() {
+                document.getElementById('notesCount').textContent = this.notes.length;
+                document.getElementById('habitsCount').textContent = this.habits.length;
+                document.getElementById('memoriesCount').textContent = this.memories.length;
+            }
+
+            showNotification(message, type) {
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+            }
+
+            async init() {
+                // Инициализация Telegram Mini App
+                Telegram.WebApp.ready(); // Сообщаем Telegram, что app готово
+                Telegram.WebApp.expand(); // Разворачиваем на полный экран
+                
+                // Загрузка данных из облака
+                await this.loadAll();
+                
+                // Event listeners
+                document.getElementById('noteForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.addNote();
+                });
+
+                document.getElementById('habitForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.addHabit();
+                });
+
+                document.getElementById('memoryForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.addMemory();
+                });
+
+                document.getElementById('notesTab').addEventListener('click', () => this.switchTab('notes'));
+                document.getElementById('habitsTab').addEventListener('click', () => this.switchTab('habits'));
+                document.getElementById('memoryTab').addEventListener('click', () => this.switchTab('memory'));
+
+                document.getElementById('clearAll').addEventListener('click', async () => {
+                    if (confirm('Удалить все записи?')) {
+                        this.notes = [];
+                        await this.saveNotes();
+                        this.renderNotes();
+                        this.showNotification('Все записи удалены', 'info');
+                    }
+                });
+
+                // Set default dates
+                document.getElementById('habitStartDate').value = new Date().toISOString().split('T')[0];
+                document.getElementById('memoryStartDate').value = new Date().toISOString().split('T')[0];
+            }
+        }
+
+        // Initialize app
+        const diary = new SimpleDiary();
+        diary.init();
+    </script>
+</body>
+</html>
