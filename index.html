@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="ru" class="h-full">
 <head>
@@ -30,6 +29,7 @@
             padding: 0;
             background-size: cover;
             background-attachment: fixed;
+            background-position: center; /* Исправление симметрии и обрезки фона */
         }
 
         body {
@@ -192,8 +192,8 @@
                             Мои записи
                         </h2>
 
-                        <div class="flex space-x-2">
-                            <input type="text" id="notesSearch" class="px-3 py-2 bg-white/90 border border-white/50 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="Поиск..." style="width: 200px;">
+                        <div class="flex flex-col space-y-2 w-full sm:w-auto sm:flex-row sm:space-x-2 sm:space-y-0">
+                            <input type="text" id="notesSearch" class="px-3 py-2 bg-white/90 border border-white/50 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="Поиск..." style="width: 100%;">
                             <select id="filterCategory"
                                     class="px-3 py-2 bg-white/90 border border-white/50 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
                                 <option value="all">Все</option>
@@ -202,7 +202,6 @@
                                 <option value="ideas">Идеи</option>
                                 <option value="tasks">Задачи</option>
                             </select>
-
                             <button id="clearAll"
                                     class="px-4 py-2 bg-red-500/80 text-white rounded-lg hover:bg-red-600/80 transition-colors duration-200 text-sm">
                                 Очистить
@@ -280,14 +279,22 @@
                                 <option value="movie">🎬 Фильм</option>
                                 <option value="series">📺 Сериал</option>
                                 <option value="game">🎮 Игра</option>
+                                <option value="relations">❤️ Отношения</option>
                             </select>
+                        </div>
+                        <div id="relationsFields" class="hidden space-y-4">
+                            <div>
+                                <label class="block text-purple-100 text-sm font-medium mb-2">Имя партнёра</label>
+                                <input type="text" id="partnerName" required
+                                       class="w-full px-4 py-3 bg-white/90 border border-white/50 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent" placeholder="Имя партнёра">
+                            </div>
                         </div>
                         <div>
                             <label class="block text-purple-100 text-sm font-medium mb-2">Дата начала</label>
                             <input type="date" id="memoryStartDate" required
                                    class="w-full px-4 py-3 bg-white/90 border border-white/50 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent">
                         </div>
-                        <div>
+                        <div id="endDateField">
                             <label class="block text-purple-100 text-sm font-medium mb-2">Дата конца (опционально)</label>
                             <input type="date" id="memoryEndDate"
                                    class="w-full px-4 py-3 bg-white/90 border border-white/50 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent">
@@ -407,6 +414,7 @@
             async saveNotes() {
                 await CloudStorageManager.set('notes', JSON.stringify(this.notes));
                 this.updateCounts();
+                this.renderNotes(); // Дополнительный рендер для мгновенного обновления
             }
             async saveHabits() {
                 await CloudStorageManager.set('habits', JSON.stringify(this.habits));
@@ -441,7 +449,6 @@
                 };
                 this.notes.unshift(note);
                 await this.saveNotes();
-                this.renderNotes();
                 document.getElementById('noteForm').reset();
                 this.showNotification(this.lang === 'ru' ? 'Запись сохранена' : 'Note saved', 'success');
             }
@@ -450,7 +457,6 @@
                 if (confirm(this.lang === 'ru' ? 'Удалить запись?' : 'Delete note?')) {
                     this.notes = this.notes.filter(n => n.id !== id);
                     await this.saveNotes();
-                    this.renderNotes();
                     this.showNotification(this.lang === 'ru' ? 'Запись удалена' : 'Note deleted', 'info');
                 }
             }
@@ -550,11 +556,13 @@
                 const list = document.getElementById('habitsList');
                 if (this.habits.length === 0) { list.innerHTML = `<p class="text-purple-200 text-center">${this.lang==='ru'?'Нет привычек':'No habits'}</p>`; return; }
                 list.innerHTML = this.habits.map(habit => {
-                    const progress = Math.min((habit.completedDays.length / habit.goal) * 100, 100);
-                    const isCompletedToday = habit.completedDays.includes(new Date().toISOString().split('T')[0]);
                     const start = new Date(habit.startDate);
                     const now = new Date();
-                    const daysElapsed = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)) + 1);
+                    let daysElapsed = Math.floor((now - start) / (1000 * 60 * 60 * 24)) + 1;
+                    daysElapsed = daysElapsed < 0 ? 0 : daysElapsed; // Исправление отрицательных дней
+                    const uniqueCompleted = [...new Set(habit.completedDays)].length; // Учёт уникальных дней
+                    const progress = Math.min((uniqueCompleted / habit.goal) * 100, 100);
+                    const isCompletedToday = habit.completedDays.includes(new Date().toISOString().split('T')[0]);
                     return `
                         <div class="note-card bg-black/30 backdrop-blur-sm border border-white/30 rounded-xl p-6">
                             <div class="flex items-start justify-between mb-4">
@@ -565,7 +573,7 @@
                                 <button onclick="diary.deleteHabit(${habit.id})" class="text-red-300 hover:text-red-200">🗑</button>
                             </div>
                             <div class="grid grid-cols-4 gap-4 mb-4">
-                                <div class="text-center"><div class="text-2xl font-bold text-green-400">${habit.completedDays.length}</div><div class="text-purple-200 text-sm">${this.lang==='ru'?'Выполнено':'Completed'}</div></div>
+                                <div class="text-center"><div class="text-2xl font-bold text-green-400">${uniqueCompleted}</div><div class="text-purple-200 text-sm">${this.lang==='ru'?'Выполнено':'Completed'}</div></div>
                                 <div class="text-center"><div class="text-2xl font-bold text-blue-400">${habit.goal}</div><div class="text-purple-200 text-sm">${this.lang==='ru'?'Цель':'Goal'}</div></div>
                                 <div class="text-center"><div class="text-2xl font-bold text-purple-400">${daysElapsed}</div><div class="text-purple-200 text-sm">${this.lang==='ru'?'Дней прошло':'Days elapsed'}</div></div>
                                 <div class="text-center"><div class="text-2xl font-bold text-yellow-400">${Math.round(progress)}%</div><div class="text-purple-200 text-sm">${this.lang==='ru'?'Прогресс':'Progress'}</div></div>
@@ -583,8 +591,16 @@
                 const startDate = document.getElementById('memoryStartDate').value;
                 const endDate = document.getElementById('memoryEndDate').value || null;
                 const notes = document.getElementById('memoryNotes').value.trim();
+                let partnerName = '';
+                if (type === 'relations') {
+                    partnerName = document.getElementById('partnerName').value.trim();
+                    if (!partnerName) {
+                        alert(this.lang === 'ru' ? 'Укажите имя партнёра' : 'Enter partner name');
+                        return;
+                    }
+                }
                 if (!title || !startDate) { alert(this.lang==='ru'?'Заполните все поля':'Fill all fields'); return; }
-                const memory = { id: Date.now(), title, type, startDate, endDate, notes, date: new Date().toLocaleString(this.lang==='ru'?'ru-RU':'en-US')};
+                const memory = { id: Date.now(), title, type, startDate, endDate, notes, partnerName, date: new Date().toLocaleString(this.lang==='ru'?'ru-RU':'en-US')};
                 this.memories.unshift(memory);
                 await this.saveMemories();
                 this.renderMemories();
@@ -594,27 +610,48 @@
             }
 
             async deleteMemory(id) {
-                if (confirm(this.lang==='ru'?'Удалить воспоминание?':'Delete memory?')) {
+                if (confirm(this.lang === 'ru' ? 'Удалить воспоминание?' : 'Delete memory?')) {
                     this.memories = this.memories.filter(m => m.id !== id);
                     await this.saveMemories();
                     this.renderMemories();
-                    this.showNotification(this.lang==='ru'?'Воспоминание удалено':'Memory deleted','info');
+                    this.showNotification(this.lang === 'ru' ? 'Воспоминание удалено' : 'Memory deleted', 'info');
                 }
             }
 
             renderMemories() {
                 const list = document.getElementById('memoriesList');
                 if (this.memories.length === 0) { list.innerHTML = `<p class="text-purple-200 text-center">${this.lang==='ru'?'Нет воспоминаний':'No memories'}</p>`; return; }
-                list.innerHTML = this.memories.map(memory => `
-                    <div class="note-card bg-black/30 backdrop-blur-sm border border-white/30 rounded-xl p-4">
-                        <h3 class="text-white font-semibold text-lg mb-2">${memory.title}</h3>
-                        <div class="text-purple-200 text-sm">Тип: ${memory.type}</div>
-                        <div class="text-purple-200 text-sm">Начало: ${new Date(memory.startDate).toLocaleDateString(this.lang==='ru'?'ru-RU':'en-US')}</div>
-                        ${memory.endDate ? `<div class="text-purple-200 text-sm">Конец: ${new Date(memory.endDate).toLocaleDateString(this.lang==='ru'?'ru-RU':'en-US')}</div>` : ''}
-                        ${memory.notes?`<div class="mt-2 text-orange-100 bg-black/20 rounded-lg p-3">${memory.notes}</div>`:''}
-                        <div class="text-purple-300 text-xs mt-2">Добавлено: ${memory.date}</div>
-                    </div>
-                `).join('');
+                list.innerHTML = this.memories.map(memory => {
+                    let content = `
+                        <div class="note-card bg-black/30 backdrop-blur-sm border border-white/30 rounded-xl p-4">
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-white font-semibold text-lg mb-2">${memory.title}</h3>
+                                <button onclick="diary.deleteMemory(${memory.id})" class="text-red-300 hover:text-red-200">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="text-purple-200 text-sm">Тип: ${memory.type}</div>
+                            <div class="text-purple-200 text-sm">Начало: ${new Date(memory.startDate).toLocaleDateString(this.lang==='ru'?'ru-RU':'en-US')}</div>
+                            ${memory.endDate ? `<div class="text-purple-200 text-sm">Конец: ${new Date(memory.endDate).toLocaleDateString(this.lang==='ru'?'ru-RU':'en-US')}</div>` : ''}
+                            ${memory.notes?`<div class="mt-2 text-orange-100 bg-black/20 rounded-lg p-3">${memory.notes}</div>`:''}
+                            <div class="text-purple-300 text-xs mt-2">Добавлено: ${memory.date}</div>
+                    `;
+                    if (memory.type === 'relations') {
+                        const start = new Date(memory.startDate);
+                        const now = new Date();
+                        const daysInRelations = Math.floor((now - start) / (1000 * 60 * 60 * 24)) + 1;
+                        content += `
+                            <div class="mt-4 p-4 bg-gradient-to-r from-pink-500 to-red-500 rounded-xl text-white">
+                                <h4 class="font-bold text-lg flex items-center"><svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>Отношения с ${memory.partnerName}</h4>
+                                <p class="text-2xl font-bold">${daysInRelations} ${this.lang === 'ru' ? 'дней' : 'days'}</p>
+                            </div>
+                        `;
+                    }
+                    content += `</div>`;
+                    return content;
+                }).join('');
             }
 
             switchTab(tab) {
@@ -656,15 +693,12 @@
                         'note-content-label': 'Содержание',
                         'save-note-btn': 'Сохранить',
                         'my-notes-title': 'Мои записи',
-                        'notes-count-label': '📊 Записей: ',
                         'new-habit-title': 'Новая привычка',
                         'start-habit-btn': 'Начать',
                         'my-habits-title': 'Мои привычки',
-                        'habits-count-label': '⏰ Привычек: ',
                         'new-memory-title': 'Новое воспоминание',
                         'save-memory-btn': 'Сохранить',
-                        'my-memories-title': 'Архив воспоминаний',
-                        'memories-count-label': '📖 Воспоминаний: '
+                        'my-memories-title': 'Архив воспоминаний'
                     },
                     en: {
                         'app-title': 'DailyBookimix',
@@ -679,15 +713,12 @@
                         'note-content-label': 'Content',
                         'save-note-btn': 'Save',
                         'my-notes-title': 'My Notes',
-                        'notes-count-label': '📊 Notes: ',
                         'new-habit-title': 'New Habit',
                         'start-habit-btn': 'Start',
                         'my-habits-title': 'My Habits',
-                        'habits-count-label': '⏰ Habits: ',
                         'new-memory-title': 'New Memory',
                         'save-memory-btn': 'Save',
-                        'my-memories-title': 'Memory Archive',
-                        'memories-count-label': '📖 Memories: '
+                        'my-memories-title': 'Memory Archive'
                     }
                 };
                 const trans = translations[this.lang];
@@ -778,7 +809,7 @@
 
                 document.getElementById('clearAll').addEventListener('click', async () => {
                     if (confirm(this.lang === 'ru' ? 'Удалить все записи?' : 'Delete all notes?')) {
-                        this.notes = []; await this.saveNotes(); this.renderNotes(); this.showNotification(this.lang==='ru'?'Все записи удалены':'All notes deleted','info');
+                        this.notes = []; await this.saveNotes(); this.showNotification(this.lang==='ru'?'Все записи удалены':'All notes deleted','info');
                     }
                 });
 
@@ -791,6 +822,13 @@
                 // defaults
                 document.getElementById('habitStartDate').value = new Date().toISOString().split('T')[0];
                 document.getElementById('memoryStartDate').value = new Date().toISOString().split('T')[0];
+
+                // Логика для смены формы в архиве
+                document.getElementById('memoryType').addEventListener('change', (e) => {
+                    const isRelations = e.target.value === 'relations';
+                    document.getElementById('relationsFields').classList.toggle('hidden', !isRelations);
+                    document.getElementById('endDateField').classList.toggle('hidden', isRelations); // Скрываем дату конца для отношений
+                });
             }
         }
 
@@ -801,4 +839,3 @@
     </script>
 </body>
 </html>
-```
