@@ -301,16 +301,12 @@
                         </div>
                         <div id="relationsFields" class="hidden space-y-4">
                             <div>
-                                <label class="block text-purple-100 text-sm font-medium mb-2">Имя партнёра</label>
+                                <label class="block text-purple-100 text-sm font-medium mb-2" id="partner-name-label">Имя партнёра</label>
                                 <input type="text" id="partnerName" required
                                        class="w-full px-4 py-3 bg-white/90 border border-white/50 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent" placeholder="Имя партнёра">
                             </div>
                             <div>
-                                <label class="block text-purple-100 text-sm font-medium mb-2">Фото (опционально)</label>
-                                <input type="file" id="partnerPhoto" accept="image/*">
-                            </div>
-                            <div>
-                                <label class="block text-purple-100 text-sm font-medium mb-2">Ключевые события (добавьте позже)</label>
+                                <label class="block text-purple-100 text-sm font-medium mb-2" id="key-events-label">Ключевые события (добавьте позже)</label>
                             </div>
                         </div>
                         <div>
@@ -367,18 +363,18 @@
     <div id="eventModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <h2>Добавить событие</h2>
+            <h2 id="add-event-title">Добавить событие</h2>
             <form id="eventForm">
                 <input type="hidden" id="eventMemoryId">
                 <div>
-                    <label>Дата события</label>
+                    <label id="event-date-label">Дата события</label>
                     <input type="date" id="eventDate" required>
                 </div>
                 <div>
-                    <label>Описание</label>
+                    <label id="event-desc-label">Описание</label>
                     <textarea id="eventDesc" required></textarea>
                 </div>
-                <button type="submit">Сохранить</button>
+                <button type="submit" id="save-event-btn">Сохранить</button>
             </form>
         </div>
     </div>
@@ -420,7 +416,7 @@
                     const v = await cloudGetItem(key);
                     return v !== null ? v : defaultValue;
                 } catch (e) {
-                    console.error('Cloud get error:', e);
+                    console.warn('Cloud get error:', e);
                     return defaultValue;
                 }
             },
@@ -429,7 +425,7 @@
                     await cloudSetItem(key, value);
                     return true;
                 } catch (e) {
-                    console.error('Cloud set error:', e);
+                    console.warn('Cloud set error:', e);
                     return false;
                 }
             }
@@ -453,15 +449,15 @@
             async loadAll() {
                 try {
                     const data = await cloudGetItems(['notes', 'habits', 'memories']);
-                    this.notes = JSON.parse(data.notes || '[]');
-                    this.habits = JSON.parse(data.habits || '[]');
-                    this.memories = JSON.parse(data.memories || '[]');
+                    this.notes = JSON.parse(data.notes || '[]').sort((a, b) => b.id - a.id);
+                    this.habits = JSON.parse(data.habits || '[]').sort((a, b) => b.id - a.id);
+                    this.memories = JSON.parse(data.memories || '[]').sort((a, b) => b.id - a.id);
                     this.renderNotes();
                     this.renderHabits();
                     this.renderMemories();
                     this.updateCounts();
                 } catch (e) {
-                    console.error('Load error:', e);
+                    console.warn('Load error:', e);
                 }
             }
 
@@ -552,8 +548,8 @@
 
                 if (categoryFilter !== 'all') filtered = filtered.filter(n => n.category === categoryFilter);
 
-                if (searchRaw) {
-                    const search = searchRaw.replace('#', '');
+                const search = searchRaw.replace('#', '').toLowerCase();
+                if (search) {
                     filtered = filtered.filter(note =>
                         note.title.toLowerCase().includes(search) ||
                         note.content.toLowerCase().includes(search) ||
@@ -655,15 +651,23 @@
                 }
             }
 
-            async toggleHabitDay(id, date) {
+            async toggleHabitDay(id, date, fromCalendar = false) {
                 const habit = this.habits.find(h => h.id === id);
                 if (!habit) return;
                 const dateStr = date.toISOString().split('T')[0];
-                const idx = habit.completedDays.indexOf(dateStr);
-                if (idx > -1) habit.completedDays.splice(idx, 1);
-                else habit.completedDays.push(dateStr);
+                const set = new Set(habit.completedDays);
+                if (set.has(dateStr)) {
+                    set.delete(dateStr);
+                } else {
+                    set.add(dateStr);
+                }
+                habit.completedDays = Array.from(set);
                 await this.saveHabits();
-                this.showHabitCalendar(id); // Обновить календарь
+                if (fromCalendar) {
+                    this.showHabitCalendar(id);
+                } else {
+                    this.renderHabits();
+                }
             }
 
             showHabitCalendar(id) {
@@ -673,22 +677,24 @@
                 const title = document.getElementById('calendarTitle');
                 const table = document.getElementById('calendarTable');
                 title.textContent = this.lang === 'ru' ? `Календарь: ${habit.name}` : `Calendar: ${habit.name}`;
-                let html = '<tr><th>Пн</th><th>Вт</th><th>Ср</th><th>Чт</th><th>Пт</th><th>Сб</th><th>Вс</th></tr>';
+                const daysOfWeek = this.lang === 'ru' ? ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                let html = `<tr>${daysOfWeek.map(day => `<th>${day}</th>`).join('')}</tr>`;
                 const start = new Date(habit.startDate);
                 const now = new Date();
                 const daysToShow = Math.max(habit.goal, Math.floor((now - start) / (86400000)) + 1);
                 let current = new Date(start);
                 html += '<tr>';
-                // Заполнить пустыми днями до начала недели
-                for (let i = 0; i < current.getDay() - 1; i++) html += '<td></td>';
+                // Заполнить пустыми днями до начала недели (понедельник = 1)
+                const startDay = current.getDay() === 0 ? 6 : current.getDay() - 1;
+                for (let i = 0; i < startDay; i++) html += '<td></td>';
                 for (let i = 0; i < daysToShow; i++) {
                     if (current.getDay() === 1 && i > 0) html += '</tr><tr>';
                     const dateStr = current.toISOString().split('T')[0];
                     const isCompleted = habit.completedDays.includes(dateStr);
                     const isFuture = current > now;
                     const isToday = dateStr === now.toISOString().split('T')[0];
-                    let className = isFuture ? 'day-future' : (isCompleted ? 'day-completed' : 'day-missed');
-                    let clickable = !isFuture || isToday ? `onclick="diary.toggleHabitDay(${id}, new Date('${dateStr}'))"` : '';
+                    let className = isFuture && !isToday ? 'day-future' : (isCompleted ? 'day-completed' : 'day-missed');
+                    let clickable = (!isFuture || isToday) ? `onclick="diary.toggleHabitDay(${id}, new Date('${dateStr}'), true)"` : '';
                     html += `<td class="${className}" ${clickable}>${current.getDate()}</td>`;
                     current.setDate(current.getDate() + 1);
                 }
@@ -710,7 +716,7 @@
                     const now = new Date();
                     let daysElapsed = Math.floor((now - start) / 86400000) + 1;
                     daysElapsed = daysElapsed < 0 ? 0 : daysElapsed;
-                    const uniqueCompleted = [...new Set(habit.completedDays)].length;
+                    const uniqueCompleted = new Set(habit.completedDays).size;
                     const progress = Math.min((uniqueCompleted / habit.goal) * 100, 100);
                     const isCompletedToday = habit.completedDays.includes(now.toISOString().split('T')[0]);
                     return `
@@ -740,7 +746,7 @@
                                 <div class="text-center"><div class="text-2xl font-bold text-yellow-400">${Math.round(progress)}%</div><div class="text-purple-200 text-sm">${this.lang === 'ru' ? 'Прогресс' : 'Progress'}</div></div>
                             </div>
                             <div class="mb-4"><div class="w-full bg-white/20 rounded-full h-3"><div class="bg-gradient-to-r from-green-400 to-blue-500 h-3 rounded-full" style="width:${progress}%"></div></div></div>
-                            <button onclick="event.stopPropagation(); diary.toggleHabitDay(${habit.id})" class="w-full px-4 py-2 rounded-lg ${isCompletedToday ? 'bg-green-500 text-white' : 'bg-white/20 text-purple-200'}">${isCompletedToday ? (this.lang === 'ru' ? '✓ Выполнено' : '✓ Done') : (this.lang === 'ru' ? 'Отметить' : 'Mark')}</button>
+                            <button onclick="event.stopPropagation(); diary.toggleHabitDay(${habit.id}, new Date(), false)" class="w-full px-4 py-2 rounded-lg ${isCompletedToday ? 'bg-green-500 text-white' : 'bg-white/20 text-purple-200'}">${isCompletedToday ? (this.lang === 'ru' ? '✓ Выполнено' : '✓ Done') : (this.lang === 'ru' ? 'Отметить' : 'Mark')}</button>
                         </div>
                     `;
                 }).join('');
@@ -754,16 +760,9 @@
                 const endDate = document.getElementById('memoryEndDate').value || null;
                 const notes = document.getElementById('memoryNotes').value.trim();
                 let partnerName = '';
-                let photo = null;
                 let events = id ? this.memories.find(m => m.id === id).events || [] : [];
                 if (type === 'relations') {
                     partnerName = document.getElementById('partnerName').value.trim();
-                    const file = document.getElementById('partnerPhoto').files[0];
-                    if (file) {
-                        photo = await this.fileToBase64(file);
-                    } else if (id) {
-                        photo = this.memories.find(m => m.id === id).photo;
-                    }
                     if (!partnerName) {
                         this.showNotification(this.lang === 'ru' ? 'Укажите имя партнёра' : 'Enter partner name', 'error');
                         return;
@@ -781,7 +780,6 @@
                     endDate, 
                     notes, 
                     partnerName, 
-                    photo, 
                     events, 
                     date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-US')
                 };
@@ -799,15 +797,6 @@
                 this.showNotification(this.lang === 'ru' ? 'Воспоминание сохранено' : 'Memory saved', 'success');
             }
 
-            fileToBase64(file) {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = error => reject(error);
-                });
-            }
-
             editMemory(id) {
                 const memory = this.memories.find(m => m.id === id);
                 if (!memory) return;
@@ -819,7 +808,6 @@
                 document.getElementById('memoryNotes').value = memory.notes;
                 if (memory.type === 'relations') {
                     document.getElementById('partnerName').value = memory.partnerName;
-                    // Photo can't be pre-filled in input, but it's saved
                 }
                 document.getElementById('relationsFields').classList.toggle('hidden', memory.type !== 'relations');
                 document.getElementById('endDateField').classList.toggle('hidden', memory.type === 'relations');
@@ -843,13 +831,17 @@
                 const id = parseInt(document.getElementById('eventMemoryId').value);
                 const date = document.getElementById('eventDate').value;
                 const desc = document.getElementById('eventDesc').value.trim();
-                if (!date || !desc) return;
+                if (!date || !desc) {
+                    this.showNotification(this.lang === 'ru' ? 'Заполните поля' : 'Fill fields', 'error');
+                    return;
+                }
                 const memory = this.memories.find(m => m.id === id);
                 if (!memory.events) memory.events = [];
                 memory.events.push({ date, desc });
                 await this.saveMemories();
                 document.getElementById('eventForm').reset();
                 document.getElementById('eventModal').style.display = 'none';
+                this.renderMemories();
             }
 
             renderMemories() {
@@ -860,6 +852,7 @@
                     list.innerHTML = `<p class="text-purple-200 text-center">${this.lang === 'ru' ? 'Нет воспоминаний' : 'No memories'}</p>`;
                     return;
                 }
+                const typeNames = this.lang === 'ru' ? { book: 'Книга', movie: 'Фильм', series: 'Сериал', game: 'Игра', relations: 'Отношения' } : { book: 'Book', movie: 'Movie', series: 'Series', game: 'Game', relations: 'Relations' };
                 list.innerHTML = filtered.map(memory => {
                     let content = `
                         <div class="note-card bg-black/30 backdrop-blur-sm border border-white/30 rounded-xl p-4">
@@ -878,7 +871,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <div class="text-purple-200 text-sm">Тип: ${memory.type}</div>
+                            <div class="text-purple-200 text-sm">Тип: ${typeNames[memory.type]}</div>
                             <div class="text-purple-200 text-sm">Начало: ${new Date(memory.startDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>
                             ${memory.endDate ? `<div class="text-purple-200 text-sm">Конец: ${new Date(memory.endDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>` : ''}
                             ${memory.notes ? `<div class="mt-2 text-orange-100 bg-black/20 rounded-lg p-3">${memory.notes}</div>` : ''}
@@ -888,20 +881,19 @@
                         const start = new Date(memory.startDate);
                         const now = new Date();
                         const daysTogether = Math.floor((now - start) / 86400000) + 1;
-                        const level = daysTogether < 30 ? 'Новички' : daysTogether < 365 ? 'Стабильные' : 'Ветераны';
+                        const level = daysTogether < 30 ? (this.lang === 'ru' ? 'Новички' : 'Beginners') : daysTogether < 365 ? (this.lang === 'ru' ? 'Стабильные' : 'Stable') : (this.lang === 'ru' ? 'Ветераны' : 'Veterans');
                         const quote = this.quotes[Math.floor(Math.random() * this.quotes.length)];
                         content += `
                             <div class="mt-4 p-4 bg-gradient-to-r from-pink-500 to-red-500 rounded-xl text-white animate-pulse">
-                                <h4 class="font-bold text-lg flex items-center"><svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>Отношения с ${memory.partnerName}</h4>
-                                ${memory.photo ? `<img src="${memory.photo}" alt="Фото" class="w-20 h-20 rounded-full mx-auto mb-2">` : ''}
+                                <h4 class="font-bold text-lg flex items-center"><svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>${this.lang === 'ru' ? 'Отношения с' : 'Relations with'} ${memory.partnerName}</h4>
                                 <p class="text-2xl font-bold">${daysTogether} ${this.lang === 'ru' ? 'дней вместе' : 'days together'}</p>
-                                <p>Уровень: ${level}</p>
+                                <p>${this.lang === 'ru' ? 'Уровень:' : 'Level:'} ${level}</p>
                                 <p class="italic">"${quote}"</p>
-                                <button onclick="diary.showAddEventModal(${memory.id})" class="mt-2 bg-white/30 px-4 py-2 rounded">Добавить событие</button>
-                                <button onclick="diary.shareRelations(${memory.id})" class="mt-2 bg-white/30 px-4 py-2 rounded ml-2">Поделиться</button>
+                                <button onclick="diary.showAddEventModal(${memory.id})" class="mt-2 bg-white/30 px-4 py-2 rounded">${this.lang === 'ru' ? 'Добавить событие' : 'Add event'}</button>
+                                <button onclick="diary.shareRelations(${memory.id})" class="mt-2 bg-white/30 px-4 py-2 rounded ml-2">${this.lang === 'ru' ? 'Поделиться' : 'Share'}</button>
                                 <div class="mt-4">
-                                    <h5>Ключевые события:</h5>
-                                    <ul>${memory.events ? memory.events.map(e => `<li>${e.date}: ${e.desc}</li>`).join('') : 'Нет событий'}</ul>
+                                    <h5>${this.lang === 'ru' ? 'Ключевые события:' : 'Key events:'}</h5>
+                                    <ul>${memory.events ? memory.events.map(e => `<li>${e.date}: ${e.desc}</li>`).join('') : (this.lang === 'ru' ? 'Нет событий' : 'No events')}</ul>
                                 </div>
                             </div>
                         `;
@@ -913,9 +905,16 @@
 
             shareRelations(id) {
                 const memory = this.memories.find(m => m.id === id);
-                const text = `Отношения с ${memory.partnerName}: ${memory.daysTogether} дней! ${memory.notes}`;
-                navigator.clipboard.writeText(text);
-                this.showNotification('Скопировано в буфер', 'info');
+                if (!memory) return;
+                const start = new Date(memory.startDate);
+                const now = new Date();
+                const daysTogether = Math.floor((now - start) / 86400000) + 1;
+                const text = `${this.lang === 'ru' ? 'Отношения с' : 'Relations with'} ${memory.partnerName}: ${daysTogether} ${this.lang === 'ru' ? 'дней' : 'days'}! ${memory.notes}`;
+                navigator.clipboard.writeText(text).then(() => {
+                    this.showNotification(this.lang === 'ru' ? 'Скопировано в буфер' : 'Copied to clipboard', 'info');
+                }).catch(() => {
+                    this.showNotification(this.lang === 'ru' ? 'Ошибка копирования' : 'Copy error', 'error');
+                });
             }
 
             switchTab(tab) {
@@ -931,7 +930,7 @@
             updateCounts() {
                 document.getElementById('notesCount').textContent = this.notes.length;
                 document.getElementById('habitsCount').textContent = this.habits.length;
-                document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !h.endDate).length; // Пример активных
+                document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !h.endDate).length;
                 document.getElementById('memoriesCount').textContent = this.memories.length;
             }
 
@@ -963,7 +962,13 @@
                         'my-habits-title': 'Мои привычки',
                         'new-memory-title': 'Новое воспоминание',
                         'save-memory-btn': 'Сохранить',
-                        'my-memories-title': 'Архив воспоминаний'
+                        'my-memories-title': 'Архив воспоминаний',
+                        'partner-name-label': 'Имя партнёра',
+                        'key-events-label': 'Ключевые события (добавьте позже)',
+                        'add-event-title': 'Добавить событие',
+                        'event-date-label': 'Дата события',
+                        'event-desc-label': 'Описание',
+                        'save-event-btn': 'Сохранить'
                     },
                     en: {
                         'app-title': 'DailyBookimix',
@@ -983,7 +988,13 @@
                         'my-habits-title': 'My Habits',
                         'new-memory-title': 'New Memory',
                         'save-memory-btn': 'Save',
-                        'my-memories-title': 'Memory Archive'
+                        'my-memories-title': 'Memory Archive',
+                        'partner-name-label': 'Partner Name',
+                        'key-events-label': 'Key events (add later)',
+                        'add-event-title': 'Add Event',
+                        'event-date-label': 'Event Date',
+                        'event-desc-label': 'Description',
+                        'save-event-btn': 'Save'
                     }
                 };
                 const trans = translations[this.lang];
@@ -992,10 +1003,18 @@
                     if (el) el.textContent = trans[key];
                 });
 
+                // Placeholders
                 document.getElementById('notesSearch').placeholder = this.lang === 'ru' ? 'Поиск по тексту или #хэштегу' : 'Search by text or #hashtag';
                 document.getElementById('habitsSearch').placeholder = this.lang === 'ru' ? 'Поиск' : 'Search';
                 document.getElementById('memoriesSearch').placeholder = this.lang === 'ru' ? 'Поиск' : 'Search';
+                document.getElementById('habitName').placeholder = this.lang === 'ru' ? 'Название' : 'Name';
+                document.getElementById('habitGoal').placeholder = this.lang === 'ru' ? 'Цель (дней)' : 'Goal (days)';
+                document.getElementById('habitDescription').placeholder = this.lang === 'ru' ? 'Описание' : 'Description';
+                document.getElementById('memoryTitle').placeholder = this.lang === 'ru' ? 'Название' : 'Title';
+                document.getElementById('memoryNotes').placeholder = this.lang === 'ru' ? 'Заметки' : 'Notes';
+                document.getElementById('partnerName').placeholder = this.lang === 'ru' ? 'Имя партнёра' : 'Partner Name';
 
+                // Categories
                 document.getElementById('noteCategory').innerHTML = this.lang === 'ru' ? `
                     <option value="personal">Личное</option>
                     <option value="work">Работа</option>
@@ -1022,12 +1041,26 @@
                     <option value="tasks">Tasks</option>
                 `;
 
-                document.getElementById('habitName').placeholder = this.lang === 'ru' ? 'Название' : 'Name';
-                document.getElementById('habitGoal').placeholder = this.lang === 'ru' ? 'Цель (дней)' : 'Goal (days)';
-                document.getElementById('habitDescription').placeholder = this.lang === 'ru' ? 'Описание' : 'Description';
-                document.getElementById('memoryTitle').placeholder = this.lang === 'ru' ? 'Название' : 'Title';
-                document.getElementById('memoryNotes').placeholder = this.lang === 'ru' ? 'Заметки' : 'Notes';
-                document.getElementById('partnerName').placeholder = this.lang === 'ru' ? 'Имя партнёра' : 'Partner Name';
+                // Memory types
+                document.getElementById('memoryType').innerHTML = this.lang === 'ru' ? `
+                    <option value="book">📚 Книга</option>
+                    <option value="movie">🎬 Фильм</option>
+                    <option value="series">📺 Сериал</option>
+                    <option value="game">🎮 Игра</option>
+                    <option value="relations">❤️ Отношения</option>
+                ` : `
+                    <option value="book">📚 Book</option>
+                    <option value="movie">🎬 Movie</option>
+                    <option value="series">📺 Series</option>
+                    <option value="game">🎮 Game</option>
+                    <option value="relations">❤️ Relations</option>
+                `;
+
+                // Empty state
+                const emptyP = document.querySelector('#emptyState p.text-lg');
+                const emptySub = document.querySelector('#emptyState p.text-sm');
+                if (emptyP) emptyP.textContent = this.lang === 'ru' ? 'Нет записей' : 'No notes';
+                if (emptySub) emptySub.textContent = this.lang === 'ru' ? 'Создайте первую' : 'Create the first one';
 
                 this.renderNotes();
                 this.renderHabits();
@@ -1059,6 +1092,7 @@
             }
 
             downloadJSON() {
+                if (!confirm(this.lang === 'ru' ? 'Экспортировать данные?' : 'Export data?')) return;
                 const data = { notes: this.notes, habits: this.habits, memories: this.memories };
                 const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
