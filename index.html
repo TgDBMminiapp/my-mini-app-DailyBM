@@ -345,7 +345,6 @@
                 <span>📊 Записей: <span id="notesCount">0</span></span>
                 <span>⏰ Привычек: <span id="habitsCount">0</span> (активных: <span id="activeHabitsCount">0</span>)</span>
                 <span>📖 Воспоминаний: <span id="memoriesCount">0</span></span>
-                <button id="exportData" class="px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-600/80 text-sm">Экспорт</button>
             </div>
         </footer>
     </div>
@@ -439,11 +438,6 @@
                 this.currentTab = 'notes';
                 this.lang = 'ru';
                 this.theme = 'light';
-                this.quotes = [
-                    "Любовь — это не смотреть друг на друга, а смотреть в одном направлении.",
-                    "Настоящая любовь — это когда души находят друг друга.",
-                    "Каждый день с тобой — это приключение."
-                ]; // Для отношений
             }
 
             async loadAll() {
@@ -881,14 +875,10 @@
                         const start = new Date(memory.startDate);
                         const now = new Date();
                         const daysTogether = Math.floor((now - start) / 86400000) + 1;
-                        const level = daysTogether < 30 ? (this.lang === 'ru' ? 'Новички' : 'Beginners') : daysTogether < 365 ? (this.lang === 'ru' ? 'Стабильные' : 'Stable') : (this.lang === 'ru' ? 'Ветераны' : 'Veterans');
-                        const quote = this.quotes[Math.floor(Math.random() * this.quotes.length)];
                         content += `
-                            <div class="mt-4 p-4 bg-gradient-to-r from-pink-500 to-red-500 rounded-xl text-white animate-pulse">
+                            <div class="mt-4 p-4 bg-gradient-to-r from-pink-500 to-red-500 rounded-xl text-white">
                                 <h4 class="font-bold text-lg flex items-center"><svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>${this.lang === 'ru' ? 'Отношения с' : 'Relations with'} ${memory.partnerName}</h4>
                                 <p class="text-2xl font-bold">${daysTogether} ${this.lang === 'ru' ? 'дней вместе' : 'days together'}</p>
-                                <p>${this.lang === 'ru' ? 'Уровень:' : 'Level:'} ${level}</p>
-                                <p class="italic">"${quote}"</p>
                                 <button onclick="diary.showAddEventModal(${memory.id})" class="mt-2 bg-white/30 px-4 py-2 rounded">${this.lang === 'ru' ? 'Добавить событие' : 'Add event'}</button>
                                 <button onclick="diary.shareRelations(${memory.id})" class="mt-2 bg-white/30 px-4 py-2 rounded ml-2">${this.lang === 'ru' ? 'Поделиться' : 'Share'}</button>
                                 <div class="mt-4">
@@ -1091,17 +1081,6 @@
                 document.getElementById('cloud-label').textContent = this.lang === 'ru' ? 'Облачно' : 'Cloud';
             }
 
-            downloadJSON() {
-                if (!confirm(this.lang === 'ru' ? 'Экспортировать данные?' : 'Export data?')) return;
-                const data = { notes: this.notes, habits: this.habits, memories: this.memories };
-                const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'dailybookimix_data.json';
-                a.click();
-            }
-
             async init() {
                 try { Telegram.WebApp.ready(); Telegram.WebApp.expand(); } catch (e) { console.warn('No Telegram WebApp'); }
 
@@ -1130,7 +1109,6 @@
 
                 document.getElementById('langSwitch').addEventListener('click', () => this.toggleLang());
                 document.getElementById('themeSwitch').addEventListener('click', () => this.toggleTheme());
-                document.getElementById('exportData').addEventListener('click', () => this.downloadJSON());
 
                 // Модальные закрытия
                 const modals = document.querySelectorAll('.modal');
