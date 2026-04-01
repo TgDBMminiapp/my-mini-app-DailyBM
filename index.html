@@ -53,33 +53,96 @@
             border: 1px solid var(--border-dark);
         }
 
-        .note-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform: translateY(0); }
-        .note-card:hover { transform: translateY(-3px); box-shadow: 0 15px 30px rgba(0,0,0,0.2); }
+        .note-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(0);
+        }
+        .note-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+        }
 
-        .fade-in { animation: fadeIn 0.5s ease-in; }
-        @keyframes fadeIn { from { opacity:0; transform: translateY(20px);} to { opacity:1; transform: translateY(0);} }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-        .tab-button { background: rgba(0,0,0,0.3); flex:1 1 0; min-width:0; }
-        .tab-button.active { background: rgba(255,255,255,0.95); color: #1f2937; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .tab-button {
+            background: rgba(0,0,0,0.3);
+            flex: 1 1 0;
+            min-width: 0;
+        }
+        .tab-button.active {
+            background: rgba(255,255,255,0.95);
+            color: #1f2937;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
 
-        .notification { position: fixed; top: 20px; right: 20px; padding: 16px 20px; border-radius: 12px; color: white; z-index: 10000; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: fadeIn 0.3s; }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            color: white;
+            z-index: 10000;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            animation: fadeIn 0.3s, slideIn 0.3s;
+        }
         .notification.success { background-color: #10b981; }
         .notification.error { background-color: #ef4444; }
         .notification.info { background-color: #3b82f6; }
 
-        .modal { display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(8px); }
-        .modal-content { background-color: #fff; margin: 10% auto; padding: 24px; border-radius: 16px; width: 90%; max-width: 420px; color: #1f2937; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: 10% auto;
+            padding: 24px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 420px;
+            color: #1f2937;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
 
-        .calendar-table { width: 100%; border-collapse: collapse; }
-        .calendar-table th, .calendar-table td { border: 1px solid #e5e7eb; padding: 10px; text-align: center; font-size: 14px; }
-        .calendar-table th { background-color: #f8fafc; font-weight: 600; }
+        .calendar-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .calendar-table th, .calendar-table td {
+            border: 1px solid #e5e7eb;
+            padding: 10px 4px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .calendar-table th { background-color: #f8fafc; }
         .day-completed { background-color: #10b981; color: white; }
         .day-missed { background-color: #ef4444; color: white; }
         .day-future { background-color: #f1f5f9; color: #64748b; }
-        .day-today { border: 2px solid #f59e0b !important; }
+        .day-today { border: 3px solid #f59e0b !important; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3); }
 
         .habit-ended { filter: grayscale(1); opacity: 0.85; }
-        .broken-heart { animation: pulse 1.5s infinite; }
+        .streak-fire { animation: flame 1.5s infinite; }
+
+        @keyframes flame {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
     </style>
 </head>
 <body class="font-sans">
@@ -132,10 +195,12 @@
 
         <!-- NOTES SECTION -->
         <div id="notesSection" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Add/Edit Note -->
             <div class="md:col-span-1">
                 <div class="glass-effect rounded-3xl p-6 fade-in">
-                    <h2 class="text-xl font-semibold text-white mb-5 flex items-center" id="new-note-title"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>Новая запись</h2>
+                    <h2 class="text-xl font-semibold text-white mb-5 flex items-center" id="new-note-title">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        Новая запись
+                    </h2>
                     <form id="noteForm" class="space-y-5">
                         <input type="hidden" id="noteId">
                         <div>
@@ -158,11 +223,13 @@
                 </div>
             </div>
 
-            <!-- Notes List -->
             <div class="md:col-span-2">
                 <div class="glass-effect rounded-3xl p-6 fade-in">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <h2 class="text-2xl font-semibold text-white flex items-center" id="my-notes-title"><svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>Мои записи</h2>
+                        <h2 class="text-2xl font-semibold text-white flex items-center" id="my-notes-title">
+                            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                            Мои записи
+                        </h2>
                         <div class="flex gap-2">
                             <input type="text" id="notesSearch" placeholder="Поиск по тексту или #хэштегу" class="flex-1 sm:w-72 px-4 py-3 bg-white/95 border border-white/40 rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
                             <select id="filterCategory" class="px-4 py-3 bg-white/95 border border-white/40 rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"></select>
@@ -357,7 +424,7 @@
     </div>
 
     <script>
-        // CloudStorage wrappers
+        // CloudStorage wrappers (безопасные)
         function cloudSetItem(key, value) {
             return new Promise((resolve, reject) => {
                 Telegram.WebApp.CloudStorage.setItem(key, value, (err, success) => {
@@ -408,6 +475,16 @@
             }
         };
 
+        // Простая защита от XSS
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         class SimpleDiary {
             constructor() {
                 this.notes = [];
@@ -416,43 +493,42 @@
                 this.currentTab = 'notes';
                 this.lang = 'ru';
                 this.theme = 'light';
+                this.currentEndHabitId = null;
+                this.currentEndRelationsId = null;
+                this.searchDebounce = null;
             }
 
             async loadAll() {
                 try {
-                    const data = await cloudGetItems(['notes', 'habits', 'memories']);
+                    const data = await cloudGetItems(['notes', 'habits', 'memories', 'lang', 'theme']);
                     this.notes = JSON.parse(data.notes || '[]').sort((a, b) => b.id - a.id);
-
-                    // Миграция и улучшение привычек
                     this.habits = JSON.parse(data.habits || '[]').sort((a, b) => b.id - a.id);
-                    this.migrateHabits();
-
                     this.memories = JSON.parse(data.memories || '[]').sort((a, b) => b.id - a.id);
-                    this.migrateMemories();
 
-                    this.renderNotes();
-                    this.renderHabits();
-                    this.renderMemories();
+                    this.migrateData();
+
+                    if (data.lang) this.lang = data.lang;
+                    if (data.theme) this.theme = data.theme;
+
+                    this.renderAll();
                     this.updateCounts();
                 } catch (e) {
                     console.warn('Load error:', e);
                 }
             }
 
-            migrateHabits() {
-                // Автоматическая миграция старых привычек (обратная совместимость)
+            migrateData() {
+                // Миграция привычек
                 this.habits.forEach(h => {
                     if (!h.completedDays) h.completedDays = [];
                     if (!h.endDate && new Set(h.completedDays).size >= h.goal) {
-                        // Автозавершаем привычку на дату последней отметки
-                        const sortedDates = [...h.completedDays].sort();
-                        h.endDate = sortedDates[sortedDates.length - 1];
+                        const sorted = [...h.completedDays].sort();
+                        h.endDate = sorted[sorted.length - 1];
                     }
                     if (!h.endDate) h.endDate = null;
                 });
-            }
 
-            migrateMemories() {
+                // Миграция воспоминаний
                 this.memories.forEach(m => {
                     if (m.type === 'relations' && !m.endDate) m.endDate = null;
                     if (!m.events) m.events = [];
@@ -482,13 +558,17 @@
                 return matches ? matches.map(m => m.trim()) : [];
             }
 
-            // NOTES
-            async addOrEditNote() {
+            // ==================== NOTES ====================
+            async addOrEditNote(e) {
+                e.preventDefault();
                 const id = parseInt(document.getElementById('noteId').value) || null;
                 const title = document.getElementById('noteTitle').value.trim();
                 const category = document.getElementById('noteCategory').value;
                 const content = document.getElementById('noteContent').value.trim();
-                if (!title || !content) return this.showNotification(this.lang === 'ru' ? 'Заполните все поля' : 'Fill all fields', 'error');
+
+                if (!title || !content) {
+                    return this.showNotification(this.lang === 'ru' ? 'Заполните все поля' : 'Fill all fields', 'error');
+                }
 
                 const note = {
                     id: id || Date.now(),
@@ -505,6 +585,7 @@
                 } else {
                     this.notes.unshift(note);
                 }
+
                 await this.saveNotes();
                 this.resetNoteForm();
                 this.showNotification(this.lang === 'ru' ? 'Запись сохранена ✅' : 'Note saved ✅', 'success');
@@ -517,7 +598,14 @@
                 document.getElementById('noteTitle').value = note.title;
                 document.getElementById('noteCategory').value = note.category;
                 document.getElementById('noteContent').value = note.content;
-                document.getElementById('new-note-title').innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>${this.lang === 'ru' ? 'Редактировать запись' : 'Edit Note'}`;
+
+                const titleEl = document.getElementById('new-note-title');
+                titleEl.innerHTML = `
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                    </svg>
+                    ${this.lang === 'ru' ? 'Редактировать запись' : 'Edit Note'}
+                `;
             }
 
             async deleteNote(id) {
@@ -529,7 +617,6 @@
 
             renderNotes() {
                 const listEl = document.getElementById('notesList');
-                const emptyEl = document.getElementById('emptyState') || this.createEmptyState();
                 const search = (document.getElementById('notesSearch').value || '').toLowerCase().replace('#', '');
                 const categoryFilter = document.getElementById('filterCategory').value;
 
@@ -544,15 +631,21 @@
                 });
 
                 if (filtered.length === 0) {
-                    listEl.innerHTML = '';
-                    listEl.appendChild(emptyEl);
-                    emptyEl.style.display = 'block';
+                    listEl.innerHTML = `
+                        <div class="text-center py-20">
+                            <svg class="w-20 h-20 text-purple-200 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <p class="text-purple-200 text-xl">${this.lang === 'ru' ? 'Пока нет записей' : 'No notes yet'}</p>
+                            <p class="text-purple-300 mt-2">${this.lang === 'ru' ? 'Создайте первую запись выше 👆' : 'Create your first note above 👆'}</p>
+                        </div>`;
                     return;
                 }
-                emptyEl.style.display = 'none';
 
                 const categoryColors = { personal: 'bg-pink-500', work: 'bg-blue-500', ideas: 'bg-amber-500', tasks: 'bg-emerald-500' };
-                const categoryNames = this.lang === 'ru' ? { personal: 'Личное', work: 'Работа', ideas: 'Идеи', tasks: 'Задачи' } : { personal: 'Personal', work: 'Work', ideas: 'Ideas', tasks: 'Tasks' };
+                const categoryNames = this.lang === 'ru' ? 
+                    { personal: 'Личное', work: 'Работа', ideas: 'Идеи', tasks: 'Задачи' } : 
+                    { personal: 'Personal', work: 'Work', ideas: 'Ideas', tasks: 'Tasks' };
 
                 listEl.innerHTML = filtered.map(note => `
                     <div class="note-card bg-white/10 backdrop-blur-md border border-white/30 rounded-3xl p-6">
@@ -562,17 +655,16 @@
                                 <span class="text-xs text-orange-200">${note.date}</span>
                             </div>
                             <div class="flex gap-3">
-                                <button onclick="diary.editNote(${note.id}); event.stopImmediatePropagation()" class="text-blue-300 hover:text-white">
-                                    ✏️
-                                </button>
-                                <button onclick="diary.deleteNote(${note.id}); event.stopImmediatePropagation()" class="text-red-300 hover:text-white">
-                                    🗑️
-                                </button>
+                                <button onclick="diary.editNote(${note.id}); event.stopImmediatePropagation()" class="text-blue-300 hover:text-white">✏️</button>
+                                <button onclick="diary.deleteNote(${note.id}); event.stopImmediatePropagation()" class="text-red-300 hover:text-white">🗑️</button>
                             </div>
                         </div>
-                        <h3 class="font-semibold text-xl mb-2 text-white">${note.title}</h3>
-                        <p class="text-orange-100 leading-relaxed mb-4">${note.content}</p>
-                        ${note.hashtags && note.hashtags.length ? `<div class="flex flex-wrap gap-2">${note.hashtags.map(t => `<span onclick="diary.filterByHashtag('${t.replace('#','')}');event.stopImmediatePropagation()" class="bg-white/20 hover:bg-white/30 text-xs px-3 py-1 rounded-3xl cursor-pointer">${t}</span>`).join('')}</div>` : ''}
+                        <h3 class="font-semibold text-xl mb-2 text-white">${escapeHtml(note.title)}</h3>
+                        <p class="text-orange-100 leading-relaxed mb-4">${escapeHtml(note.content)}</p>
+                        ${note.hashtags && note.hashtags.length ? 
+                            `<div class="flex flex-wrap gap-2">${note.hashtags.map(t => 
+                                `<span onclick="diary.filterByHashtag('${t.replace('#','')}');event.stopImmediatePropagation()" class="bg-white/20 hover:bg-white/30 text-xs px-3 py-1 rounded-3xl cursor-pointer">${t}</span>`
+                            ).join('')}</div>` : ''}
                     </div>
                 `).join('');
             }
@@ -583,26 +675,19 @@
                 this.switchTab('notes');
             }
 
-            createEmptyState() {
-                const div = document.createElement('div');
-                div.id = 'emptyState';
-                div.className = 'text-center py-20';
-                div.innerHTML = `
-                    <svg class="w-20 h-20 text-purple-200 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    <p class="text-purple-200 text-xl">${this.lang === 'ru' ? 'Пока нет записей' : 'No notes yet'}</p>
-                    <p class="text-purple-300 mt-2">${this.lang === 'ru' ? 'Создайте первую запись выше 👆' : 'Create your first note above 👆'}</p>
-                `;
-                return div;
-            }
-
             resetNoteForm() {
                 document.getElementById('noteForm').reset();
                 document.getElementById('noteId').value = '';
-                document.getElementById('new-note-title').innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>${this.lang === 'ru' ? 'Новая запись' : 'New Note'}`;
+                const titleEl = document.getElementById('new-note-title');
+                titleEl.innerHTML = `
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    ${this.lang === 'ru' ? 'Новая запись' : 'New Note'}
+                `;
             }
 
-            // HABITS
-            async addOrEditHabit() {
+            // ==================== HABITS ====================
+            async addOrEditHabit(e) {
+                e.preventDefault();
                 const id = parseInt(document.getElementById('habitId').value) || null;
                 const name = document.getElementById('habitName').value.trim();
                 const startDate = document.getElementById('habitStartDate').value;
@@ -610,7 +695,9 @@
                 const goal = parseInt(document.getElementById('habitGoal').value);
                 const description = document.getElementById('habitDescription').value.trim();
 
-                if (!name || !startDate || !goal) return this.showNotification(this.lang === 'ru' ? 'Заполните обязательные поля' : 'Fill required fields', 'error');
+                if (!name || !startDate || !goal) {
+                    return this.showNotification(this.lang === 'ru' ? 'Заполните обязательные поля' : 'Fill required fields', 'error');
+                }
 
                 const habit = {
                     id: id || Date.now(),
@@ -628,6 +715,7 @@
                 } else {
                     this.habits.unshift(habit);
                 }
+
                 await this.saveHabits();
                 this.resetHabitForm();
                 this.showNotification(this.lang === 'ru' ? 'Привычка сохранена' : 'Habit saved', 'success');
@@ -642,6 +730,7 @@
                 document.getElementById('habitEndDate').value = habit.endDate || '';
                 document.getElementById('habitGoal').value = habit.goal;
                 document.getElementById('habitDescription').value = habit.description || '';
+
                 document.getElementById('new-habit-title').textContent = this.lang === 'ru' ? 'Редактировать привычку' : 'Edit Habit';
             }
 
@@ -656,25 +745,42 @@
                 const habit = this.habits.find(h => h.id === id);
                 if (!habit) return;
 
-                // Если привычка уже завершена — запрещаем новые отметки
                 if (habit.endDate && dateStr > habit.endDate) {
                     this.showNotification(this.lang === 'ru' ? 'Привычка уже завершена' : 'Habit already ended', 'info');
                     return;
                 }
 
                 const set = new Set(habit.completedDays);
-                if (set.has(dateStr)) set.delete(dateStr);
-                else set.add(dateStr);
-
+                set.has(dateStr) ? set.delete(dateStr) : set.add(dateStr);
                 habit.completedDays = Array.from(set);
 
-                // Автозавершение при достижении цели
-                const completedCount = habit.completedDays.length;
-                if (!habit.endDate && completedCount >= habit.goal) {
-                    habit.endDate = dateStr; // завершаем на последний отмеченный день
+                // Автозавершение
+                if (!habit.endDate && habit.completedDays.length >= habit.goal) {
+                    habit.endDate = dateStr;
                 }
 
                 await this.saveHabits();
+            }
+
+            calculateStreak(habit) {
+                if (habit.endDate) return 0;
+                const sorted = [...habit.completedDays].sort().reverse();
+                if (!sorted.length) return 0;
+
+                let streak = 0;
+                const today = new Date().toISOString().split('T')[0];
+                let checkDate = new Date(today);
+
+                for (let i = 0; i < 365; i++) {
+                    const dateStr = checkDate.toISOString().split('T')[0];
+                    if (sorted.includes(dateStr)) {
+                        streak++;
+                    } else if (dateStr < sorted[0]) {
+                        break;
+                    }
+                    checkDate.setDate(checkDate.getDate() - 1);
+                }
+                return streak;
             }
 
             showHabitCalendar(id) {
@@ -682,23 +788,34 @@
                 if (!habit) return;
 
                 const modal = document.getElementById('calendarModal');
-                document.getElementById('calendarTitle').innerHTML = `${habit.name} <span class="text-sm ml-3 font-normal text-orange-200">${habit.endDate ? '✅ Завершена' : 'В процессе'}</span>`;
+                document.getElementById('calendarTitle').innerHTML = `
+                    ${habit.name} 
+                    <span class="text-sm ml-3 font-normal text-orange-200">
+                        ${habit.endDate ? '✅ Завершена' : 'В процессе'}
+                    </span>
+                `;
 
                 const table = document.getElementById('calendarTable');
                 const daysOfWeek = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-                let html = `<tr>${daysOfWeek.map(d => `<th>${d}</th>`).join('')}</tr><tr>`;
+                let html = `<tr>${daysOfWeek.map(d => `<th>${d}</th>`).join('')}</tr>`;
 
                 const start = new Date(habit.startDate);
                 const end = habit.endDate ? new Date(habit.endDate) : new Date();
-                const daysToShow = Math.ceil((end - start) / 86400000) + 15; // +15 дней после окончания для красоты
+                const daysToShow = Math.ceil((end - start) / 86400000) + 30;
 
                 let current = new Date(start);
-                const startDayOffset = (current.getDay() + 6) % 7; // понедельник = 0
-                for (let i = 0; i < startDayOffset; i++) html += '<td class="opacity-30"></td>';
+                const startOffset = (current.getDay() + 6) % 7; // понедельник = 0
 
+                // Пустые ячейки в начале
+                html += '<tr>';
+                for (let i = 0; i < startOffset; i++) {
+                    html += '<td class="opacity-30"></td>';
+                }
+
+                let dayCount = startOffset;
                 for (let i = 0; i < daysToShow; i++) {
-                    if (current.getDay() === 1 && i > 0) html += '</tr><tr>';
+                    if (dayCount % 7 === 0 && i > 0) html += '</tr><tr>';
 
                     const dateStr = current.toISOString().split('T')[0];
                     const isCompleted = habit.completedDays.includes(dateStr);
@@ -708,9 +825,12 @@
                     let className = isFuture ? 'day-future' : (isCompleted ? 'day-completed' : 'day-missed');
                     if (isToday) className += ' day-today';
 
-                    const clickable = (!isFuture || isToday) ? `onclick="diary.toggleHabitDay(${id}, '${dateStr}'); diary.showHabitCalendar(${id});"` : '';
+                    const clickable = (!isFuture || isToday) ? 
+                        `onclick="diary.toggleHabitDay(${id}, '${dateStr}'); diary.showHabitCalendar(${id});"` : '';
+
                     html += `<td class="${className}" ${clickable}>${current.getDate()}</td>`;
                     current.setDate(current.getDate() + 1);
+                    dayCount++;
                 }
                 html += '</tr>';
                 table.innerHTML = html;
@@ -753,14 +873,17 @@
                     const completedCount = h.completedDays.length;
                     const progress = Math.min(Math.round((completedCount / h.goal) * 100), 100);
                     const isEnded = !!h.endDate;
-                    const isCompletedToday = h.completedDays.includes(new Date().toISOString().split('T')[0]);
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const isCompletedToday = h.completedDays.includes(todayStr);
+                    const streak = this.calculateStreak(h);
 
                     return `
                         <div class="note-card ${isEnded ? 'habit-ended' : ''} bg-white/10 backdrop-blur-md border border-white/30 rounded-3xl p-6">
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <h3 class="font-semibold text-2xl mb-1">${h.name}</h3>
-                                    <p class="text-purple-200 text-sm">${h.description || ''}</p>
+                                    <h3 class="font-semibold text-2xl mb-1">${escapeHtml(h.name)}</h3>
+                                    <p class="text-purple-200 text-sm">${escapeHtml(h.description || '')}</p>
+                                    ${streak > 0 ? `<div class="mt-2 inline-flex items-center gap-1 text-amber-400 text-sm"><span class="streak-fire">🔥</span> ${streak} дней подряд</div>` : ''}
                                 </div>
                                 <div class="flex items-center gap-2">
                                     ${isEnded ? `<span class="text-xs px-4 py-1 bg-emerald-400 text-white rounded-3xl">Завершена</span>` : ''}
@@ -783,7 +906,7 @@
 
                             <div class="mt-6 flex gap-4">
                                 <button onclick="event.stopImmediatePropagation(); diary.showHabitCalendar(${h.id})" class="flex-1 py-3 bg-white/20 hover:bg-white/30 rounded-2xl text-white text-sm font-medium">📅 Календарь</button>
-                                <button onclick="event.stopImmediatePropagation(); diary.toggleHabitDay(${h.id}, '${new Date().toISOString().split('T')[0]}'); diary.renderHabits()" class="flex-1 py-3 ${isCompletedToday ? 'bg-emerald-500' : 'bg-white/20 hover:bg-white/30'} rounded-2xl text-white text-sm font-medium">
+                                <button onclick="event.stopImmediatePropagation(); diary.toggleHabitDay(${h.id}, '${todayStr}'); diary.renderHabits()" class="flex-1 py-3 ${isCompletedToday ? 'bg-emerald-500' : 'bg-white/20 hover:bg-white/30'} rounded-2xl text-white text-sm font-medium">
                                     ${isCompletedToday ? '✓ Сегодня отмечено' : 'Отметить сегодня'}
                                 </button>
                             </div>
@@ -798,8 +921,9 @@
                 document.getElementById('new-habit-title').textContent = this.lang === 'ru' ? 'Новая привычка' : 'New Habit';
             }
 
-            // MEMORIES & RELATIONS
-            async addOrEditMemory() {
+            // ==================== MEMORIES ====================
+            async addOrEditMemory(e) {
+                e.preventDefault();
                 const id = parseInt(document.getElementById('memoryId').value) || null;
                 const title = document.getElementById('memoryTitle').value.trim();
                 const type = document.getElementById('memoryType').value;
@@ -815,7 +939,9 @@
                     if (!partnerName) return this.showNotification(this.lang === 'ru' ? 'Укажите имя партнёра' : 'Enter partner name', 'error');
                 }
 
-                if (!title || !startDate) return this.showNotification(this.lang === 'ru' ? 'Заполните обязательные поля' : 'Fill required fields', 'error');
+                if (!title || !startDate) {
+                    return this.showNotification(this.lang === 'ru' ? 'Заполните обязательные поля' : 'Fill required fields', 'error');
+                }
 
                 const memory = {
                     id: id || Date.now(),
@@ -835,6 +961,7 @@
                 } else {
                     this.memories.unshift(memory);
                 }
+
                 await this.saveMemories();
                 this.resetMemoryForm();
                 this.showNotification(this.lang === 'ru' ? 'Воспоминание сохранено' : 'Memory saved', 'success');
@@ -854,6 +981,7 @@
                 }
                 document.getElementById('relationsFields').classList.toggle('hidden', memory.type !== 'relations');
                 document.getElementById('endDateField').classList.toggle('hidden', memory.type === 'relations');
+
                 document.getElementById('new-memory-title').textContent = this.lang === 'ru' ? 'Редактировать воспоминание' : 'Edit Memory';
             }
 
@@ -869,7 +997,8 @@
                 document.getElementById('eventModal').style.display = 'block';
             }
 
-            async addEvent() {
+            async addEvent(e) {
+                e.preventDefault();
                 const id = parseInt(document.getElementById('eventMemoryId').value);
                 const date = document.getElementById('eventDate').value;
                 const desc = document.getElementById('eventDesc').value.trim();
@@ -884,13 +1013,10 @@
             }
 
             endRelations(id) {
+                this.currentEndRelationsId = id;
                 document.getElementById('endRelationsMemoryId').value = id;
                 const memory = this.memories.find(m => m.id === id);
-                if (memory && memory.endDate) {
-                    document.getElementById('endRelationsDate').value = memory.endDate;
-                } else {
-                    document.getElementById('endRelationsDate').value = new Date().toISOString().split('T')[0];
-                }
+                document.getElementById('endRelationsDate').value = memory && memory.endDate ? memory.endDate : new Date().toISOString().split('T')[0];
                 document.getElementById('endRelationsModal').style.display = 'block';
             }
 
@@ -934,7 +1060,7 @@
                         extraHTML = `
                             <div class="mt-5 p-5 bg-gradient-to-br from-pink-400 to-rose-500 rounded-3xl text-white">
                                 <div class="flex justify-between items-center mb-3">
-                                    <div class="flex items-center gap-2 text-2xl">${heart} <span class="font-bold">${m.partnerName}</span></div>
+                                    <div class="flex items-center gap-2 text-2xl">${heart} <span class="font-bold">${escapeHtml(m.partnerName)}</span></div>
                                     <span class="text-sm opacity-90">${days} дней ${m.endDate ? 'вместе (завершено)' : 'вместе'}</span>
                                 </div>
                                 ${m.endDate ? `<div class="text-xs bg-white/20 inline-block px-4 py-1 rounded-3xl">Расстались ${new Date(m.endDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>` : ''}
@@ -942,14 +1068,14 @@
                                 ${!m.endDate ? `<button onclick="diary.endRelations(${m.id}); event.stopImmediatePropagation()" class="mt-3 w-full py-3 bg-red-600/80 hover:bg-red-700 rounded-2xl text-sm">💔 Мы расстались</button>` : ''}
                                 <div class="mt-6">
                                     <h5 class="text-xs uppercase tracking-widest mb-2 opacity-75">Ключевые события</h5>
-                                    <ul class="text-sm space-y-2">${(m.events || []).map(e => `<li class="flex justify-between"><span>${e.date}</span><span>${e.desc}</span></li>`).join('') || `<li class="opacity-60">Пока нет событий</li>`}</ul>
+                                    <ul class="text-sm space-y-2">${(m.events || []).map(e => `<li class="flex justify-between"><span>${e.date}</span><span>${escapeHtml(e.desc)}</span></li>`).join('') || `<li class="opacity-60">Пока нет событий</li>`}</ul>
                                 </div>
                             </div>`;
                     }
                     return `
                         <div class="note-card bg-white/10 backdrop-blur-md border border-white/30 rounded-3xl p-6">
                             <div class="flex justify-between">
-                                <h3 class="font-semibold text-xl">${m.title}</h3>
+                                <h3 class="font-semibold text-xl">${escapeHtml(m.title)}</h3>
                                 <div class="flex gap-3">
                                     <button onclick="diary.editMemory(${m.id}); event.stopImmediatePropagation()" class="text-blue-300">✏️</button>
                                     <button onclick="diary.deleteMemory(${m.id}); event.stopImmediatePropagation()" class="text-red-300">🗑️</button>
@@ -958,7 +1084,7 @@
                             <div class="text-purple-200 text-sm mt-1">${typeNames[m.type]}</div>
                             <div class="text-purple-200 text-sm">Начало: ${new Date(m.startDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>
                             ${m.endDate && m.type !== 'relations' ? `<div class="text-purple-200 text-sm">Конец: ${new Date(m.endDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>` : ''}
-                            ${m.notes ? `<div class="mt-4 bg-white/10 p-4 rounded-2xl text-orange-100">${m.notes}</div>` : ''}
+                            ${m.notes ? `<div class="mt-4 bg-white/10 p-4 rounded-2xl text-orange-100">${escapeHtml(m.notes)}</div>` : ''}
                             ${extraHTML}
                             <div class="text-[10px] text-purple-300 mt-4">Добавлено: ${m.date}</div>
                         </div>`;
@@ -974,7 +1100,7 @@
                 document.getElementById('new-memory-title').textContent = this.lang === 'ru' ? 'Новое воспоминание' : 'New Memory';
             }
 
-            // Common
+            // ==================== COMMON ====================
             switchTab(tab) {
                 this.currentTab = tab;
                 document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
@@ -993,6 +1119,12 @@
                 document.getElementById('memoriesCount').textContent = this.memories.length;
             }
 
+            renderAll() {
+                this.renderNotes();
+                this.renderHabits();
+                this.renderMemories();
+            }
+
             showNotification(message, type) {
                 const n = document.createElement('div');
                 n.className = `notification ${type}`;
@@ -1004,6 +1136,7 @@
             closeModals() {
                 document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
                 this.currentEndHabitId = null;
+                this.currentEndRelationsId = null;
             }
 
             applyLang() {
@@ -1066,12 +1199,12 @@
                     if (el) el.textContent = t[key];
                 });
 
-                // Динамические плейсхолдеры и селекты
+                // Динамические плейсхолдеры
                 document.getElementById('notesSearch').placeholder = this.lang === 'ru' ? 'Поиск по тексту или #хэштегу' : 'Search text or #hashtag';
                 document.getElementById('habitsSearch').placeholder = this.lang === 'ru' ? 'Поиск привычек...' : 'Search habits...';
                 document.getElementById('memoriesSearch').placeholder = this.lang === 'ru' ? 'Поиск воспоминаний...' : 'Search memories...';
 
-                // Категории заметок
+                // Селекты
                 document.getElementById('noteCategory').innerHTML = this.lang === 'ru'
                     ? `<option value="personal">Личное</option><option value="work">Работа</option><option value="ideas">Идеи</option><option value="tasks">Задачи</option>`
                     : `<option value="personal">Personal</option><option value="work">Work</option><option value="ideas">Ideas</option><option value="tasks">Tasks</option>`;
@@ -1080,14 +1213,11 @@
                     ? `<option value="all">Все категории</option><option value="personal">Личное</option><option value="work">Работа</option><option value="ideas">Идеи</option><option value="tasks">Задачи</option>`
                     : `<option value="all">All categories</option><option value="personal">Personal</option><option value="work">Work</option><option value="ideas">Ideas</option><option value="tasks">Tasks</option>`;
 
-                // Типы воспоминаний
                 document.getElementById('memoryType').innerHTML = this.lang === 'ru'
                     ? `<option value="book">📚 Книга</option><option value="movie">🎬 Фильм</option><option value="series">📺 Сериал</option><option value="game">🎮 Игра</option><option value="relations">❤️ Отношения</option>`
                     : `<option value="book">📚 Book</option><option value="movie">🎬 Movie</option><option value="series">📺 Series</option><option value="game">🎮 Game</option><option value="relations">❤️ Relations</option>`;
 
-                this.renderNotes();
-                this.renderHabits();
-                this.renderMemories();
+                this.renderAll();
                 this.updateSwitchButtons();
             }
 
@@ -1114,6 +1244,11 @@
                 document.getElementById('cloud-label').textContent = this.lang === 'ru' ? 'Облачно' : 'Cloud';
             }
 
+            debounceSearch(fn, delay = 300) {
+                clearTimeout(this.searchDebounce);
+                this.searchDebounce = setTimeout(fn, delay);
+            }
+
             async init() {
                 try {
                     Telegram.WebApp.ready();
@@ -1121,29 +1256,27 @@
                 } catch (e) {}
 
                 await this.loadAll();
-                await CloudStorageManager.get('lang', 'ru').then(l => this.lang = l);
-                await CloudStorageManager.get('theme', 'light').then(t => this.theme = t);
                 this.applyLang();
                 this.applyTheme();
 
                 // Формы
-                document.getElementById('noteForm').addEventListener('submit', e => { e.preventDefault(); this.addOrEditNote(); });
-                document.getElementById('habitForm').addEventListener('submit', e => { e.preventDefault(); this.addOrEditHabit(); });
-                document.getElementById('memoryForm').addEventListener('submit', e => { e.preventDefault(); this.addOrEditMemory(); });
-                document.getElementById('eventForm').addEventListener('submit', e => { e.preventDefault(); this.addEvent(); });
+                document.getElementById('noteForm').addEventListener('submit', e => this.addOrEditNote(e));
+                document.getElementById('habitForm').addEventListener('submit', e => this.addOrEditHabit(e));
+                document.getElementById('memoryForm').addEventListener('submit', e => this.addOrEditMemory(e));
+                document.getElementById('eventForm').addEventListener('submit', e => this.addEvent(e));
 
                 // Табы
                 document.getElementById('notesTab').addEventListener('click', () => this.switchTab('notes'));
                 document.getElementById('habitsTab').addEventListener('click', () => this.switchTab('habits'));
                 document.getElementById('memoryTab').addEventListener('click', () => this.switchTab('memory'));
 
-                // Поиск и фильтры
-                document.getElementById('notesSearch').addEventListener('input', () => this.renderNotes());
+                // Поиск с debounce
+                document.getElementById('notesSearch').addEventListener('input', () => this.debounceSearch(() => this.renderNotes()));
                 document.getElementById('filterCategory').addEventListener('change', () => this.renderNotes());
-                document.getElementById('habitsSearch').addEventListener('input', () => this.renderHabits());
-                document.getElementById('memoriesSearch').addEventListener('input', () => this.renderMemories());
+                document.getElementById('habitsSearch').addEventListener('input', () => this.debounceSearch(() => this.renderHabits()));
+                document.getElementById('memoriesSearch').addEventListener('input', () => this.debounceSearch(() => this.renderMemories()));
 
-                // Кнопки
+                // Кнопка очистки
                 document.getElementById('clearAll').addEventListener('click', async () => {
                     if (confirm(this.lang === 'ru' ? 'Удалить ВСЕ записи?' : 'Delete ALL notes?')) {
                         this.notes = [];
@@ -1152,6 +1285,7 @@
                     }
                 });
 
+                // Переключатели
                 document.getElementById('langSwitch').addEventListener('click', () => this.toggleLang());
                 document.getElementById('themeSwitch').addEventListener('click', () => this.toggleTheme());
 
@@ -1166,7 +1300,7 @@
                 document.getElementById('habitStartDate').value = new Date().toISOString().split('T')[0];
                 document.getElementById('memoryStartDate').value = new Date().toISOString().split('T')[0];
 
-                console.log('%c✅ DailyBookimix полностью переписан и готов к работе!', 'color:#ff4500;font-weight:bold');
+                console.log('%c✅ DailyBookimix v2.0 — полностью переписан и оптимизирован!', 'color:#ff4500;font-weight:bold');
             }
         }
 
