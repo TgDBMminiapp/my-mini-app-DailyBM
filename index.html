@@ -13,12 +13,6 @@
         :root {
             --bg-gradient-light: linear-gradient(135deg, #ff4500 0%, #ff6b35 25%, #f7931e 50%, #ff8c42 75%, #ff5722 100%);
             --bg-gradient-dark: linear-gradient(135deg, #0f1724 0%, #1f2937 30%, #2d3748 60%, #111827 100%);
-            --text-primary-light: #ffffff;
-            --text-secondary-light: #ffdab9;
-            --bg-glass-light: rgba(0, 0, 0, 0.4);
-            --border-light: rgba(255, 255, 255, 0.3);
-            --bg-glass-dark: rgba(255, 255, 255, 0.06);
-            --border-dark: rgba(0, 0, 0, 0.3);
         }
 
         html, body {
@@ -28,13 +22,13 @@
             padding: 0;
             background-size: cover;
             background-attachment: fixed;
-            background-position: center;
         }
 
         body {
             box-sizing: border-box;
             background: var(--bg-gradient-light);
-            color: var(--text-primary-light);
+            color: #ffffff;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
         body.dark {
@@ -43,1268 +37,926 @@
         }
 
         .glass-effect {
-            background: var(--bg-glass-light);
-            backdrop-filter: blur(15px);
-            border: 1px solid var(--border-light);
+            background: rgba(255,255,255,0.18);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.25);
         }
 
         .dark .glass-effect {
-            background: var(--bg-glass-dark);
-            border: 1px solid var(--border-dark);
+            background: rgba(255,255,255,0.09);
+            border: 1px solid rgba(255,255,255,0.12);
+        }
+
+        .header-glass {
+            background: rgba(255,255,255,0.22);
+            backdrop-filter: blur(20px);
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 16px 12px;
+            font-size: 15px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            background: rgba(255,255,255,0.95);
+            color: #1f2937;
+            border-radius: 9999px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
         }
 
         .note-card {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            transform: translateY(0);
         }
-        .note-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+        .note-card:active {
+            transform: scale(0.97);
         }
-
-        .fade-in {
-            animation: fadeIn 0.5s ease-in;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .tab-button {
-            background: rgba(0,0,0,0.3);
-            flex: 1 1 0;
-            min-width: 0;
-        }
-        .tab-button.active {
-            background: rgba(255,255,255,0.95);
-            color: #1f2937;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 16px 20px;
-            border-radius: 12px;
-            color: white;
-            z-index: 10000;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            animation: fadeIn 0.3s, slideIn 0.3s;
-        }
-        .notification.success { background-color: #10b981; }
-        .notification.error { background-color: #ef4444; }
-        .notification.info { background-color: #3b82f6; }
 
         .modal {
             display: none;
             position: fixed;
             z-index: 10000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.6);
-            backdrop-filter: blur(8px);
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(12px);
         }
+
         .modal-content {
-            background-color: #fff;
+            background: #fff;
             margin: 10% auto;
-            padding: 24px;
-            border-radius: 16px;
-            width: 90%;
+            width: 92%;
             max-width: 420px;
+            border-radius: 28px;
+            padding: 28px;
             color: #1f2937;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
         }
 
-        .calendar-table {
-            width: 100%;
-            border-collapse: collapse;
+        .form-input {
+            padding: 18px 20px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.95);
+            border: 2px solid transparent;
+            font-size: 17px;
+            transition: all 0.2s;
         }
-        .calendar-table th, .calendar-table td {
-            border: 1px solid #e5e7eb;
-            padding: 10px 4px;
-            text-align: center;
-            font-size: 14px;
-            font-weight: 500;
+        .form-input:focus {
+            border-color: #ff8c42;
+            box-shadow: 0 0 0 4px rgba(255,140,66,0.2);
         }
-        .calendar-table th { background-color: #f8fafc; }
-        .day-completed { background-color: #10b981; color: white; }
-        .day-missed { background-color: #ef4444; color: white; }
-        .day-future { background-color: #f1f5f9; color: #64748b; }
-        .day-today { border: 3px solid #f59e0b !important; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3); }
 
-        .habit-ended { filter: grayscale(1); opacity: 0.85; }
-        .streak-fire { animation: flame 1.5s infinite; }
-
-        @keyframes flame {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.15); }
+        .bottom-controls {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(15px);
         }
     </style>
 </head>
 <body class="font-sans">
-    <div class="min-h-screen p-4 flex flex-col">
-        <!-- Header -->
-        <header class="glass-effect rounded-3xl p-6 mb-6 fade-in">
-            <div class="flex items-center justify-between flex-wrap">
-                <div class="flex items-center space-x-3 mb-4 sm:mb-0">
-                    <div class="w-10 h-10 bg-white rounded-2xl flex items-center justify-center shadow-inner">
-                        <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 class="text-3xl font-bold text-white tracking-tight" id="app-title">DailyBookimix</h1>
-                        <p class="text-orange-100 text-sm font-medium" id="app-desc">Защищённый ежедневник</p>
-                    </div>
-                </div>
 
-                <div class="flex items-center space-x-2 mb-4 sm:mb-0">
-                    <button id="langSwitch" class="px-5 py-2 bg-white/20 hover:bg-white/30 rounded-2xl text-white text-sm font-medium transition-all">English</button>
-                    <button id="themeSwitch" class="px-5 py-2 bg-white/20 hover:bg-white/30 rounded-2xl text-white text-sm font-medium transition-all">Тёмная</button>
-                    <div class="security-badge px-5 py-2 bg-white/20 rounded-3xl flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                        </svg>
-                        <span id="cloud-label" class="text-white text-sm font-medium">Облачно</span>
-                    </div>
-                </div>
+    <div class="max-w-[480px] mx-auto min-h-screen p-4 pb-20 flex flex-col">
+
+        <!-- HEADER -->
+        <header class="header-glass rounded-3xl px-6 py-5 mb-6 flex items-center gap-4">
+            <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner">
+                <svg class="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+                <h1 id="app-title" class="text-3xl font-bold tracking-tighter">DailyBookimix</h1>
+                <p id="app-desc" class="text-orange-100 text-sm">Защищённый ежедневник</p>
             </div>
         </header>
 
-        <!-- Navigation Tabs -->
-        <div class="glass-effect rounded-3xl p-2 mb-6 fade-in">
-            <div class="flex space-x-2">
-                <button id="notesTab" class="tab-button active py-4 px-6 rounded-2xl text-white font-medium flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    <span id="notes-tab">Записи</span>
+        <!-- ТАБЫ -->
+        <div class="glass-effect rounded-3xl p-2 mb-6">
+            <div class="flex gap-1">
+                <button id="notesTab" class="tab-button active flex flex-col items-center justify-center">
+                    <span class="text-2xl mb-1">📝</span>
+                    <span id="notes-tab" class="text-[13px]">Записи</span>
                 </button>
-                <button id="habitsTab" class="tab-button py-4 px-6 rounded-2xl text-purple-200 font-medium flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <span id="habits-tab">Привычки</span>
+                <button id="habitsTab" class="tab-button flex flex-col items-center justify-center">
+                    <span class="text-2xl mb-1">🔥</span>
+                    <span id="habits-tab" class="text-[13px]">Привычки</span>
                 </button>
-                <button id="memoryTab" class="tab-button py-4 px-6 rounded-2xl text-purple-200 font-medium flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-                    <span id="memory-tab">Архив</span>
+                <button id="memoryTab" class="tab-button flex flex-col items-center justify-center">
+                    <span class="text-2xl mb-1">📦</span>
+                    <span id="memory-tab" class="text-[13px]">Архив</span>
                 </button>
             </div>
         </div>
 
+        <!-- КНОПКИ НАСТРОЕК ВНИЗУ -->
+        <div class="bottom-controls rounded-3xl px-5 py-3 mb-6 flex items-center justify-between text-sm font-medium">
+            <button id="langSwitch" class="flex items-center gap-2 px-5 py-2 bg-white/20 hover:bg-white/30 rounded-2xl transition-all">
+                🌐 <span id="lang-text">English</span>
+            </button>
+            
+            <button id="themeSwitch" class="flex items-center gap-2 px-5 py-2 bg-white/20 hover:bg-white/30 rounded-2xl transition-all">
+                <span id="theme-text">Тёмная</span>
+            </button>
+            
+            <div class="flex items-center gap-2 px-5 py-2 bg-white/20 rounded-2xl">
+                <span class="text-lg">☁️</span>
+                <span id="cloud-label" class="text-white">Облачно</span>
+            </div>
+        </div>
+
         <!-- NOTES SECTION -->
-        <div id="notesSection" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="md:col-span-1">
-                <div class="glass-effect rounded-3xl p-6 fade-in">
-                    <h2 class="text-xl font-semibold text-white mb-5 flex items-center" id="new-note-title">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <div id="notesSection">
+            <div class="space-y-6">
+                <div class="glass-effect rounded-3xl p-6">
+                    <h2 id="new-note-title" class="text-2xl font-semibold mb-6 flex items-center gap-3">
+                        <span class="text-4xl">✍️</span>
                         Новая запись
                     </h2>
                     <form id="noteForm" class="space-y-5">
                         <input type="hidden" id="noteId">
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2" id="note-title-label">Заголовок</label>
-                            <input type="text" id="noteTitle" required class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400">
-                        </div>
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2" id="note-category-label">Категория</label>
-                            <select id="noteCategory" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400"></select>
-                        </div>
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2" id="note-content-label">Содержание</label>
-                            <textarea id="noteContent" required rows="5" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-y"></textarea>
-                        </div>
-                        <button type="submit" class="w-full bg-white text-orange-600 font-semibold py-4 rounded-2xl hover:bg-orange-50 flex items-center justify-center gap-2" id="save-note-btn">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                            Сохранить запись
+                        <input id="noteTitle" type="text" placeholder="Заголовок записи" required class="form-input w-full text-gray-900">
+                        <select id="noteCategory" class="form-input w-full text-gray-900"></select>
+                        <textarea id="noteContent" rows="5" placeholder="Что сегодня произошло..." required class="form-input w-full text-gray-900 resize-none"></textarea>
+                        <button type="submit" id="save-note-btn" class="w-full py-6 bg-white text-orange-600 font-semibold text-xl rounded-3xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+                            Сохранить запись <span class="text-3xl">💾</span>
                         </button>
                     </form>
                 </div>
-            </div>
 
-            <div class="md:col-span-2">
-                <div class="glass-effect rounded-3xl p-6 fade-in">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <h2 class="text-2xl font-semibold text-white flex items-center" id="my-notes-title">
-                            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <div class="glass-effect rounded-3xl p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 id="my-notes-title" class="text-2xl font-semibold flex items-center gap-3">
+                            <span class="text-4xl">📖</span>
                             Мои записи
                         </h2>
-                        <div class="flex gap-2">
-                            <input type="text" id="notesSearch" placeholder="Поиск по тексту или #хэштегу" class="flex-1 sm:w-72 px-4 py-3 bg-white/95 border border-white/40 rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-                            <select id="filterCategory" class="px-4 py-3 bg-white/95 border border-white/40 rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"></select>
-                            <button id="clearAll" class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl text-sm font-medium transition-colors">Очистить всё</button>
-                        </div>
+                        <button id="clearAll" class="text-red-400 hover:text-red-500 text-sm font-medium px-4 py-2">Очистить всё</button>
                     </div>
-                    <div id="notesList" class="space-y-4 max-h-[62vh] overflow-y-auto pr-2"></div>
+                    <input id="notesSearch" type="text" placeholder="Поиск по тексту или #хэштегу" class="form-input w-full mb-4 text-gray-900">
+                    <select id="filterCategory" class="form-input w-full mb-6 text-gray-900"></select>
+                    <div id="notesList" class="space-y-4 max-h-[380px] overflow-y-auto pr-1"></div>
                 </div>
             </div>
         </div>
 
         <!-- HABITS SECTION -->
-        <div id="habitsSection" class="grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
-            <div class="md:col-span-1">
-                <div class="glass-effect rounded-3xl p-6 fade-in">
-                    <h2 class="text-xl font-semibold text-white mb-5" id="new-habit-title">Новая привычка</h2>
+        <div id="habitsSection" class="hidden">
+            <div class="space-y-6">
+                <div class="glass-effect rounded-3xl p-6">
+                    <h2 id="new-habit-title" class="text-2xl font-semibold mb-6">Новая привычка</h2>
                     <form id="habitForm" class="space-y-5">
                         <input type="hidden" id="habitId">
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2">Название привычки</label>
-                            <input type="text" id="habitName" required class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400">
-                        </div>
+                        <input id="habitName" type="text" placeholder="Название привычки" required class="form-input w-full text-gray-900">
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-purple-100 text-sm font-medium mb-2">Дата начала</label>
-                                <input type="date" id="habitStartDate" required class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                <label class="text-orange-100 text-sm block mb-2">Дата начала</label>
+                                <input id="habitStartDate" type="date" required class="form-input w-full text-gray-900">
                             </div>
                             <div>
-                                <label class="block text-purple-100 text-sm font-medium mb-2">Дата завершения (опц.)</label>
-                                <input type="date" id="habitEndDate" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                <label class="text-orange-100 text-sm block mb-2">Дата завершения (необязательно)</label>
+                                <input id="habitEndDate" type="date" class="form-input w-full text-gray-900">
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2">Цель (дней)</label>
-                            <input type="number" id="habitGoal" min="1" value="30" required class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400">
-                        </div>
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2">Описание</label>
-                            <textarea id="habitDescription" rows="3" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-y"></textarea>
-                        </div>
-                        <button type="submit" id="start-habit-btn" class="w-full bg-white text-orange-600 font-semibold py-4 rounded-2xl hover:bg-orange-50 flex items-center justify-center gap-2">Начать трекинг</button>
+                        <input id="habitGoal" type="number" value="30" min="1" required placeholder="Цель в днях" class="form-input w-full text-gray-900">
+                        <textarea id="habitDescription" rows="3" placeholder="Описание привычки (можно пусто)" class="form-input w-full text-gray-900 resize-none"></textarea>
+                        <button type="submit" id="start-habit-btn" class="w-full py-6 bg-white text-orange-600 font-semibold text-xl rounded-3xl">Начать трекинг</button>
                     </form>
                 </div>
-            </div>
 
-            <div class="md:col-span-2">
-                <div class="glass-effect rounded-3xl p-6 fade-in">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <h2 class="text-2xl font-semibold text-white" id="my-habits-title">Мои привычки</h2>
-                        <input type="text" id="habitsSearch" placeholder="Поиск привычек..." class="flex-1 sm:w-80 px-4 py-3 bg-white/95 border border-white/40 rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-                    </div>
-                    <div id="habitsList" class="space-y-4 max-h-[62vh] overflow-y-auto pr-2"></div>
+                <div class="glass-effect rounded-3xl p-6">
+                    <h2 id="my-habits-title" class="text-2xl font-semibold mb-6">Мои привычки</h2>
+                    <input id="habitsSearch" type="text" placeholder="Поиск привычек..." class="form-input w-full mb-6 text-gray-900">
+                    <div id="habitsList" class="space-y-4 max-h-[380px] overflow-y-auto"></div>
                 </div>
             </div>
         </div>
 
         <!-- MEMORY SECTION -->
-        <div id="memorySection" class="grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
-            <div class="md:col-span-1">
-                <div class="glass-effect rounded-3xl p-6 fade-in">
-                    <h2 class="text-xl font-semibold text-white mb-5" id="new-memory-title">Новое воспоминание</h2>
+        <div id="memorySection" class="hidden">
+            <div class="space-y-6">
+                <div class="glass-effect rounded-3xl p-6">
+                    <h2 id="new-memory-title" class="text-2xl font-semibold mb-6">Новое воспоминание</h2>
                     <form id="memoryForm" class="space-y-5">
                         <input type="hidden" id="memoryId">
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2">Название</label>
-                            <input type="text" id="memoryTitle" required class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400">
-                        </div>
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2">Тип</label>
-                            <select id="memoryType" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400"></select>
-                        </div>
-                        <div id="relationsFields" class="hidden space-y-5">
-                            <div>
-                                <label class="block text-purple-100 text-sm font-medium mb-2" id="partner-name-label">Имя партнёра</label>
-                                <input type="text" id="partnerName" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400">
-                            </div>
+                        <input id="memoryTitle" type="text" placeholder="Название" required class="form-input w-full text-gray-900">
+                        <select id="memoryType" class="form-input w-full text-gray-900"></select>
+                        <div id="relationsFields" class="hidden">
+                            <input id="partnerName" type="text" placeholder="Имя партнёра" class="form-input w-full text-gray-900">
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-purple-100 text-sm font-medium mb-2">Дата начала</label>
-                                <input type="date" id="memoryStartDate" required class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                <label class="text-orange-100 text-sm block mb-2">Дата начала</label>
+                                <input id="memoryStartDate" type="date" required class="form-input w-full text-gray-900">
                             </div>
                             <div id="endDateField">
-                                <label class="block text-purple-100 text-sm font-medium mb-2">Дата конца (опционально)</label>
-                                <input type="date" id="memoryEndDate" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                <label class="text-orange-100 text-sm block mb-2">Дата конца (необязательно)</label>
+                                <input id="memoryEndDate" type="date" class="form-input w-full text-gray-900">
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-purple-100 text-sm font-medium mb-2">Заметки</label>
-                            <textarea id="memoryNotes" rows="4" class="w-full px-5 py-4 bg-white/95 border border-white/40 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-400 resize-y"></textarea>
-                        </div>
-                        <button type="submit" id="save-memory-btn" class="w-full bg-white text-orange-600 font-semibold py-4 rounded-2xl hover:bg-orange-50">Сохранить воспоминание</button>
+                        <textarea id="memoryNotes" rows="4" placeholder="Заметки..." class="form-input w-full text-gray-900 resize-none"></textarea>
+                        <button type="submit" id="save-memory-btn" class="w-full py-6 bg-white text-orange-600 font-semibold text-xl rounded-3xl">Сохранить воспоминание</button>
                     </form>
                 </div>
-            </div>
 
-            <div class="md:col-span-2">
-                <div class="glass-effect rounded-3xl p-6 fade-in">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <h2 class="text-2xl font-semibold text-white" id="my-memories-title">Архив воспоминаний</h2>
-                        <input type="text" id="memoriesSearch" placeholder="Поиск..." class="flex-1 sm:w-80 px-4 py-3 bg-white/95 border border-white/40 rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-                    </div>
-                    <div id="memoriesList" class="space-y-4 max-h-[62vh] overflow-y-auto pr-2"></div>
+                <div class="glass-effect rounded-3xl p-6">
+                    <h2 id="my-memories-title" class="text-2xl font-semibold mb-6">Архив воспоминаний</h2>
+                    <input id="memoriesSearch" type="text" placeholder="Поиск..." class="form-input w-full mb-6 text-gray-900">
+                    <div id="memoriesList" class="space-y-4 max-h-[380px] overflow-y-auto"></div>
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
-        <footer class="mt-auto glass-effect rounded-3xl p-5 fade-in">
-            <div class="flex flex-wrap justify-center items-center gap-x-8 gap-y-2 text-purple-100 text-sm font-medium">
-                <span>📊 Записей: <span id="notesCount" class="font-semibold text-white">0</span></span>
-                <span>⏰ Привычек: <span id="habitsCount" class="font-semibold text-white">0</span> <span class="text-xs opacity-75">(активных: <span id="activeHabitsCount" class="font-semibold text-white">0</span>)</span></span>
-                <span>📖 Воспоминаний: <span id="memoriesCount" class="font-semibold text-white">0</span></span>
+        <!-- FOOTER -->
+        <footer class="mt-auto glass-effect rounded-3xl p-5 text-center text-sm flex flex-wrap justify-center gap-x-8 gap-y-3">
+            <div>📊 Записей: <span id="notesCount" class="font-semibold">0</span></div>
+            <div>⏰ Привычек: <span id="habitsCount" class="font-semibold">0</span> 
+                <span class="text-xs opacity-75">(активных: <span id="activeHabitsCount" class="font-semibold">0</span>)</span>
             </div>
+            <div>📖 Воспоминаний: <span id="memoriesCount" class="font-semibold">0</span></div>
         </footer>
     </div>
 
-    <!-- Календарь привычки -->
+    <!-- МОДАЛКИ (без изменений) -->
     <div id="calendarModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 id="calendarTitle" class="text-xl font-semibold"></h2>
-                <span onclick="diary.closeModals()" class="text-3xl leading-none cursor-pointer text-gray-400 hover:text-gray-600">×</span>
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="calendarTitle" class="text-2xl font-semibold"></h2>
+                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
             </div>
-            <table id="calendarTable" class="calendar-table"></table>
-            <div class="text-xs text-center mt-4 text-gray-400">Нажмите на день, чтобы отметить / снять отметку</div>
+            <table id="calendarTable" class="w-full border-collapse text-center"></table>
+            <p class="text-xs text-center text-gray-400 mt-6">Нажми на день, чтобы отметить / снять отметку</p>
         </div>
     </div>
 
-    <!-- Модалка завершения привычки -->
     <div id="endHabitModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Завершить привычку</h2>
-                <span onclick="diary.closeModals()" class="text-3xl leading-none cursor-pointer text-gray-400 hover:text-gray-600">×</span>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">Завершить привычку</h2>
+                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
             </div>
-            <p class="text-sm text-gray-600 mb-6" id="endHabitName"></p>
-            <div class="mb-6">
-                <label class="block text-sm font-medium mb-2">Дата завершения</label>
-                <input type="date" id="endHabitDate" class="w-full px-5 py-4 bg-gray-100 border border-gray-300 rounded-2xl text-gray-900">
-            </div>
+            <p id="endHabitName" class="mb-6 text-gray-600"></p>
+            <input id="endHabitDate" type="date" class="form-input w-full mb-8 text-gray-900">
             <div class="flex gap-3">
-                <button onclick="diary.closeModals()" class="flex-1 py-4 bg-gray-200 text-gray-700 rounded-2xl font-medium">Отмена</button>
-                <button onclick="diary.confirmEndHabit()" class="flex-1 py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-medium">Завершить</button>
+                <button onclick="diary.closeModals()" class="flex-1 py-5 bg-gray-200 rounded-3xl text-lg">Отмена</button>
+                <button onclick="diary.confirmEndHabit()" class="flex-1 py-5 bg-red-500 text-white rounded-3xl text-lg">Завершить</button>
             </div>
         </div>
     </div>
 
-    <!-- Модалка добавления события в отношения -->
     <div id="eventModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 id="add-event-title" class="text-xl font-semibold">Добавить событие</h2>
-                <span onclick="diary.closeModals()" class="text-3xl leading-none cursor-pointer text-gray-400 hover:text-gray-600">×</span>
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="add-event-title" class="text-2xl font-semibold">Добавить событие</h2>
+                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
             </div>
             <form id="eventForm">
                 <input type="hidden" id="eventMemoryId">
-                <div class="mb-5">
-                    <label class="block text-sm font-medium mb-2" id="event-date-label">Дата события</label>
-                    <input type="date" id="eventDate" required class="w-full px-5 py-4 bg-gray-100 border border-gray-300 rounded-2xl text-gray-900">
-                </div>
-                <div class="mb-6">
-                    <label class="block text-sm font-medium mb-2" id="event-desc-label">Описание события</label>
-                    <textarea id="eventDesc" required rows="3" class="w-full px-5 py-4 bg-gray-100 border border-gray-300 rounded-2xl text-gray-900"></textarea>
-                </div>
+                <input id="eventDate" type="date" required class="form-input w-full mb-6 text-gray-900">
+                <textarea id="eventDesc" rows="4" required placeholder="Что произошло?" class="form-input w-full mb-8 text-gray-900"></textarea>
                 <div class="flex gap-3">
-                    <button type="button" onclick="diary.closeModals()" class="flex-1 py-4 bg-gray-200 text-gray-700 rounded-2xl font-medium">Отмена</button>
-                    <button type="submit" id="save-event-btn" class="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-medium">Сохранить событие</button>
+                    <button type="button" onclick="diary.closeModals()" class="flex-1 py-5 bg-gray-200 rounded-3xl text-lg">Отмена</button>
+                    <button type="submit" class="flex-1 py-5 bg-orange-600 text-white rounded-3xl text-lg">Сохранить</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Модалка завершения отношений -->
     <div id="endRelationsModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold flex items-center gap-2">💔 Мы расстались</h2>
-                <span onclick="diary.closeModals()" class="text-3xl leading-none cursor-pointer text-gray-400 hover:text-gray-600">×</span>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">💔 Мы расстались</h2>
+                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
             </div>
-            <p class="text-sm text-gray-600 mb-6">Укажите дату расставания — счётчик дней остановится.</p>
-            <input type="hidden" id="endRelationsMemoryId">
-            <div class="mb-6">
-                <label class="block text-sm font-medium mb-2">Дата расставания</label>
-                <input type="date" id="endRelationsDate" class="w-full px-5 py-4 bg-gray-100 border border-gray-300 rounded-2xl text-gray-900">
-            </div>
+            <input id="endRelationsDate" type="date" class="form-input w-full mb-8 text-gray-900">
             <div class="flex gap-3">
-                <button onclick="diary.closeModals()" class="flex-1 py-4 bg-gray-200 text-gray-700 rounded-2xl font-medium">Отмена</button>
-                <button onclick="diary.confirmEndRelations()" class="flex-1 py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-medium">Подтвердить расставание</button>
+                <button onclick="diary.closeModals()" class="flex-1 py-5 bg-gray-200 rounded-3xl text-lg">Отмена</button>
+                <button onclick="diary.confirmEndRelations()" class="flex-1 py-5 bg-red-500 text-white rounded-3xl text-lg">Подтвердить</button>
             </div>
         </div>
     </div>
 
     <script>
-        // CloudStorage wrappers (безопасные)
-        function cloudSetItem(key, value) {
-            return new Promise((resolve, reject) => {
-                Telegram.WebApp.CloudStorage.setItem(key, value, (err, success) => {
-                    if (err) reject(err); else resolve(success);
-                });
-            });
-        }
-        function cloudGetItem(key) {
-            return new Promise((resolve, reject) => {
-                Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
-                    if (err) reject(err); else resolve(value || null);
-                });
-            });
-        }
-        function cloudGetItems(keys) {
-            return new Promise((resolve, reject) => {
-                Telegram.WebApp.CloudStorage.getItems(keys, (err, values) => {
-                    if (err) reject(err); else resolve(values || {});
-                });
-            });
-        }
-        function cloudRemoveItem(key) {
-            return new Promise((resolve, reject) => {
-                Telegram.WebApp.CloudStorage.removeItem(key, (err, success) => {
-                    if (err) reject(err); else resolve(success);
-                });
-            });
-        }
+        // ================================================
+        // НОВЫЙ МЕНЕДЖЕР ХРАНИЛИЩА С ЗАЩИТОЙ ОТ ОШИБКИ
+        // ================================================
+        const StorageManager = {
+            supportsCloud: false,
 
-        const CloudStorageManager = {
-            async get(key, defaultValue) {
-                try {
-                    const v = await cloudGetItem(key);
-                    return v !== null ? v : defaultValue;
-                } catch (e) {
-                    console.warn('Cloud get error:', e);
-                    return defaultValue;
+            init() {
+                // Проверяем поддержку CloudStorage (добавлено в Bot API 6.9)
+                this.supportsCloud = !!(Telegram.WebApp.CloudStorage && Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9'));
+                
+                if (!this.supportsCloud) {
+                    console.warn('CloudStorage не поддерживается в этой версии Telegram. Используем localStorage (данные сохраняются только на этом устройстве).');
                 }
             },
-            async set(key, value) {
-                try {
-                    await cloudSetItem(key, value);
-                    return true;
-                } catch (e) {
-                    console.warn('Cloud set error:', e);
-                    return false;
+
+            async getItem(key) {
+                if (this.supportsCloud) {
+                    return new Promise(resolve => {
+                        Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
+                            resolve(value !== null && value !== undefined ? value : null);
+                        });
+                    });
                 }
+                return localStorage.getItem(key) || null;
+            },
+
+            async setItem(key, value) {
+                if (this.supportsCloud) {
+                    return new Promise(resolve => {
+                        Telegram.WebApp.CloudStorage.setItem(key, value, () => resolve());
+                    });
+                }
+                localStorage.setItem(key, value);
+                return Promise.resolve();
+            },
+
+            async getItems(keys) {
+                if (this.supportsCloud) {
+                    return new Promise(resolve => {
+                        Telegram.WebApp.CloudStorage.getItems(keys, (err, data) => {
+                            resolve(data || {});
+                        });
+                    });
+                }
+                const data = {};
+                keys.forEach(key => {
+                    const val = localStorage.getItem(key);
+                    if (val !== null) data[key] = val;
+                });
+                return data;
             }
         };
 
-        // Простая защита от XSS
-        function escapeHtml(unsafe) {
-            return unsafe
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
+        const diary = {
+            notes: [],
+            habits: [],
+            memories: [],
+            lang: 'ru',
+            theme: 'light',
 
-        class SimpleDiary {
-            constructor() {
-                this.notes = [];
-                this.habits = [];
-                this.memories = [];
-                this.currentTab = 'notes';
-                this.lang = 'ru';
-                this.theme = 'light';
-                this.currentEndHabitId = null;
-                this.currentEndRelationsId = null;
-                this.searchDebounce = null;
-            }
+            async load() {
+                const data = await StorageManager.getItems(['notes', 'habits', 'memories', 'lang', 'theme']);
+                
+                this.notes = JSON.parse(data.notes || '[]').sort((a, b) => b.id - a.id);
+                this.habits = JSON.parse(data.habits || '[]').sort((a, b) => b.id - a.id);
+                this.memories = JSON.parse(data.memories || '[]').sort((a, b) => b.id - a.id);
+                
+                if (data.lang) this.lang = data.lang;
+                if (data.theme) this.theme = data.theme;
 
-            async loadAll() {
-                try {
-                    const data = await cloudGetItems(['notes', 'habits', 'memories', 'lang', 'theme']);
-                    this.notes = JSON.parse(data.notes || '[]').sort((a, b) => b.id - a.id);
-                    this.habits = JSON.parse(data.habits || '[]').sort((a, b) => b.id - a.id);
-                    this.memories = JSON.parse(data.memories || '[]').sort((a, b) => b.id - a.id);
-
-                    this.migrateData();
-
-                    if (data.lang) this.lang = data.lang;
-                    if (data.theme) this.theme = data.theme;
-
-                    this.renderAll();
-                    this.updateCounts();
-                } catch (e) {
-                    console.warn('Load error:', e);
-                }
-            }
-
-            migrateData() {
-                // Миграция привычек
-                this.habits.forEach(h => {
-                    if (!h.completedDays) h.completedDays = [];
-                    if (!h.endDate && new Set(h.completedDays).size >= h.goal) {
-                        const sorted = [...h.completedDays].sort();
-                        h.endDate = sorted[sorted.length - 1];
-                    }
-                    if (!h.endDate) h.endDate = null;
-                });
-
-                // Миграция воспоминаний
-                this.memories.forEach(m => {
-                    if (m.type === 'relations' && !m.endDate) m.endDate = null;
-                    if (!m.events) m.events = [];
-                });
-            }
+                this.renderAll();
+            },
 
             async saveNotes() {
-                await CloudStorageManager.set('notes', JSON.stringify(this.notes));
+                await StorageManager.setItem('notes', JSON.stringify(this.notes));
                 this.renderNotes();
-                this.updateCounts();
-            }
-
+                this.updateFooter();
+            },
             async saveHabits() {
-                await CloudStorageManager.set('habits', JSON.stringify(this.habits));
+                await StorageManager.setItem('habits', JSON.stringify(this.habits));
                 this.renderHabits();
-                this.updateCounts();
-            }
-
+                this.updateFooter();
+            },
             async saveMemories() {
-                await CloudStorageManager.set('memories', JSON.stringify(this.memories));
+                await StorageManager.setItem('memories', JSON.stringify(this.memories));
                 this.renderMemories();
-                this.updateCounts();
-            }
+                this.updateFooter();
+            },
 
-            extractHashtags(content) {
-                const matches = content.match(/#\w+/g);
-                return matches ? matches.map(m => m.trim()) : [];
-            }
-
-            // ==================== NOTES ====================
-            async addOrEditNote(e) {
+            // ==================== ЗАПИСИ ====================
+            async saveNote(e) {
                 e.preventDefault();
-                const id = parseInt(document.getElementById('noteId').value) || null;
+                const id = document.getElementById('noteId').value ? +document.getElementById('noteId').value : Date.now();
                 const title = document.getElementById('noteTitle').value.trim();
                 const category = document.getElementById('noteCategory').value;
                 const content = document.getElementById('noteContent').value.trim();
 
-                if (!title || !content) {
-                    return this.showNotification(this.lang === 'ru' ? 'Заполните все поля' : 'Fill all fields', 'error');
-                }
+                if (!title || !content) return this.toast('Заполни все поля', 'error');
 
-                const note = {
-                    id: id || Date.now(),
-                    title,
-                    category,
-                    content,
-                    hashtags: this.extractHashtags(content),
-                    date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-US')
-                };
+                const note = { id, title, category, content, date: new Date().toLocaleString(this.lang==='ru'?'ru-RU':'en-US') };
 
-                if (id) {
-                    const index = this.notes.findIndex(n => n.id === id);
-                    if (index > -1) this.notes[index] = note;
-                } else {
-                    this.notes.unshift(note);
-                }
+                if (document.getElementById('noteId').value) {
+                    const idx = this.notes.findIndex(n => n.id === id);
+                    this.notes[idx] = note;
+                } else this.notes.unshift(note);
 
                 await this.saveNotes();
                 this.resetNoteForm();
-                this.showNotification(this.lang === 'ru' ? 'Запись сохранена ✅' : 'Note saved ✅', 'success');
-            }
+                this.toast('Запись сохранена ✅');
+            },
 
             editNote(id) {
-                const note = this.notes.find(n => n.id === id);
-                if (!note) return;
-                document.getElementById('noteId').value = note.id;
-                document.getElementById('noteTitle').value = note.title;
-                document.getElementById('noteCategory').value = note.category;
-                document.getElementById('noteContent').value = note.content;
-
-                const titleEl = document.getElementById('new-note-title');
-                titleEl.innerHTML = `
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                    </svg>
-                    ${this.lang === 'ru' ? 'Редактировать запись' : 'Edit Note'}
-                `;
-            }
+                const n = this.notes.find(n => n.id === id);
+                document.getElementById('noteId').value = n.id;
+                document.getElementById('noteTitle').value = n.title;
+                document.getElementById('noteCategory').value = n.category;
+                document.getElementById('noteContent').value = n.content;
+                document.getElementById('new-note-title').innerHTML = `<span class="text-4xl">✏️</span> Редактировать запись`;
+            },
 
             async deleteNote(id) {
-                if (!confirm(this.lang === 'ru' ? 'Удалить запись?' : 'Delete note?')) return;
+                if (!confirm('Удалить запись?')) return;
                 this.notes = this.notes.filter(n => n.id !== id);
                 await this.saveNotes();
-                this.showNotification(this.lang === 'ru' ? 'Запись удалена' : 'Note deleted', 'info');
-            }
+            },
 
             renderNotes() {
-                const listEl = document.getElementById('notesList');
-                const search = (document.getElementById('notesSearch').value || '').toLowerCase().replace('#', '');
-                const categoryFilter = document.getElementById('filterCategory').value;
+                const container = document.getElementById('notesList');
+                const search = (document.getElementById('notesSearch').value || '').toLowerCase();
+                const cat = document.getElementById('filterCategory').value;
 
-                let filtered = this.notes.filter(n => {
-                    if (categoryFilter !== 'all' && n.category !== categoryFilter) return false;
-                    if (!search) return true;
-                    return (
-                        n.title.toLowerCase().includes(search) ||
-                        n.content.toLowerCase().includes(search) ||
-                        n.hashtags.some(tag => tag.toLowerCase().includes(search))
-                    );
-                });
+                let list = this.notes;
+                if (cat !== 'all') list = list.filter(n => n.category === cat);
+                if (search) list = list.filter(n => 
+                    n.title.toLowerCase().includes(search) || n.content.toLowerCase().includes(search)
+                );
 
-                if (filtered.length === 0) {
-                    listEl.innerHTML = `
-                        <div class="text-center py-20">
-                            <svg class="w-20 h-20 text-purple-200 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                            </svg>
-                            <p class="text-purple-200 text-xl">${this.lang === 'ru' ? 'Пока нет записей' : 'No notes yet'}</p>
-                            <p class="text-purple-300 mt-2">${this.lang === 'ru' ? 'Создайте первую запись выше 👆' : 'Create your first note above 👆'}</p>
-                        </div>`;
+                if (!list.length) {
+                    container.innerHTML = `<div class="text-center py-12 text-orange-100">Пока пусто.<br>Добавь первую запись выше 👆</div>`;
                     return;
                 }
 
-                const categoryColors = { personal: 'bg-pink-500', work: 'bg-blue-500', ideas: 'bg-amber-500', tasks: 'bg-emerald-500' };
-                const categoryNames = this.lang === 'ru' ? 
-                    { personal: 'Личное', work: 'Работа', ideas: 'Идеи', tasks: 'Задачи' } : 
-                    { personal: 'Personal', work: 'Work', ideas: 'Ideas', tasks: 'Tasks' };
+                const colors = {personal:'pink',work:'blue',ideas:'amber',tasks:'emerald'};
+                const names = this.lang==='ru' ? {personal:'Личное',work:'Работа',ideas:'Идеи',tasks:'Задачи'} : {personal:'Personal',work:'Work',ideas:'Ideas',tasks:'Tasks'};
 
-                listEl.innerHTML = filtered.map(note => `
-                    <div class="note-card bg-white/10 backdrop-blur-md border border-white/30 rounded-3xl p-6">
-                        <div class="flex justify-between mb-4">
+                container.innerHTML = list.map(note => `
+                    <div class="note-card bg-white/10 p-6 rounded-3xl border border-white/30">
+                        <div class="flex justify-between">
                             <div class="flex items-center gap-3">
-                                <span class="${categoryColors[note.category]} text-white text-xs font-bold px-4 py-1 rounded-3xl">${categoryNames[note.category]}</span>
+                                <span class="bg-${colors[note.category]}-500 px-4 py-1 text-xs font-bold rounded-3xl">${names[note.category]}</span>
                                 <span class="text-xs text-orange-200">${note.date}</span>
                             </div>
-                            <div class="flex gap-3">
-                                <button onclick="diary.editNote(${note.id}); event.stopImmediatePropagation()" class="text-blue-300 hover:text-white">✏️</button>
-                                <button onclick="diary.deleteNote(${note.id}); event.stopImmediatePropagation()" class="text-red-300 hover:text-white">🗑️</button>
+                            <div class="flex gap-4 text-2xl">
+                                <span onclick="diary.editNote(${note.id});event.stopImmediatePropagation()" class="cursor-pointer">✏️</span>
+                                <span onclick="diary.deleteNote(${note.id});event.stopImmediatePropagation()" class="cursor-pointer text-red-400">🗑️</span>
                             </div>
                         </div>
-                        <h3 class="font-semibold text-xl mb-2 text-white">${escapeHtml(note.title)}</h3>
-                        <p class="text-orange-100 leading-relaxed mb-4">${escapeHtml(note.content)}</p>
-                        ${note.hashtags && note.hashtags.length ? 
-                            `<div class="flex flex-wrap gap-2">${note.hashtags.map(t => 
-                                `<span onclick="diary.filterByHashtag('${t.replace('#','')}');event.stopImmediatePropagation()" class="bg-white/20 hover:bg-white/30 text-xs px-3 py-1 rounded-3xl cursor-pointer">${t}</span>`
-                            ).join('')}</div>` : ''}
+                        <h3 class="font-semibold text-xl mt-4">${note.title}</h3>
+                        <p class="text-orange-100 mt-2 line-clamp-4">${note.content}</p>
                     </div>
                 `).join('');
-            }
-
-            filterByHashtag(tag) {
-                document.getElementById('notesSearch').value = '#' + tag;
-                this.renderNotes();
-                this.switchTab('notes');
-            }
+            },
 
             resetNoteForm() {
                 document.getElementById('noteForm').reset();
                 document.getElementById('noteId').value = '';
-                const titleEl = document.getElementById('new-note-title');
-                titleEl.innerHTML = `
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                    ${this.lang === 'ru' ? 'Новая запись' : 'New Note'}
-                `;
-            }
+                document.getElementById('new-note-title').innerHTML = `<span class="text-4xl">✍️</span> Новая запись`;
+            },
 
-            // ==================== HABITS ====================
-            async addOrEditHabit(e) {
+            // ==================== ПРИВЫЧКИ ====================
+            async saveHabit(e) {
                 e.preventDefault();
-                const id = parseInt(document.getElementById('habitId').value) || null;
+                const id = document.getElementById('habitId').value ? +document.getElementById('habitId').value : Date.now();
                 const name = document.getElementById('habitName').value.trim();
-                const startDate = document.getElementById('habitStartDate').value;
-                const endDateInput = document.getElementById('habitEndDate').value || null;
-                const goal = parseInt(document.getElementById('habitGoal').value);
-                const description = document.getElementById('habitDescription').value.trim();
+                const start = document.getElementById('habitStartDate').value;
+                const end = document.getElementById('habitEndDate').value || null;
+                const goal = +document.getElementById('habitGoal').value;
+                const desc = document.getElementById('habitDescription').value.trim();
 
-                if (!name || !startDate || !goal) {
-                    return this.showNotification(this.lang === 'ru' ? 'Заполните обязательные поля' : 'Fill required fields', 'error');
-                }
+                if (!name || !start || !goal) return this.toast('Заполни обязательные поля');
 
                 const habit = {
-                    id: id || Date.now(),
-                    name,
-                    startDate,
-                    endDate: endDateInput,
-                    goal,
-                    description,
-                    completedDays: id ? (this.habits.find(h => h.id === id) || {}).completedDays || [] : []
+                    id, name, startDate: start, endDate: end, goal, description: desc,
+                    completedDays: id ? (this.habits.find(h=>h.id===id)||{completedDays:[]}).completedDays : []
                 };
 
-                if (id) {
-                    const index = this.habits.findIndex(h => h.id === id);
-                    if (index > -1) this.habits[index] = habit;
-                } else {
-                    this.habits.unshift(habit);
-                }
+                if (document.getElementById('habitId').value) {
+                    const idx = this.habits.findIndex(h => h.id === id);
+                    this.habits[idx] = habit;
+                } else this.habits.unshift(habit);
 
                 await this.saveHabits();
                 this.resetHabitForm();
-                this.showNotification(this.lang === 'ru' ? 'Привычка сохранена' : 'Habit saved', 'success');
-            }
+                this.toast('Привычка добавлена');
+            },
 
             editHabit(id) {
-                const habit = this.habits.find(h => h.id === id);
-                if (!habit) return;
-                document.getElementById('habitId').value = habit.id;
-                document.getElementById('habitName').value = habit.name;
-                document.getElementById('habitStartDate').value = habit.startDate;
-                document.getElementById('habitEndDate').value = habit.endDate || '';
-                document.getElementById('habitGoal').value = habit.goal;
-                document.getElementById('habitDescription').value = habit.description || '';
-
-                document.getElementById('new-habit-title').textContent = this.lang === 'ru' ? 'Редактировать привычку' : 'Edit Habit';
-            }
+                const h = this.habits.find(h => h.id === id);
+                document.getElementById('habitId').value = h.id;
+                document.getElementById('habitName').value = h.name;
+                document.getElementById('habitStartDate').value = h.startDate;
+                document.getElementById('habitEndDate').value = h.endDate || '';
+                document.getElementById('habitGoal').value = h.goal;
+                document.getElementById('habitDescription').value = h.description || '';
+                document.getElementById('new-habit-title').textContent = 'Редактировать привычку';
+            },
 
             async deleteHabit(id) {
-                if (!confirm(this.lang === 'ru' ? 'Удалить привычку навсегда?' : 'Delete habit forever?')) return;
+                if (!confirm('Удалить привычку навсегда?')) return;
                 this.habits = this.habits.filter(h => h.id !== id);
                 await this.saveHabits();
-                this.showNotification(this.lang === 'ru' ? 'Привычка удалена' : 'Habit deleted', 'info');
-            }
+            },
 
-            async toggleHabitDay(id, dateStr) {
+            toggleDay(id, date) {
+                const h = this.habits.find(h => h.id === id);
+                if (!h || h.endDate) return;
+                const set = new Set(h.completedDays);
+                set.has(date) ? set.delete(date) : set.add(date);
+                h.completedDays = Array.from(set);
+                if (!h.endDate && h.completedDays.length >= h.goal) h.endDate = date;
+                this.saveHabits();
+            },
+
+            showCalendar(id) {
                 const habit = this.habits.find(h => h.id === id);
                 if (!habit) return;
-
-                if (habit.endDate && dateStr > habit.endDate) {
-                    this.showNotification(this.lang === 'ru' ? 'Привычка уже завершена' : 'Habit already ended', 'info');
-                    return;
-                }
-
-                const set = new Set(habit.completedDays);
-                set.has(dateStr) ? set.delete(dateStr) : set.add(dateStr);
-                habit.completedDays = Array.from(set);
-
-                // Автозавершение
-                if (!habit.endDate && habit.completedDays.length >= habit.goal) {
-                    habit.endDate = dateStr;
-                }
-
-                await this.saveHabits();
-            }
-
-            calculateStreak(habit) {
-                if (habit.endDate) return 0;
-                const sorted = [...habit.completedDays].sort().reverse();
-                if (!sorted.length) return 0;
-
-                let streak = 0;
-                const today = new Date().toISOString().split('T')[0];
-                let checkDate = new Date(today);
-
-                for (let i = 0; i < 365; i++) {
-                    const dateStr = checkDate.toISOString().split('T')[0];
-                    if (sorted.includes(dateStr)) {
-                        streak++;
-                    } else if (dateStr < sorted[0]) {
-                        break;
-                    }
-                    checkDate.setDate(checkDate.getDate() - 1);
-                }
-                return streak;
-            }
-
-            showHabitCalendar(id) {
-                const habit = this.habits.find(h => h.id === id);
-                if (!habit) return;
-
-                const modal = document.getElementById('calendarModal');
-                document.getElementById('calendarTitle').innerHTML = `
-                    ${habit.name} 
-                    <span class="text-sm ml-3 font-normal text-orange-200">
-                        ${habit.endDate ? '✅ Завершена' : 'В процессе'}
-                    </span>
-                `;
-
+                document.getElementById('calendarTitle').innerHTML = `${habit.name} <span class="text-sm text-orange-200">${habit.endDate?'✅ завершена':'в процессе'}</span>`;
+                
                 const table = document.getElementById('calendarTable');
-                const daysOfWeek = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-
-                let html = `<tr>${daysOfWeek.map(d => `<th>${d}</th>`).join('')}</tr>`;
-
-                const start = new Date(habit.startDate);
-                const end = habit.endDate ? new Date(habit.endDate) : new Date();
-                const daysToShow = Math.ceil((end - start) / 86400000) + 30;
-
-                let current = new Date(start);
-                const startOffset = (current.getDay() + 6) % 7; // понедельник = 0
-
-                // Пустые ячейки в начале
-                html += '<tr>';
-                for (let i = 0; i < startOffset; i++) {
-                    html += '<td class="opacity-30"></td>';
-                }
-
-                let dayCount = startOffset;
-                for (let i = 0; i < daysToShow; i++) {
-                    if (dayCount % 7 === 0 && i > 0) html += '</tr><tr>';
-
-                    const dateStr = current.toISOString().split('T')[0];
-                    const isCompleted = habit.completedDays.includes(dateStr);
-                    const isFuture = current > new Date() && !habit.endDate;
-                    const isToday = dateStr === new Date().toISOString().split('T')[0];
-
-                    let className = isFuture ? 'day-future' : (isCompleted ? 'day-completed' : 'day-missed');
-                    if (isToday) className += ' day-today';
-
-                    const clickable = (!isFuture || isToday) ? 
-                        `onclick="diary.toggleHabitDay(${id}, '${dateStr}'); diary.showHabitCalendar(${id});"` : '';
-
-                    html += `<td class="${className}" ${clickable}>${current.getDate()}</td>`;
-                    current.setDate(current.getDate() + 1);
-                    dayCount++;
+                table.innerHTML = `<tr><th class="py-3">Пн</th><th class="py-3">Вт</th><th class="py-3">Ср</th><th class="py-3">Чт</th><th class="py-3">Пт</th><th class="py-3">Сб</th><th class="py-3">Вс</th></tr>`;
+                
+                let html = '<tr>';
+                let current = new Date(habit.startDate);
+                let offset = (current.getDay() + 6) % 7;
+                for (let i = 0; i < offset; i++) html += '<td></td>';
+                
+                const today = new Date().toISOString().split('T')[0];
+                
+                while (current <= new Date()) {
+                    if ((current.getDay() + 6) % 7 === 0 && offset > 0) html += '</tr><tr>';
+                    const d = current.toISOString().split('T')[0];
+                    const done = habit.completedDays.includes(d);
+                    const cls = done ? 'bg-emerald-500 text-white' : 'bg-white/10';
+                    html += `<td onclick="diary.toggleDay(${id},'${d}');diary.showCalendar(${id});" class="${cls} rounded-2xl py-4 cursor-pointer">${current.getDate()}</td>`;
+                    current.setDate(current.getDate()+1);
                 }
                 html += '</tr>';
-                table.innerHTML = html;
-                modal.style.display = 'block';
-            }
+                table.innerHTML += html;
+                document.getElementById('calendarModal').style.display = 'block';
+            },
 
             endHabit(id) {
-                const habit = this.habits.find(h => h.id === id);
-                if (!habit) return;
-                document.getElementById('endHabitName').textContent = habit.name;
-                document.getElementById('endHabitDate').value = habit.endDate || new Date().toISOString().split('T')[0];
+                const h = this.habits.find(h => h.id === id);
+                document.getElementById('endHabitName').textContent = h.name;
+                document.getElementById('endHabitDate').value = h.endDate || new Date().toISOString().split('T')[0];
                 document.getElementById('endHabitModal').style.display = 'block';
-                this.currentEndHabitId = id;
-            }
+                this.tempEndHabitId = id;
+            },
 
             confirmEndHabit() {
                 const date = document.getElementById('endHabitDate').value;
-                if (!date) return;
-                const habit = this.habits.find(h => h.id === this.currentEndHabitId);
-                if (habit) habit.endDate = date;
+                const h = this.habits.find(h => h.id === this.tempEndHabitId);
+                if (h) h.endDate = date;
                 this.saveHabits();
                 this.closeModals();
-            }
+            },
 
             renderHabits() {
-                const list = document.getElementById('habitsList');
+                const container = document.getElementById('habitsList');
                 const search = (document.getElementById('habitsSearch').value || '').toLowerCase();
-
                 const filtered = this.habits.filter(h => h.name.toLowerCase().includes(search));
 
-                if (filtered.length === 0) {
-                    list.innerHTML = `<div class="text-center py-16 text-purple-200">Нет привычек. Создайте первую!</div>`;
+                if (!filtered.length) {
+                    container.innerHTML = `<div class="text-center py-12 text-orange-100">Пока нет привычек</div>`;
                     return;
                 }
 
-                list.innerHTML = filtered.map(h => {
-                    const start = new Date(h.startDate);
-                    const end = h.endDate ? new Date(h.endDate) : new Date();
-                    const daysElapsed = Math.max(0, Math.floor((end - start) / 86400000) + 1);
-                    const completedCount = h.completedDays.length;
-                    const progress = Math.min(Math.round((completedCount / h.goal) * 100), 100);
-                    const isEnded = !!h.endDate;
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const isCompletedToday = h.completedDays.includes(todayStr);
-                    const streak = this.calculateStreak(h);
+                container.innerHTML = filtered.map(h => {
+                    const done = h.completedDays.length;
+                    const progress = Math.min(Math.round(done / h.goal * 100), 100);
+                    const ended = !!h.endDate;
+                    const today = new Date().toISOString().split('T')[0];
+                    const todayDone = h.completedDays.includes(today);
 
                     return `
-                        <div class="note-card ${isEnded ? 'habit-ended' : ''} bg-white/10 backdrop-blur-md border border-white/30 rounded-3xl p-6">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <h3 class="font-semibold text-2xl mb-1">${escapeHtml(h.name)}</h3>
-                                    <p class="text-purple-200 text-sm">${escapeHtml(h.description || '')}</p>
-                                    ${streak > 0 ? `<div class="mt-2 inline-flex items-center gap-1 text-amber-400 text-sm"><span class="streak-fire">🔥</span> ${streak} дней подряд</div>` : ''}
+                    <div class="note-card bg-white/10 p-6 rounded-3xl border border-white/30 ${ended?'opacity-75':''}">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="text-2xl font-semibold">${h.name}</h3>
+                                <p class="text-sm text-orange-100">${h.description||''}</p>
+                            </div>
+                            <div class="flex flex-col items-end gap-2">
+                                ${ended ? `<span class="bg-emerald-400 text-xs px-4 py-1 rounded-3xl">завершена</span>` : ''}
+                                <div class="flex gap-4 text-2xl">
+                                    <span onclick="diary.editHabit(${h.id});event.stopImmediatePropagation()" class="cursor-pointer">✏️</span>
+                                    <span onclick="diary.deleteHabit(${h.id});event.stopImmediatePropagation()" class="cursor-pointer text-red-400">🗑️</span>
                                 </div>
-                                <div class="flex items-center gap-2">
-                                    ${isEnded ? `<span class="text-xs px-4 py-1 bg-emerald-400 text-white rounded-3xl">Завершена</span>` : ''}
-                                    <button onclick="event.stopImmediatePropagation(); diary.editHabit(${h.id})" class="text-blue-300">✏️</button>
-                                    <button onclick="event.stopImmediatePropagation(); diary.deleteHabit(${h.id})" class="text-red-300">🗑️</button>
-                                    ${!isEnded ? `<button onclick="event.stopImmediatePropagation(); diary.endHabit(${h.id})" class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-2xl">Завершить</button>` : ''}
-                                </div>
                             </div>
-
-                            <div class="grid grid-cols-4 text-center mt-6 gap-4">
-                                <div><div class="text-3xl font-bold text-emerald-400">${completedCount}</div><div class="text-xs text-purple-200">выполнено</div></div>
-                                <div><div class="text-3xl font-bold text-blue-400">${h.goal}</div><div class="text-xs text-purple-200">цель</div></div>
-                                <div><div class="text-3xl font-bold text-purple-400">${daysElapsed}</div><div class="text-xs text-purple-200">дней</div></div>
-                                <div><div class="text-3xl font-bold text-amber-400">${progress}%</div><div class="text-xs text-purple-200">прогресс</div></div>
-                            </div>
-
-                            <div class="mt-4 bg-white/20 rounded-3xl h-3 overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-emerald-400 to-blue-500 rounded-3xl transition-all" style="width: ${progress}%"></div>
-                            </div>
-
-                            <div class="mt-6 flex gap-4">
-                                <button onclick="event.stopImmediatePropagation(); diary.showHabitCalendar(${h.id})" class="flex-1 py-3 bg-white/20 hover:bg-white/30 rounded-2xl text-white text-sm font-medium">📅 Календарь</button>
-                                <button onclick="event.stopImmediatePropagation(); diary.toggleHabitDay(${h.id}, '${todayStr}'); diary.renderHabits()" class="flex-1 py-3 ${isCompletedToday ? 'bg-emerald-500' : 'bg-white/20 hover:bg-white/30'} rounded-2xl text-white text-sm font-medium">
-                                    ${isCompletedToday ? '✓ Сегодня отмечено' : 'Отметить сегодня'}
-                                </button>
-                            </div>
-                        </div>`;
+                        </div>
+                        
+                        <div class="flex justify-between mt-8 text-center">
+                            <div><div class="text-4xl font-bold text-emerald-400">${done}</div><div class="text-xs">сделано</div></div>
+                            <div><div class="text-4xl font-bold">${h.goal}</div><div class="text-xs">цель</div></div>
+                            <div><div class="text-4xl font-bold text-amber-400">${progress}%</div><div class="text-xs">прогресс</div></div>
+                        </div>
+                        
+                        <div class="h-3 bg-white/20 rounded-3xl mt-4 mb-6 overflow-hidden">
+                            <div class="h-3 bg-gradient-to-r from-emerald-400 to-blue-400 transition-all" style="width:${progress}%"></div>
+                        </div>
+                        
+                        <div class="flex gap-3">
+                            <button onclick="diary.showCalendar(${h.id});event.stopImmediatePropagation()" class="flex-1 py-4 bg-white/20 hover:bg-white/30 rounded-3xl text-sm">📅 Календарь</button>
+                            <button onclick="diary.toggleDay(${h.id},'${today}');event.stopImmediatePropagation()" class="flex-1 py-4 ${todayDone?'bg-emerald-500':'bg-white/20 hover:bg-white/30'} rounded-3xl text-sm">
+                                ${todayDone ? '✅ Сегодня сделано' : 'Отметить сегодня'}
+                            </button>
+                        </div>
+                    </div>`;
                 }).join('');
-            }
+            },
 
             resetHabitForm() {
                 document.getElementById('habitForm').reset();
                 document.getElementById('habitId').value = '';
                 document.getElementById('habitStartDate').value = new Date().toISOString().split('T')[0];
-                document.getElementById('new-habit-title').textContent = this.lang === 'ru' ? 'Новая привычка' : 'New Habit';
-            }
+                document.getElementById('new-habit-title').textContent = 'Новая привычка';
+            },
 
-            // ==================== MEMORIES ====================
-            async addOrEditMemory(e) {
+            // ==================== АРХИВ ====================
+            async saveMemory(e) {
                 e.preventDefault();
-                const id = parseInt(document.getElementById('memoryId').value) || null;
+                const id = document.getElementById('memoryId').value ? +document.getElementById('memoryId').value : Date.now();
                 const title = document.getElementById('memoryTitle').value.trim();
                 const type = document.getElementById('memoryType').value;
-                const startDate = document.getElementById('memoryStartDate').value;
-                const endDate = document.getElementById('memoryEndDate').value || null;
+                const start = document.getElementById('memoryStartDate').value;
+                const end = document.getElementById('memoryEndDate').value || null;
                 const notes = document.getElementById('memoryNotes').value.trim();
 
-                let partnerName = '';
-                let events = id ? (this.memories.find(m => m.id === id) || {}).events || [] : [];
-
-                if (type === 'relations') {
-                    partnerName = document.getElementById('partnerName').value.trim();
-                    if (!partnerName) return this.showNotification(this.lang === 'ru' ? 'Укажите имя партнёра' : 'Enter partner name', 'error');
-                }
-
-                if (!title || !startDate) {
-                    return this.showNotification(this.lang === 'ru' ? 'Заполните обязательные поля' : 'Fill required fields', 'error');
-                }
+                let partner = '';
+                if (type === 'relations') partner = document.getElementById('partnerName').value.trim();
 
                 const memory = {
-                    id: id || Date.now(),
-                    title,
-                    type,
-                    startDate,
-                    endDate: type === 'relations' ? (endDate || null) : endDate,
-                    notes,
-                    partnerName: type === 'relations' ? partnerName : '',
-                    events,
-                    date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-US')
+                    id, title, type, startDate: start, endDate: end, notes,
+                    partnerName: partner,
+                    events: id ? (this.memories.find(m=>m.id===id)||{events:[]}).events : [],
+                    date: new Date().toLocaleString()
                 };
 
-                if (id) {
-                    const index = this.memories.findIndex(m => m.id === id);
-                    if (index > -1) this.memories[index] = memory;
-                } else {
-                    this.memories.unshift(memory);
-                }
+                if (document.getElementById('memoryId').value) {
+                    const idx = this.memories.findIndex(m => m.id === id);
+                    this.memories[idx] = memory;
+                } else this.memories.unshift(memory);
 
                 await this.saveMemories();
                 this.resetMemoryForm();
-                this.showNotification(this.lang === 'ru' ? 'Воспоминание сохранено' : 'Memory saved', 'success');
-            }
+                this.toast('Воспоминание сохранено');
+            },
 
             editMemory(id) {
-                const memory = this.memories.find(m => m.id === id);
-                if (!memory) return;
-                document.getElementById('memoryId').value = memory.id;
-                document.getElementById('memoryTitle').value = memory.title;
-                document.getElementById('memoryType').value = memory.type;
-                document.getElementById('memoryStartDate').value = memory.startDate;
-                document.getElementById('memoryEndDate').value = memory.endDate || '';
-                document.getElementById('memoryNotes').value = memory.notes || '';
-                if (memory.type === 'relations') {
-                    document.getElementById('partnerName').value = memory.partnerName || '';
-                }
-                document.getElementById('relationsFields').classList.toggle('hidden', memory.type !== 'relations');
-                document.getElementById('endDateField').classList.toggle('hidden', memory.type === 'relations');
-
-                document.getElementById('new-memory-title').textContent = this.lang === 'ru' ? 'Редактировать воспоминание' : 'Edit Memory';
-            }
+                const m = this.memories.find(m => m.id === id);
+                document.getElementById('memoryId').value = m.id;
+                document.getElementById('memoryTitle').value = m.title;
+                document.getElementById('memoryType').value = m.type;
+                document.getElementById('memoryStartDate').value = m.startDate;
+                document.getElementById('memoryEndDate').value = m.endDate || '';
+                document.getElementById('memoryNotes').value = m.notes || '';
+                const isRel = m.type === 'relations';
+                document.getElementById('relationsFields').classList.toggle('hidden', !isRel);
+                document.getElementById('endDateField').classList.toggle('hidden', isRel);
+                if (isRel) document.getElementById('partnerName').value = m.partnerName || '';
+            },
 
             async deleteMemory(id) {
-                if (!confirm(this.lang === 'ru' ? 'Удалить воспоминание?' : 'Delete memory?')) return;
+                if (!confirm('Удалить воспоминание?')) return;
                 this.memories = this.memories.filter(m => m.id !== id);
                 await this.saveMemories();
-                this.showNotification(this.lang === 'ru' ? 'Воспоминание удалено' : 'Memory deleted', 'info');
-            }
+            },
 
-            showAddEventModal(id) {
+            showAddEvent(id) {
                 document.getElementById('eventMemoryId').value = id;
                 document.getElementById('eventModal').style.display = 'block';
-            }
+            },
 
-            async addEvent(e) {
+            async saveEvent(e) {
                 e.preventDefault();
-                const id = parseInt(document.getElementById('eventMemoryId').value);
+                const id = +document.getElementById('eventMemoryId').value;
                 const date = document.getElementById('eventDate').value;
                 const desc = document.getElementById('eventDesc').value.trim();
-                if (!date || !desc) return this.showNotification(this.lang === 'ru' ? 'Заполните поля' : 'Fill fields', 'error');
-
-                const memory = this.memories.find(m => m.id === id);
-                if (memory) {
-                    memory.events.push({ date, desc });
-                    await this.saveMemories();
-                }
+                const mem = this.memories.find(m => m.id === id);
+                if (mem) mem.events.push({date, desc});
+                await this.saveMemories();
                 this.closeModals();
-            }
+            },
 
             endRelations(id) {
-                this.currentEndRelationsId = id;
-                document.getElementById('endRelationsMemoryId').value = id;
-                const memory = this.memories.find(m => m.id === id);
-                document.getElementById('endRelationsDate').value = memory && memory.endDate ? memory.endDate : new Date().toISOString().split('T')[0];
+                this.tempEndRelationsId = id;
+                const m = this.memories.find(m => m.id === id);
+                document.getElementById('endRelationsDate').value = m.endDate || new Date().toISOString().split('T')[0];
                 document.getElementById('endRelationsModal').style.display = 'block';
-            }
+            },
 
             confirmEndRelations() {
-                const id = parseInt(document.getElementById('endRelationsMemoryId').value);
-                const date = document.getElementById('endRelationsDate').value;
-                const memory = this.memories.find(m => m.id === id);
-                if (memory) {
-                    memory.endDate = date;
-                    this.saveMemories();
-                }
+                const m = this.memories.find(m => m.id === this.tempEndRelationsId);
+                if (m) m.endDate = document.getElementById('endRelationsDate').value;
+                this.saveMemories();
                 this.closeModals();
-            }
+            },
 
             renderMemories() {
-                const list = document.getElementById('memoriesList');
+                const container = document.getElementById('memoriesList');
                 const search = (document.getElementById('memoriesSearch').value || '').toLowerCase();
-
-                const filtered = this.memories.filter(m =>
-                    m.title.toLowerCase().includes(search) || (m.notes || '').toLowerCase().includes(search)
+                const filtered = this.memories.filter(m => 
+                    m.title.toLowerCase().includes(search) || (m.notes||'').toLowerCase().includes(search)
                 );
 
-                if (filtered.length === 0) {
-                    list.innerHTML = `<div class="text-center py-16 text-purple-200">Пока нет воспоминаний</div>`;
+                if (!filtered.length) {
+                    container.innerHTML = `<div class="text-center py-12 text-orange-100">Архив пока пуст</div>`;
                     return;
                 }
 
-                const typeNames = this.lang === 'ru' ? {
-                    book: '📚 Книга', movie: '🎬 Фильм', series: '📺 Сериал', game: '🎮 Игра', relations: '❤️ Отношения'
+                const labels = this.lang==='ru' ? {
+                    book:'📚 Книга', movie:'🎬 Фильм', series:'📺 Сериал', game:'🎮 Игра', relations:'❤️ Отношения', other:'📦 Другое'
                 } : {
-                    book: '📚 Book', movie: '🎬 Movie', series: '📺 Series', game: '🎮 Game', relations: '❤️ Relations'
+                    book:'📚 Book', movie:'🎬 Movie', series:'📺 Series', game:'🎮 Game', relations:'❤️ Relations', other:'📦 Other'
                 };
 
-                list.innerHTML = filtered.map(m => {
-                    let extraHTML = '';
+                container.innerHTML = filtered.map(m => {
+                    let extra = '';
                     if (m.type === 'relations') {
-                        const start = new Date(m.startDate);
-                        const end = m.endDate ? new Date(m.endDate) : new Date();
-                        const days = Math.floor((end - start) / 86400000) + 1;
-                        const heart = m.endDate ? '💔' : '❤️';
-                        extraHTML = `
-                            <div class="mt-5 p-5 bg-gradient-to-br from-pink-400 to-rose-500 rounded-3xl text-white">
-                                <div class="flex justify-between items-center mb-3">
-                                    <div class="flex items-center gap-2 text-2xl">${heart} <span class="font-bold">${escapeHtml(m.partnerName)}</span></div>
-                                    <span class="text-sm opacity-90">${days} дней ${m.endDate ? 'вместе (завершено)' : 'вместе'}</span>
-                                </div>
-                                ${m.endDate ? `<div class="text-xs bg-white/20 inline-block px-4 py-1 rounded-3xl">Расстались ${new Date(m.endDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>` : ''}
-                                <button onclick="diary.showAddEventModal(${m.id}); event.stopImmediatePropagation()" class="mt-4 w-full py-3 bg-white/20 hover:bg-white/30 rounded-2xl text-sm">Добавить событие</button>
-                                ${!m.endDate ? `<button onclick="diary.endRelations(${m.id}); event.stopImmediatePropagation()" class="mt-3 w-full py-3 bg-red-600/80 hover:bg-red-700 rounded-2xl text-sm">💔 Мы расстались</button>` : ''}
-                                <div class="mt-6">
-                                    <h5 class="text-xs uppercase tracking-widest mb-2 opacity-75">Ключевые события</h5>
-                                    <ul class="text-sm space-y-2">${(m.events || []).map(e => `<li class="flex justify-between"><span>${e.date}</span><span>${escapeHtml(e.desc)}</span></li>`).join('') || `<li class="opacity-60">Пока нет событий</li>`}</ul>
-                                </div>
-                            </div>`;
+                        const days = Math.floor((new Date(m.endDate || Date.now()) - new Date(m.startDate)) / 86400000) + 1;
+                        extra = `<div class="mt-6 p-5 bg-gradient-to-br from-pink-400 to-rose-500 text-white rounded-3xl text-sm">
+                            ❤️ ${m.partnerName} — ${days} дней вместе
+                            ${m.endDate ? `<div class="text-xs mt-2">расстались ${new Date(m.endDate).toLocaleDateString()}</div>` : ''}
+                            <button onclick="diary.showAddEvent(${m.id});event.stopImmediatePropagation()" class="mt-4 w-full py-3 bg-white/30 rounded-3xl">+ добавить событие</button>
+                        </div>`;
                     }
                     return `
-                        <div class="note-card bg-white/10 backdrop-blur-md border border-white/30 rounded-3xl p-6">
-                            <div class="flex justify-between">
-                                <h3 class="font-semibold text-xl">${escapeHtml(m.title)}</h3>
-                                <div class="flex gap-3">
-                                    <button onclick="diary.editMemory(${m.id}); event.stopImmediatePropagation()" class="text-blue-300">✏️</button>
-                                    <button onclick="diary.deleteMemory(${m.id}); event.stopImmediatePropagation()" class="text-red-300">🗑️</button>
-                                </div>
+                    <div class="note-card bg-white/10 p-6 rounded-3xl border border-white/30">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-semibold text-xl">${m.title}</h3>
+                                <div class="text-sm text-orange-100">${labels[m.type]}</div>
                             </div>
-                            <div class="text-purple-200 text-sm mt-1">${typeNames[m.type]}</div>
-                            <div class="text-purple-200 text-sm">Начало: ${new Date(m.startDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>
-                            ${m.endDate && m.type !== 'relations' ? `<div class="text-purple-200 text-sm">Конец: ${new Date(m.endDate).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-US')}</div>` : ''}
-                            ${m.notes ? `<div class="mt-4 bg-white/10 p-4 rounded-2xl text-orange-100">${escapeHtml(m.notes)}</div>` : ''}
-                            ${extraHTML}
-                            <div class="text-[10px] text-purple-300 mt-4">Добавлено: ${m.date}</div>
-                        </div>`;
+                            <div class="flex gap-4 text-2xl">
+                                <span onclick="diary.editMemory(${m.id});event.stopImmediatePropagation()" class="cursor-pointer">✏️</span>
+                                <span onclick="diary.deleteMemory(${m.id});event.stopImmediatePropagation()" class="cursor-pointer text-red-400">🗑️</span>
+                            </div>
+                        </div>
+                        ${m.notes ? `<div class="mt-4 p-4 bg-white/10 rounded-3xl text-sm">${m.notes}</div>` : ''}
+                        ${extra}
+                    </div>`;
                 }).join('');
-            }
+            },
 
             resetMemoryForm() {
                 document.getElementById('memoryForm').reset();
                 document.getElementById('memoryId').value = '';
-                document.getElementById('memoryStartDate').value = new Date().toISOString().split('T')[0];
                 document.getElementById('relationsFields').classList.add('hidden');
                 document.getElementById('endDateField').classList.remove('hidden');
-                document.getElementById('new-memory-title').textContent = this.lang === 'ru' ? 'Новое воспоминание' : 'New Memory';
-            }
+            },
 
-            // ==================== COMMON ====================
+            // ==================== ОБЩЕЕ ====================
             switchTab(tab) {
-                this.currentTab = tab;
+                document.querySelectorAll('#notesSection, #habitsSection, #memorySection').forEach(el => el.classList.add('hidden'));
+                document.getElementById(tab + 'Section').classList.remove('hidden');
+                
                 document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
                 document.getElementById(tab + 'Tab').classList.add('active');
+            },
 
-                document.getElementById('notesSection').classList.add('hidden');
-                document.getElementById('habitsSection').classList.add('hidden');
-                document.getElementById('memorySection').classList.add('hidden');
-                document.getElementById(tab + 'Section').classList.remove('hidden');
-            }
-
-            updateCounts() {
+            updateFooter() {
                 document.getElementById('notesCount').textContent = this.notes.length;
                 document.getElementById('habitsCount').textContent = this.habits.length;
                 document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !h.endDate).length;
                 document.getElementById('memoriesCount').textContent = this.memories.length;
-            }
+            },
 
             renderAll() {
                 this.renderNotes();
                 this.renderHabits();
                 this.renderMemories();
-            }
+                this.updateFooter();
+            },
 
-            showNotification(message, type) {
-                const n = document.createElement('div');
-                n.className = `notification ${type}`;
-                n.textContent = message;
-                document.body.appendChild(n);
-                setTimeout(() => n.remove(), 2800);
-            }
+            toast(text, type = 'success') {
+                const t = document.createElement('div');
+                t.style.cssText = `position:fixed;top:24px;right:24px;z-index:99999;padding:18px 24px;border-radius:20px;color:white;font-weight:600;${type==='error'?'background:#ef4444':'background:#10b981'}`;
+                t.textContent = text;
+                document.body.appendChild(t);
+                setTimeout(() => t.remove(), 2600);
+            },
 
             closeModals() {
                 document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-                this.currentEndHabitId = null;
-                this.currentEndRelationsId = null;
-            }
+            },
 
-            applyLang() {
-                const translations = {
-                    ru: {
-                        'app-title': 'DailyBookimix',
-                        'app-desc': 'Защищённый ежедневник',
-                        'cloud-label': 'Облачно',
-                        'notes-tab': 'Записи',
-                        'habits-tab': 'Привычки',
-                        'memory-tab': 'Архив',
-                        'new-note-title': 'Новая запись',
-                        'note-title-label': 'Заголовок',
-                        'note-category-label': 'Категория',
-                        'note-content-label': 'Содержание',
-                        'save-note-btn': 'Сохранить запись',
-                        'my-notes-title': 'Мои записи',
-                        'new-habit-title': 'Новая привычка',
-                        'start-habit-btn': 'Начать трекинг',
-                        'my-habits-title': 'Мои привычки',
-                        'new-memory-title': 'Новое воспоминание',
-                        'save-memory-btn': 'Сохранить воспоминание',
-                        'my-memories-title': 'Архив воспоминаний',
-                        'partner-name-label': 'Имя партнёра',
-                        'add-event-title': 'Добавить событие',
-                        'event-date-label': 'Дата события',
-                        'event-desc-label': 'Описание события',
-                        'save-event-btn': 'Сохранить событие'
-                    },
-                    en: {
-                        'app-title': 'DailyBookimix',
-                        'app-desc': 'Secure Daily Journal',
-                        'cloud-label': 'Cloud',
-                        'notes-tab': 'Notes',
-                        'habits-tab': 'Habits',
-                        'memory-tab': 'Archive',
-                        'new-note-title': 'New Note',
-                        'note-title-label': 'Title',
-                        'note-category-label': 'Category',
-                        'note-content-label': 'Content',
-                        'save-note-btn': 'Save note',
-                        'my-notes-title': 'My notes',
-                        'new-habit-title': 'New habit',
-                        'start-habit-btn': 'Start tracking',
-                        'my-habits-title': 'My habits',
-                        'new-memory-title': 'New memory',
-                        'save-memory-btn': 'Save memory',
-                        'my-memories-title': 'Memory archive',
-                        'partner-name-label': 'Partner name',
-                        'add-event-title': 'Add event',
-                        'event-date-label': 'Event date',
-                        'event-desc-label': 'Event description',
-                        'save-event-btn': 'Save event'
-                    }
+            applyLanguage() {
+                const t = this.lang === 'ru' ? {
+                    'app-desc':'Защищённый ежедневник',
+                    'notes-tab':'Записи',
+                    'habits-tab':'Привычки',
+                    'memory-tab':'Архив',
+                    'new-note-title':'Новая запись',
+                    'my-notes-title':'Мои записи',
+                    'new-habit-title':'Новая привычка',
+                    'my-habits-title':'Мои привычки',
+                    'new-memory-title':'Новое воспоминание',
+                    'my-memories-title':'Архив воспоминаний',
+                    'lang-text':'English',
+                    'theme-text':'Тёмная',
+                    'cloud-label':'Облачно'
+                } : {
+                    'app-desc':'Secure Daily Journal',
+                    'notes-tab':'Notes',
+                    'habits-tab':'Habits',
+                    'memory-tab':'Archive',
+                    'new-note-title':'New Note',
+                    'my-notes-title':'My notes',
+                    'new-habit-title':'New habit',
+                    'my-habits-title':'My habits',
+                    'new-memory-title':'New memory',
+                    'my-memories-title':'Memory archive',
+                    'lang-text':'Русский',
+                    'theme-text':'Light',
+                    'cloud-label':'Cloud'
                 };
 
-                const t = translations[this.lang];
-                Object.keys(t).forEach(key => {
-                    const el = document.getElementById(key);
-                    if (el) el.textContent = t[key];
+                Object.keys(t).forEach(k => {
+                    const el = document.getElementById(k);
+                    if (el) el.textContent = t[k];
                 });
 
-                // Динамические плейсхолдеры
-                document.getElementById('notesSearch').placeholder = this.lang === 'ru' ? 'Поиск по тексту или #хэштегу' : 'Search text or #hashtag';
-                document.getElementById('habitsSearch').placeholder = this.lang === 'ru' ? 'Поиск привычек...' : 'Search habits...';
-                document.getElementById('memoriesSearch').placeholder = this.lang === 'ru' ? 'Поиск воспоминаний...' : 'Search memories...';
-
-                // Селекты
-                document.getElementById('noteCategory').innerHTML = this.lang === 'ru'
+                document.getElementById('noteCategory').innerHTML = this.lang==='ru' 
                     ? `<option value="personal">Личное</option><option value="work">Работа</option><option value="ideas">Идеи</option><option value="tasks">Задачи</option>`
                     : `<option value="personal">Personal</option><option value="work">Work</option><option value="ideas">Ideas</option><option value="tasks">Tasks</option>`;
 
-                document.getElementById('filterCategory').innerHTML = this.lang === 'ru'
+                document.getElementById('filterCategory').innerHTML = this.lang==='ru' 
                     ? `<option value="all">Все категории</option><option value="personal">Личное</option><option value="work">Работа</option><option value="ideas">Идеи</option><option value="tasks">Задачи</option>`
                     : `<option value="all">All categories</option><option value="personal">Personal</option><option value="work">Work</option><option value="ideas">Ideas</option><option value="tasks">Tasks</option>`;
 
-                document.getElementById('memoryType').innerHTML = this.lang === 'ru'
-                    ? `<option value="book">📚 Книга</option><option value="movie">🎬 Фильм</option><option value="series">📺 Сериал</option><option value="game">🎮 Игра</option><option value="relations">❤️ Отношения</option>`
-                    : `<option value="book">📚 Book</option><option value="movie">🎬 Movie</option><option value="series">📺 Series</option><option value="game">🎮 Game</option><option value="relations">❤️ Relations</option>`;
+                document.getElementById('memoryType').innerHTML = this.lang==='ru' 
+                    ? `<option value="book">📚 Книга</option><option value="movie">🎬 Фильм</option><option value="series">📺 Сериал</option><option value="game">🎮 Игра</option><option value="relations">❤️ Отношения</option><option value="other">📦 Другое</option>`
+                    : `<option value="book">📚 Book</option><option value="movie">🎬 Movie</option><option value="series">📺 Series</option><option value="game">🎮 Game</option><option value="relations">❤️ Relations</option><option value="other">📦 Other</option>`;
+            },
 
-                this.renderAll();
-                this.updateSwitchButtons();
-            }
-
-            async toggleLang() {
+            toggleLang() {
                 this.lang = this.lang === 'ru' ? 'en' : 'ru';
-                await CloudStorageManager.set('lang', this.lang);
-                this.applyLang();
-            }
+                StorageManager.setItem('lang', this.lang);
+                this.applyLanguage();
+                this.renderAll();
+            },
 
-            applyTheme() {
-                document.body.classList.toggle('dark', this.theme === 'dark');
-                this.updateSwitchButtons();
-            }
-
-            async toggleTheme() {
+            toggleTheme() {
                 this.theme = this.theme === 'light' ? 'dark' : 'light';
-                await CloudStorageManager.set('theme', this.theme);
-                this.applyTheme();
-            }
+                document.body.classList.toggle('dark', this.theme === 'dark');
+                StorageManager.setItem('theme', this.theme);
+                document.getElementById('theme-text').textContent = this.theme === 'light' ? 'Тёмная' : 'Светлая';
+            },
 
-            updateSwitchButtons() {
-                document.getElementById('langSwitch').textContent = this.lang === 'ru' ? 'English' : 'Русский';
-                document.getElementById('themeSwitch').textContent = this.theme === 'light' ? 'Тёмная' : 'Светлая';
-                document.getElementById('cloud-label').textContent = this.lang === 'ru' ? 'Облачно' : 'Cloud';
-            }
+            init() {
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
 
-            debounceSearch(fn, delay = 300) {
-                clearTimeout(this.searchDebounce);
-                this.searchDebounce = setTimeout(fn, delay);
-            }
+                // Инициализируем менеджер хранилища (исправление ошибки!)
+                StorageManager.init();
 
-            async init() {
-                try {
-                    Telegram.WebApp.ready();
-                    Telegram.WebApp.expand();
-                } catch (e) {}
+                // Показываем пользователю, если CloudStorage не работает
+                if (!StorageManager.supportsCloud) {
+                    this.toast('CloudStorage не поддерживается в этой версии Telegram.\nДанные сохраняются только на этом устройстве (localStorage).', 'info');
+                    document.getElementById('cloud-label').textContent = 'Локально';
+                }
 
-                await this.loadAll();
-                this.applyLang();
-                this.applyTheme();
+                this.load();
+                this.applyLanguage();
+                document.body.classList.toggle('dark', this.theme === 'dark');
+                document.getElementById('theme-text').textContent = this.theme === 'light' ? 'Тёмная' : 'Светлая';
 
                 // Формы
-                document.getElementById('noteForm').addEventListener('submit', e => this.addOrEditNote(e));
-                document.getElementById('habitForm').addEventListener('submit', e => this.addOrEditHabit(e));
-                document.getElementById('memoryForm').addEventListener('submit', e => this.addOrEditMemory(e));
-                document.getElementById('eventForm').addEventListener('submit', e => this.addEvent(e));
+                document.getElementById('noteForm').addEventListener('submit', e => this.saveNote(e));
+                document.getElementById('habitForm').addEventListener('submit', e => this.saveHabit(e));
+                document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
+                document.getElementById('eventForm').addEventListener('submit', e => this.saveEvent(e));
 
                 // Табы
                 document.getElementById('notesTab').addEventListener('click', () => this.switchTab('notes'));
                 document.getElementById('habitsTab').addEventListener('click', () => this.switchTab('habits'));
                 document.getElementById('memoryTab').addEventListener('click', () => this.switchTab('memory'));
 
-                // Поиск с debounce
-                document.getElementById('notesSearch').addEventListener('input', () => this.debounceSearch(() => this.renderNotes()));
+                // Поиск
+                document.getElementById('notesSearch').addEventListener('input', () => this.renderNotes());
                 document.getElementById('filterCategory').addEventListener('change', () => this.renderNotes());
-                document.getElementById('habitsSearch').addEventListener('input', () => this.debounceSearch(() => this.renderHabits()));
-                document.getElementById('memoriesSearch').addEventListener('input', () => this.debounceSearch(() => this.renderMemories()));
+                document.getElementById('habitsSearch').addEventListener('input', () => this.renderHabits());
+                document.getElementById('memoriesSearch').addEventListener('input', () => this.renderMemories());
 
-                // Кнопка очистки
+                // Очистка
                 document.getElementById('clearAll').addEventListener('click', async () => {
-                    if (confirm(this.lang === 'ru' ? 'Удалить ВСЕ записи?' : 'Delete ALL notes?')) {
+                    if (confirm('Удалить ВСЕ записи?')) {
                         this.notes = [];
                         await this.saveNotes();
-                        this.showNotification(this.lang === 'ru' ? 'Все записи очищены' : 'All notes cleared', 'info');
+                        this.toast('Все записи удалены');
                     }
                 });
 
-                // Переключатели
+                // Настройки
                 document.getElementById('langSwitch').addEventListener('click', () => this.toggleLang());
                 document.getElementById('themeSwitch').addEventListener('click', () => this.toggleTheme());
 
-                // Тип воспоминания
-                document.getElementById('memoryType').addEventListener('change', e => {
-                    const isRel = e.target.value === 'relations';
+                // Переключение полей для отношений
+                document.getElementById('memoryType').addEventListener('change', function() {
+                    const isRel = this.value === 'relations';
                     document.getElementById('relationsFields').classList.toggle('hidden', !isRel);
                     document.getElementById('endDateField').classList.toggle('hidden', isRel);
                 });
 
-                // Дефолтные даты
-                document.getElementById('habitStartDate').value = new Date().toISOString().split('T')[0];
-                document.getElementById('memoryStartDate').value = new Date().toISOString().split('T')[0];
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('habitStartDate').value = today;
+                document.getElementById('memoryStartDate').value = today;
 
-                console.log('%c✅ DailyBookimix v2.0 — полностью переписан и оптимизирован!', 'color:#ff4500;font-weight:bold');
+                console.log('%c✅ DailyBookimix — ошибка CloudStorage исправлена!', 'color:#ff8c42;font-weight:700');
             }
-        }
+        };
 
-        const diary = new SimpleDiary();
+        // Запуск
         diary.init();
     </script>
 </body>
