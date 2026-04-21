@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- ============================================================
+     DailyBookimix v4  — PART 1 OF 3
+     Contains: <head>, all CSS, and the Settings Bottom Sheet
+     ============================================================ -->
 <html lang="ru" class="h-full">
 <head>
     <meta charset="UTF-8">
@@ -9,955 +13,2224 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#ff4500">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+
     <style>
+        /* ── ROOT VARIABLES ── */
         :root {
-            --bg-gradient-light: linear-gradient(135deg, #ff4500 0%, #ff6b35 25%, #f7931e 50%, #ff8c42 75%, #ff5722 100%);
-            --bg-gradient-dark: linear-gradient(135deg, #0f1724 0%, #1f2937 30%, #2d3748 60%, #111827 100%);
+            --accent:        #ff5722;
+            --accent-light:  #ff8c42;
+            --accent-glow:   rgba(255, 87, 34, 0.35);
+            --glass-bg:      rgba(255,255,255,0.18);
+            --glass-border:  rgba(255,255,255,0.28);
+            --card-bg:       rgba(255,255,255,0.13);
+            --input-bg:      rgba(255,255,255,0.92);
+            --input-text:    #1a1a2e;
+            --text-primary:  #ffffff;
+            --text-muted:    rgba(255,255,255,0.72);
+            --text-label:    rgba(255,255,255,0.55);
+            --shadow-card:   0 8px 32px rgba(0,0,0,0.18);
+            --shadow-btn:    0 4px 20px rgba(0,0,0,0.25);
+            --radius-card:   22px;
+            --radius-pill:   999px;
+            --tab-active-bg: rgba(255,255,255,0.95);
+            --tab-active-fg: #1a1a2e;
+            --modal-bg:      #ffffff;
+            --modal-text:    #1a1a2e;
+            --btn-primary-bg:#ffffff;
+            --btn-primary-fg:#ff5722;
+            --footer-bg:     rgba(255,255,255,0.13);
+            --progress-track:rgba(255,255,255,0.2);
+
+            --bg-gradient:   linear-gradient(155deg,#ff4500 0%,#ff6b35 30%,#f7931e 60%,#ff5722 100%);
+        }
+        body.theme-dark {
+            --accent:        #ff7043;
+            --accent-light:  #ffab91;
+            --accent-glow:   rgba(255,112,67,0.3);
+            --glass-bg:      rgba(255,255,255,0.07);
+            --glass-border:  rgba(255,255,255,0.11);
+            --card-bg:       rgba(255,255,255,0.06);
+            --input-bg:      rgba(30,30,50,0.9);
+            --input-text:    #e8e8f0;
+            --text-primary:  #eaeaf5;
+            --text-muted:    rgba(234,234,245,0.6);
+            --text-label:    rgba(234,234,245,0.38);
+            --shadow-card:   0 8px 32px rgba(0,0,0,0.45);
+            --tab-active-bg: rgba(255,112,67,0.9);
+            --tab-active-fg: #ffffff;
+            --modal-bg:      #1c1c2e;
+            --modal-text:    #eaeaf5;
+            --btn-primary-bg:#ff7043;
+            --btn-primary-fg:#ffffff;
+            --footer-bg:     rgba(255,255,255,0.06);
+            --progress-track:rgba(255,255,255,0.12);
+
+            --bg-gradient:   linear-gradient(155deg,#0d1117 0%,#1a1f35 35%,#111827 65%,#0a0e1a 100%);
         }
 
-        html, body {
-            height: 100%;
-            min-height: 100vh;
-            margin: 0;
-            padding: 0;
-            background-size: cover;
-            background-attachment: fixed;
-        }
-
+        /* ── BASE ── */
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; padding: 0; }
         body {
-            box-sizing: border-box;
-            background: var(--bg-gradient-light);
-            color: #ffffff;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Nunito', system-ui, sans-serif;
+            background: var(--bg-gradient);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            transition: background 0.5s cubic-bezier(0.4,0,0.2,1), color 0.3s ease;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
         }
 
-        body.dark {
-            background: var(--bg-gradient-dark);
-            color: #e5e7eb;
+        /* ── GLASS ── */
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(22px) saturate(1.4);
+            -webkit-backdrop-filter: blur(22px) saturate(1.4);
+            border: 1px solid var(--glass-border);
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-card);
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1),
+                        box-shadow 0.22s ease,
+                        background 0.2s ease;
+        }
+        .card:active { transform: scale(0.975); }
+        .card.pinned {
+            border-color: var(--accent-light);
+            box-shadow: 0 0 0 2px var(--accent-glow), var(--shadow-card);
         }
 
-        .glass-effect {
-            background: rgba(255,255,255,0.18);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.25);
+        /* ── FORM INPUTS ── */
+        .fi {
+            width: 100%;
+            padding: 16px 18px;
+            border-radius: 16px;
+            background: var(--input-bg);
+            border: 2px solid transparent;
+            font-family: 'Nunito', sans-serif;
+            font-size: 16px;
+            color: var(--input-text);
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.3s;
+            outline: none;
+        }
+        .fi:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-glow);
+        }
+        .fi::placeholder { color: #9ca3af; }
+        textarea.fi { resize: none; }
+        select.fi { cursor: pointer; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23888' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            padding-right: 40px;
+        }
+        label.fi-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-label);
+            margin-bottom: 6px;
         }
 
-        .dark .glass-effect {
-            background: rgba(255,255,255,0.09);
-            border: 1px solid rgba(255,255,255,0.12);
+        /* ── BUTTONS ── */
+        .btn-primary {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 18px 24px;
+            background: var(--btn-primary-bg);
+            color: var(--btn-primary-fg);
+            font-family: 'Nunito', sans-serif;
+            font-size: 17px; font-weight: 800;
+            border: none; border-radius: 16px; cursor: pointer;
+            box-shadow: var(--shadow-btn);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s;
+        }
+        .btn-primary:active { transform: scale(0.96); box-shadow: none; }
+
+        .btn-ghost {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 14px 20px;
+            background: rgba(255,255,255,0.15);
+            color: var(--text-primary);
+            font-family: 'Nunito', sans-serif;
+            font-size: 15px; font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 14px; cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .btn-ghost:active { transform: scale(0.95); background: rgba(255,255,255,0.22); }
+        .btn-danger {
+            background: rgba(239,68,68,0.18);
+            color: #f87171;
+            border-color: rgba(239,68,68,0.3);
+        }
+        .btn-danger:active { background: rgba(239,68,68,0.28); }
+        .btn-success {
+            background: rgba(16,185,129,0.18);
+            color: #34d399;
+            border-color: rgba(16,185,129,0.3);
         }
 
-        .header-glass {
-            background: rgba(255,255,255,0.22);
-            backdrop-filter: blur(20px);
+        /* ── TABS ── */
+        .tab-bar {
+            display: flex; gap: 6px;
+            padding: 6px;
+        }
+        .tab-btn {
+            flex: 1; display: flex; flex-direction: column; align-items: center;
+            gap: 4px; padding: 12px 8px;
+            background: transparent; border: none; border-radius: 16px;
+            color: var(--text-muted);
+            font-family: 'Nunito', sans-serif;
+            font-size: 12px; font-weight: 700;
+            cursor: pointer;
+            transition: background 0.25s ease, color 0.25s ease, transform 0.15s ease;
+        }
+        .tab-btn .tab-icon { font-size: 22px; line-height: 1; }
+        .tab-btn:active { transform: scale(0.93); }
+        .tab-btn.active {
+            background: var(--tab-active-bg);
+            color: var(--tab-active-fg);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.18);
         }
 
-        .tab-button {
-            flex: 1;
-            padding: 16px 12px;
-            font-size: 15px;
-            font-weight: 600;
-            transition: all 0.3s ease;
+        /* ── HEADER ── */
+        .app-header {
+            background: var(--glass-bg);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid var(--glass-border);
+            border-radius: 22px;
+        }
+        .app-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
         }
 
-        .tab-button.active {
-            background: rgba(255,255,255,0.95);
-            color: #1f2937;
-            border-radius: 9999px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        /* ── STREAK BADGE ── */
+        .streak-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 999px;
+            padding: 5px 14px;
+            cursor: default;
+        }
+        @keyframes firePop {
+            0%   { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+            45%  { transform: scale(1.4) rotate(8deg);  opacity: 1; }
+            70%  { transform: scale(0.9) rotate(-4deg); }
+            100% { transform: scale(1)   rotate(0deg);  opacity: 1; }
+        }
+        .fire-anim { animation: firePop 0.65s cubic-bezier(0.68,-0.55,0.27,1.55) both; }
+
+        /* ── SETTINGS TOOLBAR ── */
+        .settings-bar {
+            display: flex; gap: 10px;
+        }
+        .settings-btn {
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;
+            padding: 14px 18px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            color: var(--text-primary);
+            font-family: 'Nunito', sans-serif;
+            font-size: 15px; font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .settings-btn:active { transform: scale(0.95); background: var(--glass-border); }
+
+        /* ── BOTTOM SHEET ── */
+        .sheet-overlay {
+            display: none; position: fixed; inset: 0; z-index: 9000;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(6px);
+        }
+        .sheet-overlay.open { display: block; }
+        .bottom-sheet {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 9001;
+            background: var(--modal-bg);
+            border-radius: 28px 28px 0 0;
+            padding: 16px 20px 36px;
+            color: var(--modal-text);
+            transform: translateY(100%);
+            transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
+            max-height: 88vh;
+            overflow-y: auto;
+        }
+        .bottom-sheet.open { transform: translateY(0); }
+        .sheet-handle {
+            width: 40px; height: 4px;
+            background: rgba(0,0,0,0.15);
+            border-radius: 999px;
+            margin: 0 auto 20px;
+        }
+        body.theme-dark .sheet-handle { background: rgba(255,255,255,0.18); }
+        .sheet-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 20px; font-weight: 800;
+            color: var(--modal-text);
+            margin-bottom: 16px;
+        }
+        .sheet-option {
+            display: flex; align-items: center; gap: 14px;
+            padding: 16px 18px;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: background 0.18s ease;
+            margin-bottom: 6px;
+        }
+        .sheet-option:hover  { background: rgba(0,0,0,0.05); }
+        .sheet-option.active { background: rgba(255,87,34,0.1); }
+        body.theme-dark .sheet-option:hover  { background: rgba(255,255,255,0.07); }
+        body.theme-dark .sheet-option.active { background: rgba(255,112,67,0.15); }
+        .sheet-option-icon {
+            width: 42px; height: 42px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 12px;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+        .sheet-option-label {
+            font-size: 16px; font-weight: 700;
+            color: var(--modal-text);
+        }
+        .sheet-option-sub {
+            font-size: 12px; font-weight: 600;
+            color: #9ca3af;
+            margin-top: 2px;
+        }
+        .sheet-check {
+            margin-left: auto;
+            width: 24px; height: 24px;
+            border-radius: 999px;
+            background: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            transform: scale(0.7);
+        }
+        .sheet-option.active .sheet-check { opacity: 1; transform: scale(1); }
+        .sheet-section-label {
+            font-size: 11px; font-weight: 800; letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #9ca3af;
+            margin: 18px 4px 8px;
         }
 
-        .note-card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        /* ── MODAL (generic) ── */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; z-index: 8000;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(10px);
         }
-        .note-card:active {
-            transform: scale(0.97);
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 10000;
-            inset: 0;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(12px);
-        }
-
-        .modal-content {
-            background: #fff;
-            margin: 10% auto;
-            width: 92%;
-            max-width: 420px;
+        .modal-overlay.open { display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .modal-box {
+            background: var(--modal-bg);
+            color: var(--modal-text);
             border-radius: 28px;
             padding: 28px;
-            color: #1f2937;
-            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+            width: 100%; max-width: 420px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.35);
+            animation: modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        @keyframes modalIn {
+            from { opacity:0; transform: scale(0.88) translateY(20px); }
+            to   { opacity:1; transform: scale(1)    translateY(0); }
+        }
+        .modal-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 22px; font-weight: 800;
+            color: var(--modal-text);
+        }
+        .modal-close {
+            background: none; border: none; cursor: pointer;
+            font-size: 28px; line-height: 1;
+            color: #9ca3af; padding: 4px;
+            transition: color 0.15s, transform 0.15s;
+        }
+        .modal-close:hover { color: #ef4444; transform: rotate(90deg); }
+
+        /* ── CARDS / RECORDS ── */
+        .record-card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-card);
+            padding: 18px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.2s cubic-bezier(0.4,0,0.2,1),
+                        box-shadow 0.2s ease,
+                        border-color 0.2s;
+            animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
+        }
+        @keyframes cardIn {
+            from { opacity:0; transform: translateY(12px) scale(0.97); }
+            to   { opacity:1; transform: translateY(0) scale(1); }
+        }
+        .record-card:active { transform: scale(0.975); }
+        .record-card:hover  { box-shadow: var(--shadow-card); border-color: rgba(255,255,255,0.22); }
+        .record-card.pinned {
+            border-color: var(--accent-light);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+        }
+        .pin-badge {
+            position: absolute; top: 14px; right: 14px;
+            font-size: 13px;
+            opacity: 0.7;
         }
 
-        .form-input {
-            padding: 18px 20px;
-            border-radius: 20px;
-            background: rgba(255,255,255,0.95);
-            border: 2px solid transparent;
-            font-size: 17px;
-            transition: all 0.2s;
+        /* ── CATEGORY PILL ── */
+        .cat-pill {
+            display: inline-flex; align-items: center;
+            padding: 3px 12px;
+            border-radius: 999px;
+            font-size: 11px; font-weight: 800;
+            letter-spacing: 0.04em;
         }
-        .form-input:focus {
-            border-color: #ff8c42;
-            box-shadow: 0 0 0 4px rgba(255,140,66,0.2);
+        .cat-personal { background: rgba(244,63,94,0.2);  color: #fb7185; }
+        .cat-work     { background: rgba(59,130,246,0.2); color: #60a5fa; }
+        .cat-ideas    { background: rgba(245,158,11,0.2); color: #fbbf24; }
+        .cat-tasks    { background: rgba(16,185,129,0.2); color: #34d399; }
+
+        /* ── DETAIL / EDIT PANEL ── */
+        .detail-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-card);
+            padding: 20px;
+            margin-bottom: 12px;
+            animation: panelOpen 0.3s cubic-bezier(0.34,1.1,0.64,1) both;
+            overflow: hidden;
+        }
+        @keyframes panelOpen {
+            from { opacity:0; transform: scaleY(0.92) translateY(-8px); }
+            to   { opacity:1; transform: scaleY(1) translateY(0); }
+        }
+        .detail-panel .fi { background: var(--input-bg); color: var(--input-text); }
+
+        /* ── PROGRESS BAR ── */
+        .prog-track {
+            width: 100%; height: 8px;
+            background: var(--progress-track);
+            border-radius: 999px; overflow: hidden;
+        }
+        .prog-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #34d399, #38bdf8);
+            border-radius: 999px;
+            transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
         }
 
-        .bottom-controls {
+        /* ── RELATIONSHIPS ── */
+        .rel-card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-card);
+            overflow: hidden;
+            margin-bottom: 14px;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1),
+                        box-shadow 0.22s ease;
+            animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
+        }
+        .rel-card:active { transform: scale(0.975); }
+        .rel-card.pinned { border-color: var(--accent-light); box-shadow: 0 0 0 2px var(--accent-glow); }
+        .rel-card-header {
+            background: linear-gradient(135deg, #f472b6 0%, #ec4899 50%, #db2777 100%);
+            padding: 20px 20px 14px;
+            color: #fff;
+        }
+        body.theme-dark .rel-card-header {
+            background: linear-gradient(135deg, #9d174d 0%, #be185d 50%, #db2777 100%);
+        }
+        .rel-card-body {
+            padding: 16px 20px 18px;
+        }
+        .rel-event-item {
+            display: flex; gap: 12px; align-items: flex-start;
+            padding: 10px 12px;
+            background: rgba(255,255,255,0.07);
+            border-radius: 12px;
+            margin-bottom: 8px;
+        }
+        body.theme-dark .rel-event-item { background: rgba(255,255,255,0.05); }
+        .rel-event-date {
+            font-size: 11px; font-weight: 800;
+            color: var(--accent-light);
+            white-space: nowrap;
+            padding-top: 2px;
+            min-width: 80px;
+        }
+        .rel-event-desc {
+            font-size: 14px; font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+        }
+        .rel-event-actions {
+            display: flex; gap: 6px;
+            flex-shrink: 0;
+        }
+        .rel-event-btn {
+            background: none; border: none; cursor: pointer;
+            font-size: 14px; padding: 2px 4px;
+            border-radius: 6px;
+            transition: background 0.15s;
+        }
+        .rel-event-btn:hover { background: rgba(0,0,0,0.1); }
+
+        /* ── CALENDAR TABLE ── */
+        #calendarTable { width: 100%; border-collapse: collapse; text-align: center; }
+        #calendarTable th { padding: 10px 4px; font-size: 12px; font-weight: 800;
+            color: #9ca3af; letter-spacing: 0.05em; }
+        #calendarTable td {
+            padding: 6px 2px; font-size: 13px; font-weight: 700;
+            border-radius: 10px; cursor: pointer;
+            transition: background 0.15s;
+        }
+        #calendarTable td.done  { background: #10b981; color: white; }
+        #calendarTable td.empty { background: transparent; cursor: default; }
+        #calendarTable td:not(.empty):not(.done) {
+            background: rgba(255,255,255,0.1);
+            color: var(--modal-text);
+        }
+        body:not(.theme-dark) #calendarTable td:not(.empty):not(.done) {
+            background: rgba(0,0,0,0.06);
+        }
+
+        /* ── TOAST ── */
+        .toast-msg {
+            position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
+            z-index: 99999;
+            padding: 14px 24px;
+            border-radius: 16px;
+            color: white; font-family: 'Nunito', sans-serif;
+            font-size: 15px; font-weight: 700;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            animation: toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both,
+                       toastOut 0.3s 2.3s ease both;
+            white-space: nowrap;
+        }
+        @keyframes toastIn  { from { opacity:0; transform: translateX(-50%) translateY(-12px) scale(0.9); } }
+        @keyframes toastOut { to   { opacity:0; transform: translateX(-50%) translateY(-8px); } }
+        .toast-success { background: linear-gradient(135deg,#10b981,#059669); }
+        .toast-error   { background: linear-gradient(135deg,#ef4444,#dc2626); }
+
+        /* ── EMPTY STATE ── */
+        .empty-state {
+            text-align: center; padding: 48px 20px;
+            color: var(--text-muted);
+        }
+        .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
+        .empty-state p { font-size: 15px; font-weight: 600; }
+
+        /* ── SEARCH ── */
+        .search-wrap { position: relative; }
+        .search-wrap .search-icon {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            font-size: 16px; pointer-events: none;
+        }
+        .search-wrap .fi { padding-left: 42px; }
+
+        /* ── SECTION HEADER ── */
+        .section-header {
+            font-family: 'Syne', sans-serif;
+            font-size: 22px; font-weight: 800;
+            color: var(--text-primary);
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        /* ── UTILITY ── */
+        .hidden { display: none !important; }
+        .scrollable { max-height: 420px; overflow-y: auto; padding-right: 4px; }
+        .scrollable::-webkit-scrollbar { width: 4px; }
+        .scrollable::-webkit-scrollbar-track { background: transparent; }
+        .scrollable::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        .divider {
+            height: 1px;
+            background: var(--glass-border);
+            margin: 12px 0;
+        }
+        .chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 12px; font-weight: 700;
             background: rgba(255,255,255,0.15);
-            backdrop-filter: blur(15px);
+            color: var(--text-primary);
         }
+        .chip.green  { background: rgba(16,185,129,0.2); color: #34d399; }
+        .chip.red    { background: rgba(239,68,68,0.2);  color: #f87171; }
+        .chip.orange { background: rgba(255,87,34,0.2);  color: var(--accent-light); }
+        .chip.blue   { background: rgba(59,130,246,0.2); color: #60a5fa; }
+        .chip.pink   { background: rgba(236,72,153,0.2); color: #f472b6; }
     </style>
 </head>
 <body class="font-sans">
 
-    <div class="max-w-[480px] mx-auto min-h-screen p-4 pb-20 flex flex-col">
+<div class="max-w-[480px] mx-auto min-h-screen px-4 pt-4 pb-24 flex flex-col gap-4">
 
-        <!-- HEADER -->
-        <header class="header-glass rounded-3xl px-6 py-5 mb-6 flex items-center gap-4">
-            <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner">
-                <svg class="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-                <h1 id="app-title" class="text-3xl font-bold tracking-tighter">DailyBookimix</h1>
-                <p id="app-desc" class="text-orange-100 text-sm">Защищённый ежедневник</p>
-            </div>
-        </header>
-
-        <!-- ТАБЫ -->
-        <div class="glass-effect rounded-3xl p-2 mb-6">
-            <div class="flex gap-1">
-                <button id="notesTab" class="tab-button active flex flex-col items-center justify-center">
-                    <span class="text-2xl mb-1">📝</span>
-                    <span id="notes-tab" class="text-[13px]">Записи</span>
-                </button>
-                <button id="habitsTab" class="tab-button flex flex-col items-center justify-center">
-                    <span class="text-2xl mb-1">🔥</span>
-                    <span id="habits-tab" class="text-[13px]">Привычки</span>
-                </button>
-                <button id="memoryTab" class="tab-button flex flex-col items-center justify-center">
-                    <span class="text-2xl mb-1">📦</span>
-                    <span id="memory-tab" class="text-[13px]">Архив</span>
-                </button>
-            </div>
+    <!-- ══════════════ HEADER ══════════════ -->
+    <header class="app-header px-5 py-4 flex items-center gap-4">
+        <div class="w-11 h-11 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
         </div>
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+                <h1 class="app-title text-[26px]">DailyBookimix</h1>
+                <div id="streakBadge" class="streak-badge">
+                    <span id="fireEmoji" class="text-xl">🔥</span>
+                    <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
+                </div>
+            </div>
+            <p id="app-desc" class="text-[13px]" style="color:var(--text-muted)">Secure Daily Journal</p>
+        </div>
+    </header>
 
-        <!-- КНОПКИ НАСТРОЕК ВНИЗУ -->
-        <div class="bottom-controls rounded-3xl px-5 py-3 mb-6 flex items-center justify-between text-sm font-medium">
-            <button id="langSwitch" class="flex items-center gap-2 px-5 py-2 bg-white/20 hover:bg-white/30 rounded-2xl transition-all">
-                🌐 <span id="lang-text">English</span>
+    <!-- ══════════════ TAB BAR ══════════════ -->
+    <div class="glass rounded-[20px] p-1.5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+        <div class="tab-bar">
+            <button id="notesTab"   class="tab-btn active" onclick="diary.switchTab('notes')">
+                <span class="tab-icon">📝</span>
+                <span id="tab-notes">Notes</span>
             </button>
-            
-            <button id="themeSwitch" class="flex items-center gap-2 px-5 py-2 bg-white/20 hover:bg-white/30 rounded-2xl transition-all">
-                <span id="theme-text">Тёмная</span>
+            <button id="habitsTab"  class="tab-btn" onclick="diary.switchTab('habits')">
+                <span class="tab-icon">🔥</span>
+                <span id="tab-habits">Habits</span>
             </button>
-            
-            <div class="flex items-center gap-2 px-5 py-2 bg-white/20 rounded-2xl">
-                <span class="text-lg">☁️</span>
-                <span id="cloud-label" class="text-white">Облачно</span>
-            </div>
-        </div>
-
-        <!-- NOTES SECTION -->
-        <div id="notesSection">
-            <div class="space-y-6">
-                <div class="glass-effect rounded-3xl p-6">
-                    <h2 id="new-note-title" class="text-2xl font-semibold mb-6 flex items-center gap-3">
-                        <span class="text-4xl">✍️</span>
-                        Новая запись
-                    </h2>
-                    <form id="noteForm" class="space-y-5">
-                        <input type="hidden" id="noteId">
-                        <input id="noteTitle" type="text" placeholder="Заголовок записи" required class="form-input w-full text-gray-900">
-                        <select id="noteCategory" class="form-input w-full text-gray-900"></select>
-                        <textarea id="noteContent" rows="5" placeholder="Что сегодня произошло..." required class="form-input w-full text-gray-900 resize-none"></textarea>
-                        <button type="submit" id="save-note-btn" class="w-full py-6 bg-white text-orange-600 font-semibold text-xl rounded-3xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                            Сохранить запись <span class="text-3xl">💾</span>
-                        </button>
-                    </form>
-                </div>
-
-                <div class="glass-effect rounded-3xl p-6">
-                    <div class="flex items-center justify-between mb-6">
-                        <h2 id="my-notes-title" class="text-2xl font-semibold flex items-center gap-3">
-                            <span class="text-4xl">📖</span>
-                            Мои записи
-                        </h2>
-                        <button id="clearAll" class="text-red-400 hover:text-red-500 text-sm font-medium px-4 py-2">Очистить всё</button>
-                    </div>
-                    <input id="notesSearch" type="text" placeholder="Поиск по тексту или #хэштегу" class="form-input w-full mb-4 text-gray-900">
-                    <select id="filterCategory" class="form-input w-full mb-6 text-gray-900"></select>
-                    <div id="notesList" class="space-y-4 max-h-[380px] overflow-y-auto pr-1"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- HABITS SECTION -->
-        <div id="habitsSection" class="hidden">
-            <div class="space-y-6">
-                <div class="glass-effect rounded-3xl p-6">
-                    <h2 id="new-habit-title" class="text-2xl font-semibold mb-6">Новая привычка</h2>
-                    <form id="habitForm" class="space-y-5">
-                        <input type="hidden" id="habitId">
-                        <input id="habitName" type="text" placeholder="Название привычки" required class="form-input w-full text-gray-900">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-orange-100 text-sm block mb-2">Дата начала</label>
-                                <input id="habitStartDate" type="date" required class="form-input w-full text-gray-900">
-                            </div>
-                            <div>
-                                <label class="text-orange-100 text-sm block mb-2">Дата завершения (необязательно)</label>
-                                <input id="habitEndDate" type="date" class="form-input w-full text-gray-900">
-                            </div>
-                        </div>
-                        <input id="habitGoal" type="number" value="30" min="1" required placeholder="Цель в днях" class="form-input w-full text-gray-900">
-                        <textarea id="habitDescription" rows="3" placeholder="Описание привычки (можно пусто)" class="form-input w-full text-gray-900 resize-none"></textarea>
-                        <button type="submit" id="start-habit-btn" class="w-full py-6 bg-white text-orange-600 font-semibold text-xl rounded-3xl">Начать трекинг</button>
-                    </form>
-                </div>
-
-                <div class="glass-effect rounded-3xl p-6">
-                    <h2 id="my-habits-title" class="text-2xl font-semibold mb-6">Мои привычки</h2>
-                    <input id="habitsSearch" type="text" placeholder="Поиск привычек..." class="form-input w-full mb-6 text-gray-900">
-                    <div id="habitsList" class="space-y-4 max-h-[380px] overflow-y-auto"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- MEMORY SECTION -->
-        <div id="memorySection" class="hidden">
-            <div class="space-y-6">
-                <div class="glass-effect rounded-3xl p-6">
-                    <h2 id="new-memory-title" class="text-2xl font-semibold mb-6">Новое воспоминание</h2>
-                    <form id="memoryForm" class="space-y-5">
-                        <input type="hidden" id="memoryId">
-                        <input id="memoryTitle" type="text" placeholder="Название" required class="form-input w-full text-gray-900">
-                        <select id="memoryType" class="form-input w-full text-gray-900"></select>
-                        <div id="relationsFields" class="hidden">
-                            <input id="partnerName" type="text" placeholder="Имя партнёра" class="form-input w-full text-gray-900">
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-orange-100 text-sm block mb-2">Дата начала</label>
-                                <input id="memoryStartDate" type="date" required class="form-input w-full text-gray-900">
-                            </div>
-                            <div id="endDateField">
-                                <label class="text-orange-100 text-sm block mb-2">Дата конца (необязательно)</label>
-                                <input id="memoryEndDate" type="date" class="form-input w-full text-gray-900">
-                            </div>
-                        </div>
-                        <textarea id="memoryNotes" rows="4" placeholder="Заметки..." class="form-input w-full text-gray-900 resize-none"></textarea>
-                        <button type="submit" id="save-memory-btn" class="w-full py-6 bg-white text-orange-600 font-semibold text-xl rounded-3xl">Сохранить воспоминание</button>
-                    </form>
-                </div>
-
-                <div class="glass-effect rounded-3xl p-6">
-                    <h2 id="my-memories-title" class="text-2xl font-semibold mb-6">Архив воспоминаний</h2>
-                    <input id="memoriesSearch" type="text" placeholder="Поиск..." class="form-input w-full mb-6 text-gray-900">
-                    <div id="memoriesList" class="space-y-4 max-h-[380px] overflow-y-auto"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- FOOTER -->
-        <footer class="mt-auto glass-effect rounded-3xl p-5 text-center text-sm flex flex-wrap justify-center gap-x-8 gap-y-3">
-            <div>📊 Записей: <span id="notesCount" class="font-semibold">0</span></div>
-            <div>⏰ Привычек: <span id="habitsCount" class="font-semibold">0</span> 
-                <span class="text-xs opacity-75">(активных: <span id="activeHabitsCount" class="font-semibold">0</span>)</span>
-            </div>
-            <div>📖 Воспоминаний: <span id="memoriesCount" class="font-semibold">0</span></div>
-        </footer>
-    </div>
-
-    <!-- МОДАЛКИ (без изменений) -->
-    <div id="calendarModal" class="modal">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
-                <h2 id="calendarTitle" class="text-2xl font-semibold"></h2>
-                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
-            </div>
-            <table id="calendarTable" class="w-full border-collapse text-center"></table>
-            <p class="text-xs text-center text-gray-400 mt-6">Нажми на день, чтобы отметить / снять отметку</p>
+            <button id="memoryTab"  class="tab-btn" onclick="diary.switchTab('memory')">
+                <span class="tab-icon">📦</span>
+                <span id="tab-memory">Archive</span>
+            </button>
         </div>
     </div>
 
-    <div id="endHabitModal" class="modal">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-semibold">Завершить привычку</h2>
-                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
-            </div>
-            <p id="endHabitName" class="mb-6 text-gray-600"></p>
-            <input id="endHabitDate" type="date" class="form-input w-full mb-8 text-gray-900">
-            <div class="flex gap-3">
-                <button onclick="diary.closeModals()" class="flex-1 py-5 bg-gray-200 rounded-3xl text-lg">Отмена</button>
-                <button onclick="diary.confirmEndHabit()" class="flex-1 py-5 bg-red-500 text-white rounded-3xl text-lg">Завершить</button>
-            </div>
-        </div>
+    <!-- ══════════════ SETTINGS BAR ══════════════ -->
+    <div class="settings-bar">
+        <button class="settings-btn" onclick="diary.openSheet('lang')">
+            <span class="text-xl">🌐</span>
+            <span id="lang-btn-label">Language</span>
+        </button>
+        <button class="settings-btn" onclick="diary.openSheet('theme')">
+            <span id="theme-icon" class="text-xl">☀️</span>
+            <span id="theme-btn-label">Theme</span>
+        </button>
     </div>
 
-    <div id="eventModal" class="modal">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
-                <h2 id="add-event-title" class="text-2xl font-semibold">Добавить событие</h2>
-                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
+    <!-- ══════════════ SECTIONS ══════════════ -->
+
+    <!-- ── NOTES SECTION ── -->
+    <div id="notesSection" class="flex flex-col gap-4">
+
+        <!-- New / Edit Note Form -->
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header">
+                <span id="noteFormIcon">✍️</span>
+                <span id="noteFormTitle">New note</span>
             </div>
-            <form id="eventForm">
-                <input type="hidden" id="eventMemoryId">
-                <input id="eventDate" type="date" required class="form-input w-full mb-6 text-gray-900">
-                <textarea id="eventDesc" rows="4" required placeholder="Что произошло?" class="form-input w-full mb-8 text-gray-900"></textarea>
-                <div class="flex gap-3">
-                    <button type="button" onclick="diary.closeModals()" class="flex-1 py-5 bg-gray-200 rounded-3xl text-lg">Отмена</button>
-                    <button type="submit" class="flex-1 py-5 bg-orange-600 text-white rounded-3xl text-lg">Сохранить</button>
+            <form id="noteForm" class="flex flex-col gap-3">
+                <input type="hidden" id="noteId">
+                <div>
+                    <label class="fi-label" id="lbl-note-title">Title</label>
+                    <input id="noteTitle" type="text" class="fi" required>
                 </div>
+                <div>
+                    <label class="fi-label" id="lbl-note-cat">Category</label>
+                    <select id="noteCategory" class="fi"></select>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-note-content">Content</label>
+                    <textarea id="noteContent" class="fi" rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn-primary" id="save-note-btn">
+                    <span id="save-note-btn-txt">Save note</span>
+                    <span>💾</span>
+                </button>
             </form>
         </div>
-    </div>
 
-    <div id="endRelationsModal" class="modal">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-semibold">💔 Мы расстались</h2>
-                <span onclick="diary.closeModals()" class="text-5xl leading-none cursor-pointer text-gray-400">×</span>
+        <!-- Notes List -->
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="flex items-center justify-between mb-4">
+                <div class="section-header" style="margin-bottom:0">
+                    <span>📖</span>
+                    <span id="my-notes-title">My notes</span>
+                </div>
+                <button id="clearAll" class="btn-ghost btn-danger" style="padding:8px 14px;font-size:13px">
+                    <span id="clear-all-txt">Clear all</span>
+                </button>
             </div>
-            <input id="endRelationsDate" type="date" class="form-input w-full mb-8 text-gray-900">
-            <div class="flex gap-3">
-                <button onclick="diary.closeModals()" class="flex-1 py-5 bg-gray-200 rounded-3xl text-lg">Отмена</button>
-                <button onclick="diary.confirmEndRelations()" class="flex-1 py-5 bg-red-500 text-white rounded-3xl text-lg">Подтвердить</button>
+            <div class="search-wrap mb-3">
+                <span class="search-icon">🔍</span>
+                <input id="notesSearch" type="text" class="fi" oninput="diary.renderNotes()">
             </div>
+            <select id="filterCategory" class="fi mb-4" onchange="diary.renderNotes()"></select>
+            <div id="notesList" class="scrollable"></div>
         </div>
     </div>
 
-    <script>
-        // ================================================
-        // НОВЫЙ МЕНЕДЖЕР ХРАНИЛИЩА С ЗАЩИТОЙ ОТ ОШИБКИ
-        // ================================================
-        const StorageManager = {
-            supportsCloud: false,
+    <!-- ── HABITS SECTION ── -->
+    <div id="habitsSection" class="hidden flex flex-col gap-4">
 
-            init() {
-                // Проверяем поддержку CloudStorage (добавлено в Bot API 6.9)
-                this.supportsCloud = !!(Telegram.WebApp.CloudStorage && Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9'));
-                
-                if (!this.supportsCloud) {
-                    console.warn('CloudStorage не поддерживается в этой версии Telegram. Используем localStorage (данные сохраняются только на этом устройстве).');
-                }
-            },
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header">
+                <span>🔥</span>
+                <span id="habitFormTitle">New habit</span>
+            </div>
+            <form id="habitForm" class="flex flex-col gap-3">
+                <input type="hidden" id="habitId">
+                <div>
+                    <label class="fi-label" id="lbl-habit-name">Habit name</label>
+                    <input id="habitName" type="text" class="fi" required>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="fi-label" id="lbl-start-date">Start date</label>
+                        <input id="habitStartDate" type="date" class="fi" required>
+                    </div>
+                    <div>
+                        <label class="fi-label" id="lbl-end-date">End date</label>
+                        <input id="habitEndDate" type="date" class="fi">
+                    </div>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-goal-days">Goal (days)</label>
+                    <input id="habitGoal" type="number" value="30" min="1" class="fi" required>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-habit-desc">Description</label>
+                    <textarea id="habitDescription" class="fi" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" id="start-habit-btn">
+                    <span id="start-habit-btn-txt">Start tracking</span>
+                    <span>🔥</span>
+                </button>
+            </form>
+        </div>
 
-            async getItem(key) {
-                if (this.supportsCloud) {
-                    return new Promise(resolve => {
-                        Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
-                            resolve(value !== null && value !== undefined ? value : null);
-                        });
-                    });
-                }
-                return localStorage.getItem(key) || null;
-            },
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header">
+                <span>📊</span>
+                <span id="my-habits-title">My habits</span>
+            </div>
+            <div class="search-wrap mb-4">
+                <span class="search-icon">🔍</span>
+                <input id="habitsSearch" type="text" class="fi" oninput="diary.renderHabits()">
+            </div>
+            <div id="habitsList" class="scrollable"></div>
+        </div>
+    </div>
 
-            async setItem(key, value) {
-                if (this.supportsCloud) {
-                    return new Promise(resolve => {
-                        Telegram.WebApp.CloudStorage.setItem(key, value, () => resolve());
-                    });
-                }
-                localStorage.setItem(key, value);
-                return Promise.resolve();
-            },
+    <!-- ── MEMORY / ARCHIVE SECTION ── -->
+    <div id="memorySection" class="hidden flex flex-col gap-4">
 
-            async getItems(keys) {
-                if (this.supportsCloud) {
-                    return new Promise(resolve => {
-                        Telegram.WebApp.CloudStorage.getItems(keys, (err, data) => {
-                            resolve(data || {});
-                        });
-                    });
-                }
-                const data = {};
-                keys.forEach(key => {
-                    const val = localStorage.getItem(key);
-                    if (val !== null) data[key] = val;
-                });
-                return data;
-            }
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header">
+                <span>✨</span>
+                <span id="memoryFormTitle">New memory</span>
+            </div>
+            <form id="memoryForm" class="flex flex-col gap-3">
+                <input type="hidden" id="memoryId">
+                <div>
+                    <label class="fi-label" id="lbl-mem-title">Title</label>
+                    <input id="memoryTitle" type="text" class="fi" required>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-mem-type">Type</label>
+                    <select id="memoryType" class="fi" onchange="diary.onMemoryTypeChange()"></select>
+                </div>
+                <div id="relationsFields" class="hidden">
+                    <label class="fi-label" id="lbl-partner-name">Partner name</label>
+                    <input id="partnerName" type="text" class="fi">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="fi-label" id="lbl-mem-start">Start date</label>
+                        <input id="memoryStartDate" type="date" class="fi" required>
+                    </div>
+                    <div id="endDateField">
+                        <label class="fi-label" id="lbl-mem-end">End date</label>
+                        <input id="memoryEndDate" type="date" class="fi">
+                    </div>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-mem-notes">Notes</label>
+                    <textarea id="memoryNotes" class="fi" rows="4"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" id="save-memory-btn">
+                    <span id="save-memory-btn-txt">Save memory</span>
+                    <span>💾</span>
+                </button>
+            </form>
+        </div>
+
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header">
+                <span>🗃️</span>
+                <span id="my-memories-title">Archive</span>
+            </div>
+            <div class="search-wrap mb-4">
+                <span class="search-icon">🔍</span>
+                <input id="memoriesSearch" type="text" class="fi" oninput="diary.renderMemories()">
+            </div>
+            <div id="memoriesList" class="scrollable"></div>
+        </div>
+    </div>
+
+    <!-- ══════════════ FOOTER STATS ══════════════ -->
+    <footer class="glass rounded-[20px] px-5 py-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-center"
+            style="background:var(--footer-bg);border:1px solid var(--glass-border)">
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            📝 <span id="stat-notes-lbl">Notes</span>: <span id="notesCount" style="color:var(--text-primary)">0</span>
+        </div>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            🔥 <span id="stat-habits-lbl">Habits</span>: <span id="habitsCount" style="color:var(--text-primary)">0</span>
+            <span style="font-size:11px;opacity:.7">(<span id="activeHabitsCount">0</span>)</span>
+        </div>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            📦 <span id="stat-mem-lbl">Memories</span>: <span id="memoriesCount" style="color:var(--text-primary)">0</span>
+        </div>
+    </footer>
+
+</div><!-- end .max-w -->
+
+
+<!-- ══════════════════════════════════════
+     SETTINGS BOTTOM SHEET
+══════════════════════════════════════ -->
+<div id="sheetOverlay" class="sheet-overlay" onclick="diary.closeSheet()"></div>
+<div id="bottomSheet" class="bottom-sheet">
+    <div class="sheet-handle"></div>
+
+    <!-- Theme picker -->
+    <div id="sheetThemeSection">
+        <div class="sheet-title" id="sheet-theme-title">Choose Theme</div>
+
+        <div class="sheet-option" id="sheetOptOrange" onclick="diary.applyTheme('orange')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#ff4500,#ff8c42)">🌅</div>
+            <div>
+                <div class="sheet-option-label" id="sheet-theme-orange">Classic Orange</div>
+                <div class="sheet-option-sub" id="sheet-theme-orange-sub">Warm & energetic</div>
+            </div>
+            <div class="sheet-check">✓</div>
+        </div>
+
+        <div class="sheet-option" id="sheetOptDark" onclick="diary.applyTheme('dark')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#0d1117,#1f2937)">🌙</div>
+            <div>
+                <div class="sheet-option-label" id="sheet-theme-dark">Midnight Dark</div>
+                <div class="sheet-option-sub" id="sheet-theme-dark-sub">Easy on the eyes</div>
+            </div>
+            <div class="sheet-check">✓</div>
+        </div>
+    </div>
+
+    <!-- Language picker -->
+    <div id="sheetLangSection">
+        <div class="sheet-title" id="sheet-lang-title">Choose Language</div>
+
+        <div class="sheet-option" id="sheetOptEn" onclick="diary.applyLang('en')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);font-size:26px">🇬🇧</div>
+            <div>
+                <div class="sheet-option-label">English</div>
+                <div class="sheet-option-sub">English</div>
+            </div>
+            <div class="sheet-check">✓</div>
+        </div>
+
+        <div class="sheet-option" id="sheetOptRu" onclick="diary.applyLang('ru')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#dc2626,#1d4ed8);font-size:26px">🇷🇺</div>
+            <div>
+                <div class="sheet-option-label">Русский</div>
+                <div class="sheet-option-sub">Russian</div>
+            </div>
+            <div class="sheet-check">✓</div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODALS
+══════════════════════════════════════ -->
+
+<!-- Calendar Modal -->
+<div id="calendarModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="calendarTitle"></span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <table id="calendarTable"></table>
+        <p id="calendar-hint" class="text-center text-xs mt-4" style="color:#9ca3af">Tap a day to toggle</p>
+    </div>
+</div>
+
+<!-- End Habit Modal -->
+<div id="endHabitModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="end-habit-title">End habit</span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <p id="endHabitName" class="mb-4 font-semibold" style="color:var(--modal-text)"></p>
+        <input id="endHabitDate" type="date" class="fi mb-6">
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-1">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" onclick="diary.confirmEndHabit()" id="confirm-end-habit-btn">End</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Event Modal -->
+<div id="eventModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="add-event-title">Add event</span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <form id="eventForm" class="flex flex-col gap-3">
+            <input type="hidden" id="eventMemoryId">
+            <input type="hidden" id="editEventIdx" value="">
+            <div>
+                <label class="fi-label" id="lbl-event-date">Date</label>
+                <input id="eventDate" type="date" class="fi" required>
+            </div>
+            <div>
+                <label class="fi-label" id="lbl-event-desc">What happened?</label>
+                <textarea id="eventDesc" class="fi" rows="4" required></textarea>
+            </div>
+            <div class="flex gap-3">
+                <button type="button" class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-2">Cancel</button>
+                <button type="submit" class="btn-primary flex-1" id="save-event-btn">
+                    <span id="save-event-btn-txt">Save</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- End Relations Modal -->
+<div id="endRelationsModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="end-relations-title">💔 We broke up</span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <div class="mb-4" style="color:var(--modal-text);font-size:14px;font-weight:600" id="end-relations-hint">
+            Choose the date you parted ways.
+        </div>
+        <input id="endRelationsDate" type="date" class="fi mb-6">
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-3">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" onclick="diary.confirmEndRelations()" id="confirm-breakup-btn">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  STORAGE MANAGER
+// ══════════════════════════════════════════════════════════════
+const StorageManager = {
+    supportsCloud: false,
+
+    init() {
+        try {
+            this.supportsCloud = !!(
+                window.Telegram &&
+                Telegram.WebApp.CloudStorage &&
+                Telegram.WebApp.isVersionAtLeast &&
+                Telegram.WebApp.isVersionAtLeast('6.9')
+            );
+        } catch(e) { this.supportsCloud = false; }
+    },
+
+    async getItem(key) {
+        if (this.supportsCloud) {
+            return new Promise(resolve => {
+                Telegram.WebApp.CloudStorage.getItem(key, (err, value) =>
+                    resolve(value !== null && value !== undefined ? value : null)
+                );
+            });
+        }
+        return localStorage.getItem(key) || null;
+    },
+
+    async setItem(key, value) {
+        if (this.supportsCloud) {
+            return new Promise(resolve => {
+                Telegram.WebApp.CloudStorage.setItem(key, value, () => resolve());
+            });
+        }
+        localStorage.setItem(key, value);
+        return Promise.resolve();
+    },
+
+    async getItems(keys) {
+        if (this.supportsCloud) {
+            return new Promise(resolve => {
+                Telegram.WebApp.CloudStorage.getItems(keys, (err, data) => resolve(data || {}));
+            });
+        }
+        const data = {};
+        keys.forEach(key => {
+            const val = localStorage.getItem(key);
+            if (val !== null) data[key] = val;
+        });
+        return data;
+    }
+};
+
+
+// ══════════════════════════════════════════════════════════════
+//  TRANSLATIONS
+// ══════════════════════════════════════════════════════════════
+const T = {
+    en: {
+        // Header
+        'app-desc': 'Secure Daily Journal',
+        // Tabs
+        'tab-notes': 'Notes',
+        'tab-habits': 'Habits',
+        'tab-memory': 'Archive',
+        // Settings bar
+        'lang-btn-label': 'Language',
+        'theme-btn-label': 'Theme',
+        // Sheet
+        'sheet-theme-title': 'Choose Theme',
+        'sheet-theme-orange': 'Classic Orange',
+        'sheet-theme-orange-sub': 'Warm & energetic',
+        'sheet-theme-dark': 'Midnight Dark',
+        'sheet-theme-dark-sub': 'Easy on the eyes',
+        'sheet-lang-title': 'Choose Language',
+        // Notes form
+        'noteFormTitle-new': 'New note',
+        'noteFormTitle-edit': 'Edit note',
+        'lbl-note-title': 'Title',
+        'lbl-note-cat': 'Category',
+        'lbl-note-content': 'Content',
+        'noteTitle-ph': 'Note title',
+        'noteContent-ph': 'What happened today...',
+        'save-note-btn-txt': 'Save note',
+        // Notes list
+        'my-notes-title': 'My notes',
+        'clear-all-txt': 'Clear all',
+        'notesSearch-ph': 'Search by text or #hashtag',
+        'notes-empty': 'No notes yet.<br>Add your first one above 👆',
+        // Notes categories
+        'cat-personal': 'Personal',
+        'cat-work': 'Work',
+        'cat-ideas': 'Ideas',
+        'cat-tasks': 'Tasks',
+        'cat-all': 'All categories',
+        // Habits form
+        'habitFormTitle-new': 'New habit',
+        'habitFormTitle-edit': 'Edit habit',
+        'lbl-habit-name': 'Habit name',
+        'lbl-start-date': 'Start date',
+        'lbl-end-date': 'End date',
+        'lbl-goal-days': 'Goal (days)',
+        'lbl-habit-desc': 'Description',
+        'habitName-ph': 'Habit name',
+        'habitDescription-ph': 'Describe your habit...',
+        'start-habit-btn-txt': 'Start tracking',
+        // Habits list
+        'my-habits-title': 'My habits',
+        'habitsSearch-ph': 'Search habits...',
+        'habits-empty': 'No habits yet',
+        'lbl-done': 'done',
+        'lbl-goal': 'goal',
+        'lbl-progress': 'progress',
+        'lbl-completed': 'Completed',
+        'lbl-mark-today': 'Mark today',
+        'lbl-done-today': '✅ Done today',
+        'lbl-calendar': '📅 Calendar',
+        'lbl-end-habit': 'End',
+        // Memory form
+        'memoryFormTitle-new': 'New memory',
+        'memoryFormTitle-edit': 'Edit memory',
+        'lbl-mem-title': 'Title',
+        'lbl-mem-type': 'Type',
+        'lbl-partner-name': 'Partner name',
+        'lbl-mem-start': 'Start date',
+        'lbl-mem-end': 'End date',
+        'lbl-mem-notes': 'Notes',
+        'memoryTitle-ph': 'Title',
+        'partnerName-ph': 'Partner name',
+        'memoryNotes-ph': 'Notes...',
+        'save-memory-btn-txt': 'Save memory',
+        // Memory types
+        'type-book': '📚 Book',
+        'type-movie': '🎬 Movie',
+        'type-series': '📺 Series',
+        'type-game': '🎮 Game',
+        'type-relations': '❤️ Relationship',
+        'type-other': '📦 Other',
+        // Memory list
+        'my-memories-title': 'Archive',
+        'memoriesSearch-ph': 'Search...',
+        'memories-empty': 'Archive is empty',
+        // Relations card
+        'rel-days-together': 'days together',
+        'rel-since': 'Since',
+        'rel-until': 'Until',
+        'rel-broke-up': 'broke up',
+        'rel-still-together': 'Still together',
+        'lbl-add-event': '+ Add event',
+        'lbl-broke-up': '💔 Broke up',
+        'lbl-events': 'Events',
+        'lbl-no-events': 'No events yet',
+        // Modals
+        'calendar-hint': 'Tap a day to mark / unmark',
+        'end-habit-title': 'End habit',
+        'add-event-title': 'Add event',
+        'lbl-event-date': 'Date',
+        'lbl-event-desc': 'What happened?',
+        'eventDesc-ph': 'Describe what happened...',
+        'save-event-btn-txt': 'Save',
+        'end-relations-title': '💔 We broke up',
+        'end-relations-hint': 'Choose the date you parted ways.',
+        // Buttons
+        'lbl-cancel': 'Cancel',
+        'lbl-confirm': 'Confirm',
+        'lbl-end': 'End',
+        'lbl-edit': '✏️ Edit',
+        'lbl-delete': 'Delete',
+        'lbl-save': 'Save',
+        'lbl-pin': '📌 Pin',
+        'lbl-unpin': '📌 Unpin',
+        // Footer
+        'stat-notes-lbl': 'Notes',
+        'stat-habits-lbl': 'Habits',
+        'stat-mem-lbl': 'Memories',
+        // Toasts
+        'toast-note-saved': 'Note saved ✅',
+        'toast-note-deleted': 'Note deleted',
+        'toast-all-deleted': 'All notes deleted',
+        'toast-habit-added': 'Habit added ✅',
+        'toast-habit-deleted': 'Habit deleted',
+        'toast-memory-saved': 'Memory saved ✅',
+        'toast-memory-deleted': 'Memory deleted',
+        'toast-event-saved': 'Event saved ✅',
+        'toast-event-deleted': 'Event deleted',
+        'toast-fill-fields': 'Please fill all required fields',
+        'toast-pinned': '📌 Pinned',
+        'toast-unpinned': 'Unpinned',
+        // Confirms
+        'confirm-delete-note': 'Delete this note?',
+        'confirm-delete-habit': 'Delete this habit forever?',
+        'confirm-delete-memory': 'Delete this memory?',
+        'confirm-delete-event': 'Delete this event?',
+        'confirm-clear-all': 'Delete ALL notes? This cannot be undone.',
+    },
+
+    ru: {
+        'app-desc': 'Защищённый ежедневник',
+        'tab-notes': 'Записи',
+        'tab-habits': 'Привычки',
+        'tab-memory': 'Архив',
+        'lang-btn-label': 'Язык',
+        'theme-btn-label': 'Тема',
+        'sheet-theme-title': 'Выбор темы',
+        'sheet-theme-orange': 'Классический оранжевый',
+        'sheet-theme-orange-sub': 'Тёплый и энергичный',
+        'sheet-theme-dark': 'Тёмная ночь',
+        'sheet-theme-dark-sub': 'Бережно для глаз',
+        'sheet-lang-title': 'Выбор языка',
+        'noteFormTitle-new': 'Новая запись',
+        'noteFormTitle-edit': 'Редактировать запись',
+        'lbl-note-title': 'Заголовок',
+        'lbl-note-cat': 'Категория',
+        'lbl-note-content': 'Содержание',
+        'noteTitle-ph': 'Заголовок записи',
+        'noteContent-ph': 'Что сегодня произошло...',
+        'save-note-btn-txt': 'Сохранить запись',
+        'my-notes-title': 'Мои записи',
+        'clear-all-txt': 'Очистить всё',
+        'notesSearch-ph': 'Поиск по тексту или #хэштегу',
+        'notes-empty': 'Пока пусто.<br>Добавь первую запись выше 👆',
+        'cat-personal': 'Личное',
+        'cat-work': 'Работа',
+        'cat-ideas': 'Идеи',
+        'cat-tasks': 'Задачи',
+        'cat-all': 'Все категории',
+        'habitFormTitle-new': 'Новая привычка',
+        'habitFormTitle-edit': 'Редактировать привычку',
+        'lbl-habit-name': 'Название привычки',
+        'lbl-start-date': 'Дата начала',
+        'lbl-end-date': 'Дата завершения',
+        'lbl-goal-days': 'Цель (дней)',
+        'lbl-habit-desc': 'Описание',
+        'habitName-ph': 'Название привычки',
+        'habitDescription-ph': 'Описание привычки...',
+        'start-habit-btn-txt': 'Начать трекинг',
+        'my-habits-title': 'Мои привычки',
+        'habitsSearch-ph': 'Поиск привычек...',
+        'habits-empty': 'Пока нет привычек',
+        'lbl-done': 'сделано',
+        'lbl-goal': 'цель',
+        'lbl-progress': 'прогресс',
+        'lbl-completed': 'Завершена',
+        'lbl-mark-today': 'Отметить сегодня',
+        'lbl-done-today': '✅ Сегодня сделано',
+        'lbl-calendar': '📅 Календарь',
+        'lbl-end-habit': 'Завершить',
+        'memoryFormTitle-new': 'Новое воспоминание',
+        'memoryFormTitle-edit': 'Редактировать',
+        'lbl-mem-title': 'Название',
+        'lbl-mem-type': 'Тип',
+        'lbl-partner-name': 'Имя партнёра',
+        'lbl-mem-start': 'Дата начала',
+        'lbl-mem-end': 'Дата конца',
+        'lbl-mem-notes': 'Заметки',
+        'memoryTitle-ph': 'Название',
+        'partnerName-ph': 'Имя партнёра',
+        'memoryNotes-ph': 'Заметки...',
+        'save-memory-btn-txt': 'Сохранить воспоминание',
+        'type-book': '📚 Книга',
+        'type-movie': '🎬 Фильм',
+        'type-series': '📺 Сериал',
+        'type-game': '🎮 Игра',
+        'type-relations': '❤️ Отношения',
+        'type-other': '📦 Другое',
+        'my-memories-title': 'Архив воспоминаний',
+        'memoriesSearch-ph': 'Поиск...',
+        'memories-empty': 'Архив пока пуст',
+        'rel-days-together': 'дней вместе',
+        'rel-since': 'С',
+        'rel-until': 'До',
+        'rel-broke-up': 'расстались',
+        'rel-still-together': 'Всё ещё вместе',
+        'lbl-add-event': '+ Добавить событие',
+        'lbl-broke-up': '💔 Расстались',
+        'lbl-events': 'События',
+        'lbl-no-events': 'Событий пока нет',
+        'calendar-hint': 'Нажми на день, чтобы отметить / снять отметку',
+        'end-habit-title': 'Завершить привычку',
+        'add-event-title': 'Добавить событие',
+        'lbl-event-date': 'Дата',
+        'lbl-event-desc': 'Что произошло?',
+        'eventDesc-ph': 'Опишите что произошло...',
+        'save-event-btn-txt': 'Сохранить',
+        'end-relations-title': '💔 Мы расстались',
+        'end-relations-hint': 'Выбери дату расставания.',
+        'lbl-cancel': 'Отмена',
+        'lbl-confirm': 'Подтвердить',
+        'lbl-end': 'Завершить',
+        'lbl-edit': '✏️ Изменить',
+        'lbl-delete': 'Удалить',
+        'lbl-save': 'Сохранить',
+        'lbl-pin': '📌 Закрепить',
+        'lbl-unpin': '📌 Открепить',
+        'stat-notes-lbl': 'Записей',
+        'stat-habits-lbl': 'Привычек',
+        'stat-mem-lbl': 'Воспоминаний',
+        'toast-note-saved': 'Запись сохранена ✅',
+        'toast-note-deleted': 'Запись удалена',
+        'toast-all-deleted': 'Все записи удалены',
+        'toast-habit-added': 'Привычка добавлена ✅',
+        'toast-habit-deleted': 'Привычка удалена',
+        'toast-memory-saved': 'Воспоминание сохранено ✅',
+        'toast-memory-deleted': 'Воспоминание удалено',
+        'toast-event-saved': 'Событие сохранено ✅',
+        'toast-event-deleted': 'Событие удалено',
+        'toast-fill-fields': 'Заполни все обязательные поля',
+        'toast-pinned': '📌 Закреплено',
+        'toast-unpinned': 'Откреплено',
+        'confirm-delete-note': 'Удалить эту запись?',
+        'confirm-delete-habit': 'Удалить привычку навсегда?',
+        'confirm-delete-memory': 'Удалить воспоминание?',
+        'confirm-delete-event': 'Удалить это событие?',
+        'confirm-clear-all': 'Удалить ВСЕ записи? Это нельзя отменить.',
+    }
+};
+
+
+// ══════════════════════════════════════════════════════════════
+//  DIARY APP
+// ══════════════════════════════════════════════════════════════
+const diary = {
+    notes:          [],
+    habits:         [],
+    memories:       [],
+    lang:           'en',
+    theme:          'orange',
+    fireStreak:     0,
+    lastActiveDate: '',
+    tempEndHabitId:    null,
+    tempEndRelationsId: null,
+    // track which detail panels are open
+    openNoteDetail:   null,
+    openHabitDetail:  null,
+    openMemoryDetail: null,
+
+    // ── helpers ─────────────────────────────────────────────
+    t(key) { return (T[this.lang] || T.en)[key] || key; },
+
+    today() { return new Date().toISOString().split('T')[0]; },
+
+    fmtDate(d) {
+        if (!d) return '';
+        return new Date(d).toLocaleDateString(
+            this.lang === 'ru' ? 'ru-RU' : 'en-GB',
+            { day: 'numeric', month: 'short', year: 'numeric' }
+        );
+    },
+
+    toast(text, type = 'success') {
+        document.querySelectorAll('.toast-msg').forEach(t => t.remove());
+        const el = document.createElement('div');
+        el.className = `toast-msg toast-${type}`;
+        el.textContent = text;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 2700);
+    },
+
+    closeModals() {
+        document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+    },
+
+    // ── SETTINGS SHEET ──────────────────────────────────────
+    openSheet(mode) {
+        const themeSection = document.getElementById('sheetThemeSection');
+        const langSection  = document.getElementById('sheetLangSection');
+        if (mode === 'theme') {
+            themeSection.style.display = 'block';
+            langSection.style.display  = 'none';
+        } else {
+            themeSection.style.display = 'none';
+            langSection.style.display  = 'block';
+        }
+        this._updateSheetChecks();
+        document.getElementById('sheetOverlay').classList.add('open');
+        document.getElementById('bottomSheet').classList.add('open');
+    },
+
+    closeSheet() {
+        document.getElementById('sheetOverlay').classList.remove('open');
+        document.getElementById('bottomSheet').classList.remove('open');
+    },
+
+    _updateSheetChecks() {
+        ['Orange','Dark'].forEach(t => {
+            const opt = document.getElementById('sheetOpt' + t);
+            if (opt) opt.classList.toggle('active', this.theme === t.toLowerCase());
+        });
+        ['En','Ru'].forEach(l => {
+            const opt = document.getElementById('sheetOpt' + l);
+            if (opt) opt.classList.toggle('active', this.lang === l.toLowerCase());
+        });
+    },
+
+    applyTheme(theme) {
+        this.theme = theme;
+        document.body.classList.remove('theme-dark');
+        if (theme === 'dark') document.body.classList.add('theme-dark');
+        StorageManager.setItem('theme', theme);
+        this._updateSheetChecks();
+        this._updateSettingsBar();
+        this.closeSheet();
+    },
+
+    applyLang(lang) {
+        this.lang = lang;
+        document.documentElement.lang = lang;
+        StorageManager.setItem('lang', lang);
+        this._updateSheetChecks();
+        this.applyTranslations();
+        this.renderAll();
+        this.closeSheet();
+    },
+
+    _updateSettingsBar() {
+        const icons = { orange: '☀️', dark: '🌙' };
+        document.getElementById('theme-icon').textContent = icons[this.theme] || '☀️';
+    },
+
+    // ── TRANSLATIONS ─────────────────────────────────────────
+    applyTranslations() {
+        // Text content IDs
+        const ids = [
+            'app-desc','tab-notes','tab-habits','tab-memory',
+            'lang-btn-label','theme-btn-label',
+            'sheet-theme-title','sheet-theme-orange','sheet-theme-orange-sub',
+            'sheet-theme-dark','sheet-theme-dark-sub','sheet-lang-title',
+            'my-notes-title','clear-all-txt',
+            'my-habits-title','my-memories-title',
+            'calendar-hint','end-habit-title','add-event-title',
+            'end-relations-title','end-relations-hint',
+            'lbl-note-title','lbl-note-cat','lbl-note-content',
+            'lbl-habit-name','lbl-start-date','lbl-end-date','lbl-goal-days','lbl-habit-desc',
+            'lbl-mem-title','lbl-mem-type','lbl-partner-name',
+            'lbl-mem-start','lbl-mem-end','lbl-mem-notes',
+            'lbl-event-date','lbl-event-desc',
+            'save-note-btn-txt','start-habit-btn-txt','save-memory-btn-txt','save-event-btn-txt',
+            'stat-notes-lbl','stat-habits-lbl','stat-mem-lbl',
+            'cancel-btn-1','cancel-btn-2','cancel-btn-3',
+        ];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = this.t(id);
+        });
+
+        // Special: confirm/end buttons
+        const confirmEndHabit = document.getElementById('confirm-end-habit-btn');
+        if (confirmEndHabit) confirmEndHabit.textContent = this.t('lbl-end');
+        const confirmBreakup = document.getElementById('confirm-breakup-btn');
+        if (confirmBreakup) confirmBreakup.textContent = this.t('lbl-confirm');
+
+        // Note form title
+        const editingNote = document.getElementById('noteId').value;
+        document.getElementById('noteFormTitle').textContent =
+            this.t(editingNote ? 'noteFormTitle-edit' : 'noteFormTitle-new');
+        document.getElementById('noteFormIcon').textContent = editingNote ? '✏️' : '✍️';
+
+        // Habit form title
+        const editingHabit = document.getElementById('habitId').value;
+        document.getElementById('habitFormTitle').textContent =
+            this.t(editingHabit ? 'habitFormTitle-edit' : 'habitFormTitle-new');
+
+        // Memory form title
+        const editingMemory = document.getElementById('memoryId').value;
+        document.getElementById('memoryFormTitle').textContent =
+            this.t(editingMemory ? 'memoryFormTitle-edit' : 'memoryFormTitle-new');
+
+        // Placeholders
+        const ph = (id, key) => { const el = document.getElementById(id); if(el) el.placeholder = this.t(key); };
+        ph('noteTitle',       'noteTitle-ph');
+        ph('noteContent',     'noteContent-ph');
+        ph('habitName',       'habitName-ph');
+        ph('habitDescription','habitDescription-ph');
+        ph('memoryTitle',     'memoryTitle-ph');
+        ph('partnerName',     'partnerName-ph');
+        ph('memoryNotes',     'memoryNotes-ph');
+        ph('notesSearch',     'notesSearch-ph');
+        ph('habitsSearch',    'habitsSearch-ph');
+        ph('memoriesSearch',  'memoriesSearch-ph');
+        ph('eventDesc',       'eventDesc-ph');
+
+        // Selects
+        const nc = document.getElementById('noteCategory');
+        if (nc) nc.innerHTML = ['personal','work','ideas','tasks']
+            .map(v => `<option value="${v}">${this.t('cat-'+v)}</option>`).join('');
+
+        const fc = document.getElementById('filterCategory');
+        if (fc) fc.innerHTML = `<option value="all">${this.t('cat-all')}</option>` +
+            ['personal','work','ideas','tasks']
+            .map(v => `<option value="${v}">${this.t('cat-'+v)}</option>`).join('');
+
+        const mt = document.getElementById('memoryType');
+        if (mt) mt.innerHTML = ['book','movie','series','game','relations','other']
+            .map(v => `<option value="${v}">${this.t('type-'+v)}</option>`).join('');
+
+        this._updateSettingsBar();
+    },
+
+    // ── LOAD / SAVE ──────────────────────────────────────────
+    async load() {
+        const data = await StorageManager.getItems([
+            'notes','habits','memories','lang','theme','fireStreak','lastActiveDate'
+        ]);
+
+        this.notes     = this._sortPinned(JSON.parse(data.notes    || '[]'));
+        this.habits    = this._sortPinned(JSON.parse(data.habits   || '[]'));
+        this.memories  = this._sortPinned(JSON.parse(data.memories || '[]'));
+
+        if (data.lang)  this.lang  = data.lang;
+        if (data.theme) this.theme = data.theme;
+        this.fireStreak     = parseInt(data.fireStreak    || '0');
+        this.lastActiveDate = data.lastActiveDate || '';
+
+        // Apply theme immediately
+        document.body.classList.remove('theme-dark');
+        if (this.theme === 'dark') document.body.classList.add('theme-dark');
+        document.documentElement.lang = this.lang;
+
+        this.applyTranslations();
+        this._updateSheetChecks();
+        this.renderAll();
+        this.updateFooter();
+    },
+
+    _sortPinned(arr) {
+        return [...arr].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    },
+
+    async saveNotes()    { await StorageManager.setItem('notes',    JSON.stringify(this.notes));    this.renderNotes();    this.updateFooter(); },
+    async saveHabits()   { await StorageManager.setItem('habits',   JSON.stringify(this.habits));   this.renderHabits();   this.updateFooter(); },
+    async saveMemories() { await StorageManager.setItem('memories', JSON.stringify(this.memories)); this.renderMemories(); this.updateFooter(); },
+
+    // ── TABS ────────────────────────────────────────────────
+    switchTab(tab) {
+        ['notes','habits','memory'].forEach(t => {
+            document.getElementById(t + 'Section').classList.toggle('hidden', t !== tab);
+            document.getElementById(t === 'notes' ? 'notesTab' :
+                                    t === 'habits' ? 'habitsTab' : 'memoryTab')
+                    .classList.toggle('active', t === tab);
+        });
+    },
+
+    // ── FOOTER ──────────────────────────────────────────────
+    updateFooter() {
+        document.getElementById('notesCount').textContent   = this.notes.length;
+        document.getElementById('habitsCount').textContent  = this.habits.length;
+        document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !h.endDate).length;
+        document.getElementById('memoriesCount').textContent = this.memories.length;
+        document.getElementById('fireStreakHeader').textContent  = this.fireStreak;
+    },
+
+    renderAll() {
+        this.renderNotes();
+        this.renderHabits();
+        this.renderMemories();
+        this.updateFooter();
+    },
+
+    // ── PIN ─────────────────────────────────────────────────
+    togglePin(type, id, event) {
+        if (event) event.stopPropagation();
+        const list = type === 'note' ? this.notes : type === 'habit' ? this.habits : this.memories;
+        const item = list.find(x => x.id === id);
+        if (!item) return;
+        item.pinned = !item.pinned;
+        const sorted = this._sortPinned(list);
+        if (type === 'note')   { this.notes    = sorted; this.saveNotes(); }
+        if (type === 'habit')  { this.habits   = sorted; this.saveHabits(); }
+        if (type === 'memory') { this.memories = sorted; this.saveMemories(); }
+        this.toast(item.pinned ? this.t('toast-pinned') : this.t('toast-unpinned'));
+    },
+
+    // ── INLINE PANEL TOGGLE ─────────────────────────────────
+    toggleNoteDetail(id)   { this.openNoteDetail   = this.openNoteDetail   === id ? null : id; this.renderNotes(); },
+    toggleHabitDetail(id)  { this.openHabitDetail  = this.openHabitDetail  === id ? null : id; this.renderHabits(); },
+    toggleMemoryDetail(id) { this.openMemoryDetail = this.openMemoryDetail === id ? null : id; this.renderMemories(); },
+
+    // ══════════════════════════════════════════════════════
+    //  NOTES
+    // ══════════════════════════════════════════════════════
+    async saveNote(e) {
+        e.preventDefault();
+        const id      = document.getElementById('noteId').value ? +document.getElementById('noteId').value : Date.now();
+        const title   = document.getElementById('noteTitle').value.trim();
+        const category= document.getElementById('noteCategory').value;
+        const content = document.getElementById('noteContent').value.trim();
+        if (!title || !content) return this.toast(this.t('toast-fill-fields'), 'error');
+
+        const note = {
+            id, title, category, content,
+            date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-GB'),
+            pinned: false
+        };
+        const existing = this.notes.findIndex(n => n.id === id);
+        if (existing >= 0) { note.pinned = this.notes[existing].pinned; this.notes[existing] = note; }
+        else this.notes.unshift(note);
+
+        this.notes = this._sortPinned(this.notes);
+        await this.saveNotes();
+        this.updateStreak();
+        this._resetNoteForm();
+        this.toast(this.t('toast-note-saved'));
+    },
+
+    _loadNoteToForm(note) {
+        document.getElementById('noteId').value      = note.id;
+        document.getElementById('noteTitle').value   = note.title;
+        document.getElementById('noteCategory').value= note.category;
+        document.getElementById('noteContent').value = note.content;
+        document.getElementById('noteFormTitle').textContent = this.t('noteFormTitle-edit');
+        document.getElementById('noteFormIcon').textContent  = '✏️';
+        document.getElementById('notesSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    async deleteNote(id, e) {
+        if (e) e.stopPropagation();
+        if (!confirm(this.t('confirm-delete-note'))) return;
+        this.notes = this.notes.filter(n => n.id !== id);
+        await this.saveNotes();
+        this.toast(this.t('toast-note-deleted'));
+    },
+
+    renderNotes() {
+        const container = document.getElementById('notesList');
+        const search    = (document.getElementById('notesSearch').value || '').toLowerCase();
+        const cat       = document.getElementById('filterCategory').value;
+
+        let list = [...this.notes];
+        if (cat !== 'all') list = list.filter(n => n.category === cat);
+        if (search) list = list.filter(n =>
+            n.title.toLowerCase().includes(search) || n.content.toLowerCase().includes(search));
+
+        if (!list.length) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><p>${this.t('notes-empty')}</p></div>`;
+            return;
+        }
+
+        const catClass = { personal:'cat-personal', work:'cat-work', ideas:'cat-ideas', tasks:'cat-tasks' };
+
+        container.innerHTML = list.map((note, i) => {
+            const isOpen = this.openNoteDetail === note.id;
+            const delay  = Math.min(i * 0.04, 0.25);
+            const pinLabel = note.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
+
+            return `
+            <div class="record-card ${note.pinned ? 'pinned' : ''}"
+                 style="animation-delay:${delay}s"
+                 onclick="diary.toggleNoteDetail(${note.id})">
+                ${note.pinned ? '<span class="pin-badge">📌</span>' : ''}
+                <div class="flex items-start justify-between gap-3 mb-2">
+                    <span class="cat-pill ${catClass[note.category] || 'cat-personal'}">
+                        ${this.t('cat-' + note.category)}
+                    </span>
+                    <span style="font-size:11px;color:var(--text-label);white-space:nowrap">${note.date}</span>
+                </div>
+                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${note.title}</div>
+                <div style="font-size:14px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'3'};-webkit-box-orient:vertical;overflow:hidden">
+                    ${note.content}
+                </div>
+                ${isOpen ? `
+                <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
+                    <div class="flex gap-2 flex-wrap" style="padding:14px">
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary._loadNoteToForm(diary.notes.find(n=>n.id===${note.id}));diary.openNoteDetail=null;diary.renderNotes()">
+                            ${this.t('lbl-edit')}
+                        </button>
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.togglePin('note',${note.id},event)">
+                            ${pinLabel}
+                        </button>
+                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.deleteNote(${note.id},event)">
+                            ${this.t('lbl-delete')}
+                        </button>
+                    </div>
+                </div>` : ''}
+            </div>`;
+        }).join('');
+    },
+
+    _resetNoteForm() {
+        document.getElementById('noteForm').reset();
+        document.getElementById('noteId').value = '';
+        document.getElementById('noteFormTitle').textContent = this.t('noteFormTitle-new');
+        document.getElementById('noteFormIcon').textContent  = '✍️';
+    },
+
+    // ══════════════════════════════════════════════════════
+    //  HABITS
+    // ══════════════════════════════════════════════════════
+    async saveHabit(e) {
+        e.preventDefault();
+        const id   = document.getElementById('habitId').value ? +document.getElementById('habitId').value : Date.now();
+        const name = document.getElementById('habitName').value.trim();
+        const start= document.getElementById('habitStartDate').value;
+        const end  = document.getElementById('habitEndDate').value || null;
+        const goal = +document.getElementById('habitGoal').value;
+        const desc = document.getElementById('habitDescription').value.trim();
+        if (!name || !start || !goal) return this.toast(this.t('toast-fill-fields'), 'error');
+
+        const existing = this.habits.find(h => h.id === id);
+        const habit = {
+            id, name, startDate: start, endDate: end, goal, description: desc,
+            completedDays: existing ? existing.completedDays : [],
+            pinned: existing ? existing.pinned : false
         };
 
-        const diary = {
-            notes: [],
-            habits: [],
-            memories: [],
-            lang: 'ru',
-            theme: 'light',
+        const idx = this.habits.findIndex(h => h.id === id);
+        if (idx >= 0) this.habits[idx] = habit;
+        else this.habits.unshift(habit);
 
-            async load() {
-                const data = await StorageManager.getItems(['notes', 'habits', 'memories', 'lang', 'theme']);
-                
-                this.notes = JSON.parse(data.notes || '[]').sort((a, b) => b.id - a.id);
-                this.habits = JSON.parse(data.habits || '[]').sort((a, b) => b.id - a.id);
-                this.memories = JSON.parse(data.memories || '[]').sort((a, b) => b.id - a.id);
-                
-                if (data.lang) this.lang = data.lang;
-                if (data.theme) this.theme = data.theme;
+        this.habits = this._sortPinned(this.habits);
+        await this.saveHabits();
+        this.updateStreak();
+        this._resetHabitForm();
+        this.toast(this.t('toast-habit-added'));
+    },
 
-                this.renderAll();
-            },
+    _loadHabitToForm(habit) {
+        document.getElementById('habitId').value          = habit.id;
+        document.getElementById('habitName').value        = habit.name;
+        document.getElementById('habitStartDate').value   = habit.startDate;
+        document.getElementById('habitEndDate').value     = habit.endDate || '';
+        document.getElementById('habitGoal').value        = habit.goal;
+        document.getElementById('habitDescription').value = habit.description || '';
+        document.getElementById('habitFormTitle').textContent = this.t('habitFormTitle-edit');
+        document.getElementById('habitsSection').scrollIntoView({ behavior:'smooth', block:'start' });
+    },
 
-            async saveNotes() {
-                await StorageManager.setItem('notes', JSON.stringify(this.notes));
-                this.renderNotes();
-                this.updateFooter();
-            },
-            async saveHabits() {
-                await StorageManager.setItem('habits', JSON.stringify(this.habits));
-                this.renderHabits();
-                this.updateFooter();
-            },
-            async saveMemories() {
-                await StorageManager.setItem('memories', JSON.stringify(this.memories));
-                this.renderMemories();
-                this.updateFooter();
-            },
+    async deleteHabit(id, e) {
+        if (e) e.stopPropagation();
+        if (!confirm(this.t('confirm-delete-habit'))) return;
+        this.habits = this.habits.filter(h => h.id !== id);
+        await this.saveHabits();
+        this.toast(this.t('toast-habit-deleted'));
+    },
 
-            // ==================== ЗАПИСИ ====================
-            async saveNote(e) {
-                e.preventDefault();
-                const id = document.getElementById('noteId').value ? +document.getElementById('noteId').value : Date.now();
-                const title = document.getElementById('noteTitle').value.trim();
-                const category = document.getElementById('noteCategory').value;
-                const content = document.getElementById('noteContent').value.trim();
+    toggleDay(id, date, e) {
+        if (e) e.stopPropagation();
+        const h = this.habits.find(h => h.id === id);
+        if (!h || h.endDate) return;
+        const s = new Set(h.completedDays);
+        s.has(date) ? s.delete(date) : s.add(date);
+        h.completedDays = Array.from(s);
+        if (h.completedDays.length >= h.goal) h.endDate = date;
+        this.saveHabits();
+        this.updateStreak();
+    },
 
-                if (!title || !content) return this.toast('Заполни все поля', 'error');
+    endHabit(id, e) {
+        if (e) e.stopPropagation();
+        const h = this.habits.find(h => h.id === id);
+        if (!h) return;
+        this.tempEndHabitId = id;
+        document.getElementById('endHabitName').textContent = h.name;
+        document.getElementById('endHabitDate').value = h.endDate || this.today();
+        document.getElementById('endHabitModal').classList.add('open');
+    },
 
-                const note = { id, title, category, content, date: new Date().toLocaleString(this.lang==='ru'?'ru-RU':'en-US') };
+    confirmEndHabit() {
+        const h = this.habits.find(h => h.id === this.tempEndHabitId);
+        if (h) h.endDate = document.getElementById('endHabitDate').value;
+        this.saveHabits();
+        this.closeModals();
+    },
 
-                if (document.getElementById('noteId').value) {
-                    const idx = this.notes.findIndex(n => n.id === id);
-                    this.notes[idx] = note;
-                } else this.notes.unshift(note);
+    showCalendar(id, e) {
+        if (e) e.stopPropagation();
+        const habit = this.habits.find(h => h.id === id);
+        if (!habit) return;
+        const statusText = habit.endDate
+            ? '✅ ' + this.t('lbl-completed')
+            : this.lang === 'ru' ? 'в процессе' : 'in progress';
+        document.getElementById('calendarTitle').textContent = `${habit.name} — ${statusText}`;
 
-                await this.saveNotes();
-                this.resetNoteForm();
-                this.toast('Запись сохранена ✅');
-            },
+        const dayLabels = this.lang === 'ru'
+            ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс']
+            : ['Mo','Tu','We','Th','Fr','Sa','Su'];
 
-            editNote(id) {
-                const n = this.notes.find(n => n.id === id);
-                document.getElementById('noteId').value = n.id;
-                document.getElementById('noteTitle').value = n.title;
-                document.getElementById('noteCategory').value = n.category;
-                document.getElementById('noteContent').value = n.content;
-                document.getElementById('new-note-title').innerHTML = `<span class="text-4xl">✏️</span> Редактировать запись`;
-            },
+        const table  = document.getElementById('calendarTable');
+        const header = `<tr>${dayLabels.map(d=>`<th>${d}</th>`).join('')}</tr>`;
+        let html = '<tr>';
+        let current = new Date(habit.startDate);
+        const offset = (current.getDay() + 6) % 7;
+        for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
+        const todayStr = this.today();
+        const end = habit.endDate ? new Date(habit.endDate) : new Date();
+        while (current <= end) {
+            const day = (current.getDay() + 6) % 7;
+            if (day === 0 && (offset > 0 || html !== '<tr>')) html += '</tr><tr>';
+            const d    = current.toISOString().split('T')[0];
+            const done = habit.completedDays.includes(d);
+            html += `<td class="${done ? 'done' : ''}" onclick="diary.toggleDay(${id},'${d}',event);diary.showCalendar(${id},event)">${current.getDate()}</td>`;
+            current.setDate(current.getDate() + 1);
+        }
+        html += '</tr>';
+        table.innerHTML = header + html;
+        document.getElementById('calendarModal').classList.add('open');
+    },
 
-            async deleteNote(id) {
-                if (!confirm('Удалить запись?')) return;
-                this.notes = this.notes.filter(n => n.id !== id);
-                await this.saveNotes();
-            },
+    renderHabits() {
+        const container = document.getElementById('habitsList');
+        const search    = (document.getElementById('habitsSearch').value || '').toLowerCase();
+        const list      = this.habits.filter(h => h.name.toLowerCase().includes(search));
 
-            renderNotes() {
-                const container = document.getElementById('notesList');
-                const search = (document.getElementById('notesSearch').value || '').toLowerCase();
-                const cat = document.getElementById('filterCategory').value;
+        if (!list.length) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔥</div><p>${this.t('habits-empty')}</p></div>`;
+            return;
+        }
 
-                let list = this.notes;
-                if (cat !== 'all') list = list.filter(n => n.category === cat);
-                if (search) list = list.filter(n => 
-                    n.title.toLowerCase().includes(search) || n.content.toLowerCase().includes(search)
-                );
+        const todayStr = this.today();
+        container.innerHTML = list.map((h, i) => {
+            const done     = h.completedDays.length;
+            const progress = Math.min(Math.round(done / h.goal * 100), 100);
+            const ended    = !!h.endDate;
+            const todayDone= h.completedDays.includes(todayStr);
+            const isOpen   = this.openHabitDetail === h.id;
+            const delay    = Math.min(i * 0.04, 0.25);
+            const pinLabel = h.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
 
-                if (!list.length) {
-                    container.innerHTML = `<div class="text-center py-12 text-orange-100">Пока пусто.<br>Добавь первую запись выше 👆</div>`;
-                    return;
-                }
-
-                const colors = {personal:'pink',work:'blue',ideas:'amber',tasks:'emerald'};
-                const names = this.lang==='ru' ? {personal:'Личное',work:'Работа',ideas:'Идеи',tasks:'Задачи'} : {personal:'Personal',work:'Work',ideas:'Ideas',tasks:'Tasks'};
-
-                container.innerHTML = list.map(note => `
-                    <div class="note-card bg-white/10 p-6 rounded-3xl border border-white/30">
-                        <div class="flex justify-between">
-                            <div class="flex items-center gap-3">
-                                <span class="bg-${colors[note.category]}-500 px-4 py-1 text-xs font-bold rounded-3xl">${names[note.category]}</span>
-                                <span class="text-xs text-orange-200">${note.date}</span>
-                            </div>
-                            <div class="flex gap-4 text-2xl">
-                                <span onclick="diary.editNote(${note.id});event.stopImmediatePropagation()" class="cursor-pointer">✏️</span>
-                                <span onclick="diary.deleteNote(${note.id});event.stopImmediatePropagation()" class="cursor-pointer text-red-400">🗑️</span>
-                            </div>
-                        </div>
-                        <h3 class="font-semibold text-xl mt-4">${note.title}</h3>
-                        <p class="text-orange-100 mt-2 line-clamp-4">${note.content}</p>
+            return `
+            <div class="record-card ${h.pinned ? 'pinned' : ''} ${ended ? 'opacity-80' : ''}"
+                 style="animation-delay:${delay}s"
+                 onclick="diary.toggleHabitDetail(${h.id})">
+                ${h.pinned ? '<span class="pin-badge">📌</span>' : ''}
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                        <div class="font-bold text-[16px]" style="color:var(--text-primary)">${h.name}</div>
+                        ${h.description ? `<div style="font-size:13px;color:var(--text-muted);margin-top:2px">${h.description}</div>` : ''}
                     </div>
-                `).join('');
-            },
+                    ${ended ? `<span class="chip green">${this.t('lbl-completed')}</span>` : ''}
+                </div>
+                <div class="flex justify-between text-center mt-3 mb-2">
+                    <div>
+                        <div style="font-size:22px;font-weight:900;color:#34d399">${done}</div>
+                        <div style="font-size:11px;color:var(--text-label)">${this.t('lbl-done')}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:22px;font-weight:900;color:var(--text-primary)">${h.goal}</div>
+                        <div style="font-size:11px;color:var(--text-label)">${this.t('lbl-goal')}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:22px;font-weight:900;color:#fbbf24">${progress}%</div>
+                        <div style="font-size:11px;color:var(--text-label)">${this.t('lbl-progress')}</div>
+                    </div>
+                </div>
+                <div class="prog-track mb-3">
+                    <div class="prog-fill" style="width:${progress}%"></div>
+                </div>
 
-            resetNoteForm() {
-                document.getElementById('noteForm').reset();
-                document.getElementById('noteId').value = '';
-                document.getElementById('new-note-title').innerHTML = `<span class="text-4xl">✍️</span> Новая запись`;
-            },
+                ${isOpen ? `
+                <div class="detail-panel" onclick="event.stopPropagation()">
+                    <div class="flex gap-2 flex-wrap mb-3">
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.showCalendar(${h.id},event)">
+                            ${this.t('lbl-calendar')}
+                        </button>
+                        <button class="btn-ghost ${todayDone ? 'btn-success' : ''}" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.toggleDay(${h.id},'${todayStr}',event)">
+                            ${todayDone ? this.t('lbl-done-today') : this.t('lbl-mark-today')}
+                        </button>
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary._loadHabitToForm(diary.habits.find(h=>h.id===${h.id}));diary.openHabitDetail=null;diary.renderHabits()">
+                            ${this.t('lbl-edit')}
+                        </button>
+                        ${!ended ? `<button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.endHabit(${h.id},event)">
+                            ${this.t('lbl-end-habit')}
+                        </button>` : ''}
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.togglePin('habit',${h.id},event)">
+                            ${pinLabel}
+                        </button>
+                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.deleteHabit(${h.id},event)">
+                            ${this.t('lbl-delete')}
+                        </button>
+                    </div>
+                </div>` : ''}
+            </div>`;
+        }).join('');
+    },
 
-            // ==================== ПРИВЫЧКИ ====================
-            async saveHabit(e) {
-                e.preventDefault();
-                const id = document.getElementById('habitId').value ? +document.getElementById('habitId').value : Date.now();
-                const name = document.getElementById('habitName').value.trim();
-                const start = document.getElementById('habitStartDate').value;
-                const end = document.getElementById('habitEndDate').value || null;
-                const goal = +document.getElementById('habitGoal').value;
-                const desc = document.getElementById('habitDescription').value.trim();
+    _resetHabitForm() {
+        document.getElementById('habitForm').reset();
+        document.getElementById('habitId').value = '';
+        document.getElementById('habitStartDate').value = this.today();
+        document.getElementById('habitFormTitle').textContent = this.t('habitFormTitle-new');
+    },
 
-                if (!name || !start || !goal) return this.toast('Заполни обязательные поля');
+    // ══════════════════════════════════════════════════════
+    //  MEMORIES / ARCHIVE
+    // ══════════════════════════════════════════════════════
+    async saveMemory(e) {
+        e.preventDefault();
+        const id     = document.getElementById('memoryId').value ? +document.getElementById('memoryId').value : Date.now();
+        const title  = document.getElementById('memoryTitle').value.trim();
+        const type   = document.getElementById('memoryType').value;
+        const start  = document.getElementById('memoryStartDate').value;
+        const end    = document.getElementById('memoryEndDate').value || null;
+        const notes  = document.getElementById('memoryNotes').value.trim();
+        const partner= type === 'relations' ? document.getElementById('partnerName').value.trim() : '';
 
-                const habit = {
-                    id, name, startDate: start, endDate: end, goal, description: desc,
-                    completedDays: id ? (this.habits.find(h=>h.id===id)||{completedDays:[]}).completedDays : []
-                };
+        const existing = this.memories.find(m => m.id === id);
+        const memory = {
+            id, title, type, startDate: start, endDate: end, notes,
+            partnerName: partner,
+            events: existing ? existing.events : [],
+            date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-GB'),
+            pinned: existing ? existing.pinned : false
+        };
 
-                if (document.getElementById('habitId').value) {
-                    const idx = this.habits.findIndex(h => h.id === id);
-                    this.habits[idx] = habit;
-                } else this.habits.unshift(habit);
+        const idx = this.memories.findIndex(m => m.id === id);
+        if (idx >= 0) this.memories[idx] = memory;
+        else this.memories.unshift(memory);
 
-                await this.saveHabits();
-                this.resetHabitForm();
-                this.toast('Привычка добавлена');
-            },
+        this.memories = this._sortPinned(this.memories);
+        await this.saveMemories();
+        this.updateStreak();
+        this._resetMemoryForm();
+        this.toast(this.t('toast-memory-saved'));
+    },
 
-            editHabit(id) {
-                const h = this.habits.find(h => h.id === id);
-                document.getElementById('habitId').value = h.id;
-                document.getElementById('habitName').value = h.name;
-                document.getElementById('habitStartDate').value = h.startDate;
-                document.getElementById('habitEndDate').value = h.endDate || '';
-                document.getElementById('habitGoal').value = h.goal;
-                document.getElementById('habitDescription').value = h.description || '';
-                document.getElementById('new-habit-title').textContent = 'Редактировать привычку';
-            },
+    _loadMemoryToForm(mem) {
+        document.getElementById('memoryId').value         = mem.id;
+        document.getElementById('memoryTitle').value      = mem.title;
+        document.getElementById('memoryType').value       = mem.type;
+        document.getElementById('memoryStartDate').value  = mem.startDate;
+        document.getElementById('memoryEndDate').value    = mem.endDate || '';
+        document.getElementById('memoryNotes').value      = mem.notes || '';
+        if (mem.type === 'relations') {
+            document.getElementById('partnerName').value  = mem.partnerName || '';
+        }
+        this.onMemoryTypeChange();
+        document.getElementById('memoryFormTitle').textContent = this.t('memoryFormTitle-edit');
+        document.getElementById('memorySection').scrollIntoView({ behavior:'smooth', block:'start' });
+    },
 
-            async deleteHabit(id) {
-                if (!confirm('Удалить привычку навсегда?')) return;
-                this.habits = this.habits.filter(h => h.id !== id);
-                await this.saveHabits();
-            },
+    onMemoryTypeChange() {
+        const isRel = document.getElementById('memoryType').value === 'relations';
+        document.getElementById('relationsFields').classList.toggle('hidden', !isRel);
+        document.getElementById('endDateField').classList.toggle('hidden', isRel);
+    },
 
-            toggleDay(id, date) {
-                const h = this.habits.find(h => h.id === id);
-                if (!h || h.endDate) return;
-                const set = new Set(h.completedDays);
-                set.has(date) ? set.delete(date) : set.add(date);
-                h.completedDays = Array.from(set);
-                if (!h.endDate && h.completedDays.length >= h.goal) h.endDate = date;
-                this.saveHabits();
-            },
+    async deleteMemory(id, e) {
+        if (e) e.stopPropagation();
+        if (!confirm(this.t('confirm-delete-memory'))) return;
+        this.memories = this.memories.filter(m => m.id !== id);
+        await this.saveMemories();
+        this.toast(this.t('toast-memory-deleted'));
+    },
 
-            showCalendar(id) {
-                const habit = this.habits.find(h => h.id === id);
-                if (!habit) return;
-                document.getElementById('calendarTitle').innerHTML = `${habit.name} <span class="text-sm text-orange-200">${habit.endDate?'✅ завершена':'в процессе'}</span>`;
-                
-                const table = document.getElementById('calendarTable');
-                table.innerHTML = `<tr><th class="py-3">Пн</th><th class="py-3">Вт</th><th class="py-3">Ср</th><th class="py-3">Чт</th><th class="py-3">Пт</th><th class="py-3">Сб</th><th class="py-3">Вс</th></tr>`;
-                
-                let html = '<tr>';
-                let current = new Date(habit.startDate);
-                let offset = (current.getDay() + 6) % 7;
-                for (let i = 0; i < offset; i++) html += '<td></td>';
-                
-                const today = new Date().toISOString().split('T')[0];
-                
-                while (current <= new Date()) {
-                    if ((current.getDay() + 6) % 7 === 0 && offset > 0) html += '</tr><tr>';
-                    const d = current.toISOString().split('T')[0];
-                    const done = habit.completedDays.includes(d);
-                    const cls = done ? 'bg-emerald-500 text-white' : 'bg-white/10';
-                    html += `<td onclick="diary.toggleDay(${id},'${d}');diary.showCalendar(${id});" class="${cls} rounded-2xl py-4 cursor-pointer">${current.getDate()}</td>`;
-                    current.setDate(current.getDate()+1);
-                }
-                html += '</tr>';
-                table.innerHTML += html;
-                document.getElementById('calendarModal').style.display = 'block';
-            },
+    // ── Relationship Events ──────────────────────────────
+    showAddEvent(memId, editIdx, e) {
+        if (e) e.stopPropagation();
+        document.getElementById('eventMemoryId').value = memId;
+        document.getElementById('editEventIdx').value  = editIdx !== undefined ? editIdx : '';
 
-            endHabit(id) {
-                const h = this.habits.find(h => h.id === id);
-                document.getElementById('endHabitName').textContent = h.name;
-                document.getElementById('endHabitDate').value = h.endDate || new Date().toISOString().split('T')[0];
-                document.getElementById('endHabitModal').style.display = 'block';
-                this.tempEndHabitId = id;
-            },
+        const mem = this.memories.find(m => m.id === memId);
+        if (editIdx !== undefined && editIdx !== '' && mem) {
+            const ev = mem.events[editIdx];
+            document.getElementById('eventDate').value = ev.date;
+            document.getElementById('eventDesc').value = ev.desc;
+            document.getElementById('add-event-title').textContent = this.t('lbl-edit');
+        } else {
+            document.getElementById('eventDate').value = this.today();
+            document.getElementById('eventDesc').value = '';
+            document.getElementById('add-event-title').textContent = this.t('add-event-title');
+        }
+        document.getElementById('eventModal').classList.add('open');
+    },
 
-            confirmEndHabit() {
-                const date = document.getElementById('endHabitDate').value;
-                const h = this.habits.find(h => h.id === this.tempEndHabitId);
-                if (h) h.endDate = date;
-                this.saveHabits();
-                this.closeModals();
-            },
+    async saveEvent(e) {
+        e.preventDefault();
+        const memId   = +document.getElementById('eventMemoryId').value;
+        const editIdx = document.getElementById('editEventIdx').value;
+        const date    = document.getElementById('eventDate').value;
+        const desc    = document.getElementById('eventDesc').value.trim();
+        const mem     = this.memories.find(m => m.id === memId);
+        if (!mem) return;
 
-            renderHabits() {
-                const container = document.getElementById('habitsList');
-                const search = (document.getElementById('habitsSearch').value || '').toLowerCase();
-                const filtered = this.habits.filter(h => h.name.toLowerCase().includes(search));
+        if (editIdx !== '') {
+            mem.events[+editIdx] = { date, desc };
+        } else {
+            if (!mem.events) mem.events = [];
+            mem.events.push({ date, desc });
+            mem.events.sort((a,b) => new Date(a.date) - new Date(b.date));
+        }
+        await this.saveMemories();
+        this.updateStreak();
+        this.closeModals();
+        this.toast(this.t('toast-event-saved'));
+    },
 
-                if (!filtered.length) {
-                    container.innerHTML = `<div class="text-center py-12 text-orange-100">Пока нет привычек</div>`;
-                    return;
-                }
+    async deleteEvent(memId, idx, e) {
+        if (e) e.stopPropagation();
+        if (!confirm(this.t('confirm-delete-event'))) return;
+        const mem = this.memories.find(m => m.id === memId);
+        if (mem) { mem.events.splice(idx, 1); await this.saveMemories(); }
+        this.toast(this.t('toast-event-deleted'));
+    },
 
-                container.innerHTML = filtered.map(h => {
-                    const done = h.completedDays.length;
-                    const progress = Math.min(Math.round(done / h.goal * 100), 100);
-                    const ended = !!h.endDate;
-                    const today = new Date().toISOString().split('T')[0];
-                    const todayDone = h.completedDays.includes(today);
+    endRelations(id, e) {
+        if (e) e.stopPropagation();
+        this.tempEndRelationsId = id;
+        const m = this.memories.find(m => m.id === id);
+        document.getElementById('endRelationsDate').value = m.endDate || this.today();
+        document.getElementById('endRelationsModal').classList.add('open');
+    },
 
-                    return `
-                    <div class="note-card bg-white/10 p-6 rounded-3xl border border-white/30 ${ended?'opacity-75':''}">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h3 class="text-2xl font-semibold">${h.name}</h3>
-                                <p class="text-sm text-orange-100">${h.description||''}</p>
-                            </div>
-                            <div class="flex flex-col items-end gap-2">
-                                ${ended ? `<span class="bg-emerald-400 text-xs px-4 py-1 rounded-3xl">завершена</span>` : ''}
-                                <div class="flex gap-4 text-2xl">
-                                    <span onclick="diary.editHabit(${h.id});event.stopImmediatePropagation()" class="cursor-pointer">✏️</span>
-                                    <span onclick="diary.deleteHabit(${h.id});event.stopImmediatePropagation()" class="cursor-pointer text-red-400">🗑️</span>
-                                </div>
-                            </div>
+    confirmEndRelations() {
+        const m = this.memories.find(m => m.id === this.tempEndRelationsId);
+        if (m) m.endDate = document.getElementById('endRelationsDate').value;
+        this.saveMemories();
+        this.closeModals();
+    },
+
+    // ── Render Memories ──────────────────────────────────
+    renderMemories() {
+        const container = document.getElementById('memoriesList');
+        const search    = (document.getElementById('memoriesSearch').value || '').toLowerCase();
+        const list      = this.memories.filter(m =>
+            m.title.toLowerCase().includes(search) ||
+            (m.notes || '').toLowerCase().includes(search) ||
+            (m.partnerName || '').toLowerCase().includes(search)
+        );
+
+        if (!list.length) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div><p>${this.t('memories-empty')}</p></div>`;
+            return;
+        }
+
+        container.innerHTML = list.map((m, i) => {
+            const delay  = Math.min(i * 0.04, 0.25);
+            const isOpen = this.openMemoryDetail === m.id;
+            const pinLabel = m.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
+
+            if (m.type === 'relations') {
+                return this._renderRelCard(m, isOpen, delay, pinLabel);
+            }
+
+            const typeLabel = this.t('type-' + m.type);
+            return `
+            <div class="record-card ${m.pinned ? 'pinned' : ''}"
+                 style="animation-delay:${delay}s"
+                 onclick="diary.toggleMemoryDetail(${m.id})">
+                ${m.pinned ? '<span class="pin-badge">📌</span>' : ''}
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <span class="chip">${typeLabel}</span>
+                    <span style="font-size:11px;color:var(--text-label)">${this.fmtDate(m.startDate)}</span>
+                </div>
+                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${m.title}</div>
+                ${m.notes ? `<div style="font-size:13px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'2'};-webkit-box-orient:vertical;overflow:hidden">${m.notes}</div>` : ''}
+                ${m.endDate ? `<div style="margin-top:6px;font-size:12px;color:var(--text-label)">
+                    ${this.t('rel-until')} ${this.fmtDate(m.endDate)}</div>` : ''}
+
+                ${isOpen ? `
+                <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
+                    <div class="flex gap-2 flex-wrap" style="padding:14px">
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">
+                            ${this.t('lbl-edit')}
+                        </button>
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.togglePin('memory',${m.id},event)">
+                            ${pinLabel}
+                        </button>
+                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
+                            onclick="diary.deleteMemory(${m.id},event)">
+                            ${this.t('lbl-delete')}
+                        </button>
+                    </div>
+                </div>` : ''}
+            </div>`;
+        }).join('');
+    },
+
+    _renderRelCard(m, isOpen, delay, pinLabel) {
+        const msPerDay = 86400000;
+        const endMs    = m.endDate ? new Date(m.endDate).getTime() : Date.now();
+        const days     = Math.max(1, Math.floor((endMs - new Date(m.startDate).getTime()) / msPerDay) + 1);
+        const isEnded  = !!m.endDate;
+        const events   = m.events || [];
+
+        const eventsHtml = events.length
+            ? events.map((ev, idx) => `
+                <div class="rel-event-item">
+                    <div class="rel-event-date">${this.fmtDate(ev.date)}</div>
+                    <div class="rel-event-desc">${ev.desc}</div>
+                    <div class="rel-event-actions">
+                        <button class="rel-event-btn" title="Edit"
+                            onclick="diary.showAddEvent(${m.id},${idx},event)">✏️</button>
+                        <button class="rel-event-btn" title="Delete"
+                            onclick="diary.deleteEvent(${m.id},${idx},event)">🗑️</button>
+                    </div>
+                </div>`).join('')
+            : `<div style="font-size:13px;color:var(--text-label);padding:6px 0">${this.t('lbl-no-events')}</div>`;
+
+        return `
+        <div class="rel-card ${m.pinned ? 'pinned' : ''}"
+             style="animation-delay:${delay}s"
+             onclick="diary.toggleMemoryDetail(${m.id})">
+            ${m.pinned ? '<span class="pin-badge" style="position:absolute;top:12px;right:12px;z-index:2">📌</span>' : ''}
+
+            <!-- Header gradient section -->
+            <div class="rel-card-header">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.75;margin-bottom:4px">
+                            ❤️ ${this.t('type-relations')}
                         </div>
-                        
-                        <div class="flex justify-between mt-8 text-center">
-                            <div><div class="text-4xl font-bold text-emerald-400">${done}</div><div class="text-xs">сделано</div></div>
-                            <div><div class="text-4xl font-bold">${h.goal}</div><div class="text-xs">цель</div></div>
-                            <div><div class="text-4xl font-bold text-amber-400">${progress}%</div><div class="text-xs">прогресс</div></div>
-                        </div>
-                        
-                        <div class="h-3 bg-white/20 rounded-3xl mt-4 mb-6 overflow-hidden">
-                            <div class="h-3 bg-gradient-to-r from-emerald-400 to-blue-400 transition-all" style="width:${progress}%"></div>
-                        </div>
-                        
-                        <div class="flex gap-3">
-                            <button onclick="diary.showCalendar(${h.id});event.stopImmediatePropagation()" class="flex-1 py-4 bg-white/20 hover:bg-white/30 rounded-3xl text-sm">📅 Календарь</button>
-                            <button onclick="diary.toggleDay(${h.id},'${today}');event.stopImmediatePropagation()" class="flex-1 py-4 ${todayDone?'bg-emerald-500':'bg-white/20 hover:bg-white/30'} rounded-3xl text-sm">
-                                ${todayDone ? '✅ Сегодня сделано' : 'Отметить сегодня'}
-                            </button>
-                        </div>
-                    </div>`;
-                }).join('');
-            },
-
-            resetHabitForm() {
-                document.getElementById('habitForm').reset();
-                document.getElementById('habitId').value = '';
-                document.getElementById('habitStartDate').value = new Date().toISOString().split('T')[0];
-                document.getElementById('new-habit-title').textContent = 'Новая привычка';
-            },
-
-            // ==================== АРХИВ ====================
-            async saveMemory(e) {
-                e.preventDefault();
-                const id = document.getElementById('memoryId').value ? +document.getElementById('memoryId').value : Date.now();
-                const title = document.getElementById('memoryTitle').value.trim();
-                const type = document.getElementById('memoryType').value;
-                const start = document.getElementById('memoryStartDate').value;
-                const end = document.getElementById('memoryEndDate').value || null;
-                const notes = document.getElementById('memoryNotes').value.trim();
-
-                let partner = '';
-                if (type === 'relations') partner = document.getElementById('partnerName').value.trim();
-
-                const memory = {
-                    id, title, type, startDate: start, endDate: end, notes,
-                    partnerName: partner,
-                    events: id ? (this.memories.find(m=>m.id===id)||{events:[]}).events : [],
-                    date: new Date().toLocaleString()
-                };
-
-                if (document.getElementById('memoryId').value) {
-                    const idx = this.memories.findIndex(m => m.id === id);
-                    this.memories[idx] = memory;
-                } else this.memories.unshift(memory);
-
-                await this.saveMemories();
-                this.resetMemoryForm();
-                this.toast('Воспоминание сохранено');
-            },
-
-            editMemory(id) {
-                const m = this.memories.find(m => m.id === id);
-                document.getElementById('memoryId').value = m.id;
-                document.getElementById('memoryTitle').value = m.title;
-                document.getElementById('memoryType').value = m.type;
-                document.getElementById('memoryStartDate').value = m.startDate;
-                document.getElementById('memoryEndDate').value = m.endDate || '';
-                document.getElementById('memoryNotes').value = m.notes || '';
-                const isRel = m.type === 'relations';
-                document.getElementById('relationsFields').classList.toggle('hidden', !isRel);
-                document.getElementById('endDateField').classList.toggle('hidden', isRel);
-                if (isRel) document.getElementById('partnerName').value = m.partnerName || '';
-            },
-
-            async deleteMemory(id) {
-                if (!confirm('Удалить воспоминание?')) return;
-                this.memories = this.memories.filter(m => m.id !== id);
-                await this.saveMemories();
-            },
-
-            showAddEvent(id) {
-                document.getElementById('eventMemoryId').value = id;
-                document.getElementById('eventModal').style.display = 'block';
-            },
-
-            async saveEvent(e) {
-                e.preventDefault();
-                const id = +document.getElementById('eventMemoryId').value;
-                const date = document.getElementById('eventDate').value;
-                const desc = document.getElementById('eventDesc').value.trim();
-                const mem = this.memories.find(m => m.id === id);
-                if (mem) mem.events.push({date, desc});
-                await this.saveMemories();
-                this.closeModals();
-            },
-
-            endRelations(id) {
-                this.tempEndRelationsId = id;
-                const m = this.memories.find(m => m.id === id);
-                document.getElementById('endRelationsDate').value = m.endDate || new Date().toISOString().split('T')[0];
-                document.getElementById('endRelationsModal').style.display = 'block';
-            },
-
-            confirmEndRelations() {
-                const m = this.memories.find(m => m.id === this.tempEndRelationsId);
-                if (m) m.endDate = document.getElementById('endRelationsDate').value;
-                this.saveMemories();
-                this.closeModals();
-            },
-
-            renderMemories() {
-                const container = document.getElementById('memoriesList');
-                const search = (document.getElementById('memoriesSearch').value || '').toLowerCase();
-                const filtered = this.memories.filter(m => 
-                    m.title.toLowerCase().includes(search) || (m.notes||'').toLowerCase().includes(search)
-                );
-
-                if (!filtered.length) {
-                    container.innerHTML = `<div class="text-center py-12 text-orange-100">Архив пока пуст</div>`;
-                    return;
-                }
-
-                const labels = this.lang==='ru' ? {
-                    book:'📚 Книга', movie:'🎬 Фильм', series:'📺 Сериал', game:'🎮 Игра', relations:'❤️ Отношения', other:'📦 Другое'
-                } : {
-                    book:'📚 Book', movie:'🎬 Movie', series:'📺 Series', game:'🎮 Game', relations:'❤️ Relations', other:'📦 Other'
-                };
-
-                container.innerHTML = filtered.map(m => {
-                    let extra = '';
-                    if (m.type === 'relations') {
-                        const days = Math.floor((new Date(m.endDate || Date.now()) - new Date(m.startDate)) / 86400000) + 1;
-                        extra = `<div class="mt-6 p-5 bg-gradient-to-br from-pink-400 to-rose-500 text-white rounded-3xl text-sm">
-                            ❤️ ${m.partnerName} — ${days} дней вместе
-                            ${m.endDate ? `<div class="text-xs mt-2">расстались ${new Date(m.endDate).toLocaleDateString()}</div>` : ''}
-                            <button onclick="diary.showAddEvent(${m.id});event.stopImmediatePropagation()" class="mt-4 w-full py-3 bg-white/30 rounded-3xl">+ добавить событие</button>
-                        </div>`;
+                        <div style="font-size:20px;font-weight:900;font-family:'Syne',sans-serif">${m.title}</div>
+                        ${m.partnerName ? `<div style="font-size:14px;opacity:.85;margin-top:2px">👤 ${m.partnerName}</div>` : ''}
+                    </div>
+                    <div style="text-align:right;flex-shrink:0">
+                        <div style="font-size:28px;font-weight:900;line-height:1">${days}</div>
+                        <div style="font-size:11px;opacity:.75">${this.t('rel-days-together')}</div>
+                    </div>
+                </div>
+                <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+                    <span style="background:rgba(255,255,255,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">
+                        ${this.t('rel-since')} ${this.fmtDate(m.startDate)}
+                    </span>
+                    ${isEnded
+                        ? `<span style="background:rgba(0,0,0,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">
+                            💔 ${this.fmtDate(m.endDate)}</span>`
+                        : `<span style="background:rgba(255,255,255,0.15);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">
+                            ✨ ${this.t('rel-still-together')}</span>`
                     }
-                    return `
-                    <div class="note-card bg-white/10 p-6 rounded-3xl border border-white/30">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h3 class="font-semibold text-xl">${m.title}</h3>
-                                <div class="text-sm text-orange-100">${labels[m.type]}</div>
-                            </div>
-                            <div class="flex gap-4 text-2xl">
-                                <span onclick="diary.editMemory(${m.id});event.stopImmediatePropagation()" class="cursor-pointer">✏️</span>
-                                <span onclick="diary.deleteMemory(${m.id});event.stopImmediatePropagation()" class="cursor-pointer text-red-400">🗑️</span>
-                            </div>
-                        </div>
-                        ${m.notes ? `<div class="mt-4 p-4 bg-white/10 rounded-3xl text-sm">${m.notes}</div>` : ''}
-                        ${extra}
-                    </div>`;
-                }).join('');
-            },
+                </div>
+            </div>
 
-            resetMemoryForm() {
-                document.getElementById('memoryForm').reset();
-                document.getElementById('memoryId').value = '';
-                document.getElementById('relationsFields').classList.add('hidden');
-                document.getElementById('endDateField').classList.remove('hidden');
-            },
+            <!-- Body -->
+            <div class="rel-card-body" onclick="event.stopPropagation()">
+                ${m.notes ? `<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;font-style:italic">"${m.notes}"</div>` : ''}
 
-            // ==================== ОБЩЕЕ ====================
-            switchTab(tab) {
-                document.querySelectorAll('#notesSection, #habitsSection, #memorySection').forEach(el => el.classList.add('hidden'));
-                document.getElementById(tab + 'Section').classList.remove('hidden');
-                
-                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-                document.getElementById(tab + 'Tab').classList.add('active');
-            },
+                <!-- Events section always visible on open -->
+                <div style="margin-bottom:10px">
+                    <div style="font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px">
+                        ${this.t('lbl-events')}
+                    </div>
+                    ${eventsHtml}
+                </div>
 
-            updateFooter() {
-                document.getElementById('notesCount').textContent = this.notes.length;
-                document.getElementById('habitsCount').textContent = this.habits.length;
-                document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !h.endDate).length;
-                document.getElementById('memoriesCount').textContent = this.memories.length;
-            },
+                <!-- Action buttons -->
+                <div class="flex gap-2 flex-wrap" style="margin-top:10px">
+                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                        onclick="diary.showAddEvent(${m.id},undefined,event)">
+                        ${this.t('lbl-add-event')}
+                    </button>
+                    ${!isEnded ? `
+                    <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
+                        onclick="diary.endRelations(${m.id},event)">
+                        ${this.t('lbl-broke-up')}
+                    </button>` : ''}
+                </div>
 
-            renderAll() {
-                this.renderNotes();
-                this.renderHabits();
-                this.renderMemories();
-                this.updateFooter();
-            },
+                ${isOpen ? `
+                <div class="divider"></div>
+                <div class="flex gap-2 flex-wrap">
+                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                        onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">
+                        ${this.t('lbl-edit')}
+                    </button>
+                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
+                        onclick="diary.togglePin('memory',${m.id},event)">
+                        ${pinLabel}
+                    </button>
+                    <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
+                        onclick="diary.deleteMemory(${m.id},event)">
+                        ${this.t('lbl-delete')}
+                    </button>
+                </div>` : ''}
+            </div>
+        </div>`;
+    },
 
-            toast(text, type = 'success') {
-                const t = document.createElement('div');
-                t.style.cssText = `position:fixed;top:24px;right:24px;z-index:99999;padding:18px 24px;border-radius:20px;color:white;font-weight:600;${type==='error'?'background:#ef4444':'background:#10b981'}`;
-                t.textContent = text;
-                document.body.appendChild(t);
-                setTimeout(() => t.remove(), 2600);
-            },
+    _resetMemoryForm() {
+        document.getElementById('memoryForm').reset();
+        document.getElementById('memoryId').value = '';
+        document.getElementById('relationsFields').classList.add('hidden');
+        document.getElementById('endDateField').classList.remove('hidden');
+        document.getElementById('memoryStartDate').value = this.today();
+        document.getElementById('memoryFormTitle').textContent = this.t('memoryFormTitle-new');
+    },
 
-            closeModals() {
-                document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-            },
+    // ══════════════════════════════════════════════════════
+    //  STREAK / FIRE
+    // ══════════════════════════════════════════════════════
+    updateStreak() {
+        const todayStr = this.today();
+        if (this.lastActiveDate === todayStr) return;
 
-            applyLanguage() {
-                const t = this.lang === 'ru' ? {
-                    'app-desc':'Защищённый ежедневник',
-                    'notes-tab':'Записи',
-                    'habits-tab':'Привычки',
-                    'memory-tab':'Архив',
-                    'new-note-title':'Новая запись',
-                    'my-notes-title':'Мои записи',
-                    'new-habit-title':'Новая привычка',
-                    'my-habits-title':'Мои привычки',
-                    'new-memory-title':'Новое воспоминание',
-                    'my-memories-title':'Архив воспоминаний',
-                    'lang-text':'English',
-                    'theme-text':'Тёмная',
-                    'cloud-label':'Облачно'
-                } : {
-                    'app-desc':'Secure Daily Journal',
-                    'notes-tab':'Notes',
-                    'habits-tab':'Habits',
-                    'memory-tab':'Archive',
-                    'new-note-title':'New Note',
-                    'my-notes-title':'My notes',
-                    'new-habit-title':'New habit',
-                    'my-habits-title':'My habits',
-                    'new-memory-title':'New memory',
-                    'my-memories-title':'Memory archive',
-                    'lang-text':'Русский',
-                    'theme-text':'Light',
-                    'cloud-label':'Cloud'
-                };
+        const yest = new Date();
+        yest.setDate(yest.getDate() - 1);
+        const yestStr = yest.toISOString().split('T')[0];
 
-                Object.keys(t).forEach(k => {
-                    const el = document.getElementById(k);
-                    if (el) el.textContent = t[k];
-                });
+        const old = this.fireStreak;
+        this.fireStreak     = (this.lastActiveDate === yestStr) ? this.fireStreak + 1 : 1;
+        this.lastActiveDate = todayStr;
+        this._saveStreak();
 
-                document.getElementById('noteCategory').innerHTML = this.lang==='ru' 
-                    ? `<option value="personal">Личное</option><option value="work">Работа</option><option value="ideas">Идеи</option><option value="tasks">Задачи</option>`
-                    : `<option value="personal">Personal</option><option value="work">Work</option><option value="ideas">Ideas</option><option value="tasks">Tasks</option>`;
+        if (this.fireStreak > old) {
+            const hdr   = document.getElementById('fireStreakHeader');
+            const emoji = document.getElementById('fireEmoji');
+            hdr.classList.remove('fire-anim'); emoji.classList.remove('fire-anim');
+            void hdr.offsetWidth;
+            hdr.classList.add('fire-anim'); emoji.classList.add('fire-anim');
+            setTimeout(() => { hdr.classList.remove('fire-anim'); emoji.classList.remove('fire-anim'); }, 700);
+        }
+        this.updateFooter();
+    },
 
-                document.getElementById('filterCategory').innerHTML = this.lang==='ru' 
-                    ? `<option value="all">Все категории</option><option value="personal">Личное</option><option value="work">Работа</option><option value="ideas">Идеи</option><option value="tasks">Задачи</option>`
-                    : `<option value="all">All categories</option><option value="personal">Personal</option><option value="work">Work</option><option value="ideas">Ideas</option><option value="tasks">Tasks</option>`;
+    async _saveStreak() {
+        await StorageManager.setItem('fireStreak',     this.fireStreak.toString());
+        await StorageManager.setItem('lastActiveDate', this.lastActiveDate);
+    },
 
-                document.getElementById('memoryType').innerHTML = this.lang==='ru' 
-                    ? `<option value="book">📚 Книга</option><option value="movie">🎬 Фильм</option><option value="series">📺 Сериал</option><option value="game">🎮 Игра</option><option value="relations">❤️ Отношения</option><option value="other">📦 Другое</option>`
-                    : `<option value="book">📚 Book</option><option value="movie">🎬 Movie</option><option value="series">📺 Series</option><option value="game">🎮 Game</option><option value="relations">❤️ Relations</option><option value="other">📦 Other</option>`;
-            },
-
-            toggleLang() {
-                this.lang = this.lang === 'ru' ? 'en' : 'ru';
-                StorageManager.setItem('lang', this.lang);
-                this.applyLanguage();
-                this.renderAll();
-            },
-
-            toggleTheme() {
-                this.theme = this.theme === 'light' ? 'dark' : 'light';
-                document.body.classList.toggle('dark', this.theme === 'dark');
-                StorageManager.setItem('theme', this.theme);
-                document.getElementById('theme-text').textContent = this.theme === 'light' ? 'Тёмная' : 'Светлая';
-            },
-
-            init() {
+// ══════════════════════════════════════════════════════
+    //  INIT
+    // ══════════════════════════════════════════════════════
+    init() {
+        // Telegram WebApp bootstrap (safe fallback for browser testing)
+        try {
+            if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.ready();
                 Telegram.WebApp.expand();
-
-                // Инициализируем менеджер хранилища (исправление ошибки!)
-                StorageManager.init();
-
-                // Показываем пользователю, если CloudStorage не работает
-                if (!StorageManager.supportsCloud) {
-                    this.toast('CloudStorage не поддерживается в этой версии Telegram.\nДанные сохраняются только на этом устройстве (localStorage).', 'info');
-                    document.getElementById('cloud-label').textContent = 'Локально';
-                }
-
-                this.load();
-                this.applyLanguage();
-                document.body.classList.toggle('dark', this.theme === 'dark');
-                document.getElementById('theme-text').textContent = this.theme === 'light' ? 'Тёмная' : 'Светлая';
-
-                // Формы
-                document.getElementById('noteForm').addEventListener('submit', e => this.saveNote(e));
-                document.getElementById('habitForm').addEventListener('submit', e => this.saveHabit(e));
-                document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
-                document.getElementById('eventForm').addEventListener('submit', e => this.saveEvent(e));
-
-                // Табы
-                document.getElementById('notesTab').addEventListener('click', () => this.switchTab('notes'));
-                document.getElementById('habitsTab').addEventListener('click', () => this.switchTab('habits'));
-                document.getElementById('memoryTab').addEventListener('click', () => this.switchTab('memory'));
-
-                // Поиск
-                document.getElementById('notesSearch').addEventListener('input', () => this.renderNotes());
-                document.getElementById('filterCategory').addEventListener('change', () => this.renderNotes());
-                document.getElementById('habitsSearch').addEventListener('input', () => this.renderHabits());
-                document.getElementById('memoriesSearch').addEventListener('input', () => this.renderMemories());
-
-                // Очистка
-                document.getElementById('clearAll').addEventListener('click', async () => {
-                    if (confirm('Удалить ВСЕ записи?')) {
-                        this.notes = [];
-                        await this.saveNotes();
-                        this.toast('Все записи удалены');
-                    }
-                });
-
-                // Настройки
-                document.getElementById('langSwitch').addEventListener('click', () => this.toggleLang());
-                document.getElementById('themeSwitch').addEventListener('click', () => this.toggleTheme());
-
-                // Переключение полей для отношений
-                document.getElementById('memoryType').addEventListener('change', function() {
-                    const isRel = this.value === 'relations';
-                    document.getElementById('relationsFields').classList.toggle('hidden', !isRel);
-                    document.getElementById('endDateField').classList.toggle('hidden', isRel);
-                });
-
-                const today = new Date().toISOString().split('T')[0];
-                document.getElementById('habitStartDate').value = today;
-                document.getElementById('memoryStartDate').value = today;
-
-                console.log('%c✅ DailyBookimix — ошибка CloudStorage исправлена!', 'color:#ff8c42;font-weight:700');
             }
-        };
+        } catch(e) {}
 
-        // Запуск
-        diary.init();
-    </script>
+        StorageManager.init();
+        this.load();
+
+        // ── Forms ──────────────────────────────────────────
+        document.getElementById('noteForm').addEventListener('submit',   e => this.saveNote(e));
+        document.getElementById('habitForm').addEventListener('submit',  e => this.saveHabit(e));
+        document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
+        document.getElementById('eventForm').addEventListener('submit',  e => this.saveEvent(e));
+
+        // ── Clear all notes ────────────────────────────────
+        document.getElementById('clearAll').addEventListener('click', async () => {
+            if (!confirm(this.t('confirm-clear-all'))) return;
+            this.notes = [];
+            await this.saveNotes();
+            this.toast(this.t('toast-all-deleted'));
+        });
+
+        // ── Close modals on overlay click ──────────────────
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', e => {
+                if (e.target === overlay) this.closeModals();
+            });
+        });
+
+        // ── Bottom sheet: close on drag down ──────────────
+        const sheet = document.getElementById('bottomSheet');
+        let sheetStartY = 0;
+        sheet.addEventListener('touchstart', e => {
+            sheetStartY = e.touches[0].clientY;
+        }, { passive: true });
+        sheet.addEventListener('touchend', e => {
+            const delta = e.changedTouches[0].clientY - sheetStartY;
+            if (delta > 60) this.closeSheet();
+        }, { passive: true });
+
+        // ── Keyboard: Escape closes modals and sheet ───────
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                this.closeModals();
+                this.closeSheet();
+            }
+        });
+
+        // ── Set today's date defaults ──────────────────────
+        const todayStr = this.today();
+        document.getElementById('habitStartDate').value  = todayStr;
+        document.getElementById('memoryStartDate').value = todayStr;
+        document.getElementById('eventDate').value       = todayStr;
+
+        console.log('%c✅ DailyBookimix v4 — loaded!', 'color:#ff8c42;font-weight:900;font-size:16px');
+    }
+};
+
+diary.init();
+</script>
 </body>
 </html>
