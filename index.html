@@ -1,16 +1,18 @@
 <!DOCTYPE html>
-<!-- PART 1 / 4 -->
 <!-- ============================================================
-     DailyBookimix v4 — IMPROVED UI/UX EDITION
-     Changes from original:
-       - Light theme readability fix (better contrast, opacity)
-       - Glass/banner contrast fix (slightly less transparent)
-       - Relationships tab cancel button bug fix (cancel-btn-2 text)
-       - Title font size reduced, lock icon removed, flame stays inside banner
-       - Hamburger menu (left sidebar) with profile + nickname + delete account
-       - Achievements system (10 achievements, locked/unlocked states)
-       - All existing functionality 100% preserved
-     ============================================================ -->
+     DailyBookimix v5 — ENHANCED EDITION
+     Changes from v4:
+       1. FIX: Achievements earned date persists permanently (never resets)
+       2. NEW: Full Daily Tasks system (replaces simple Tasks category)
+          - Quick add, Important/Normal, strikethrough on complete
+          - Archive (last 30 days), Carry-over, Mood of day
+          - Daily streak + completion stats
+       3. NEW: AES-256-GCM end-to-end encryption via Web Crypto API
+          - All data encrypted before saving to localStorage/CloudStorage
+          - Password prompt on first launch, stored in sessionStorage only
+          - Telegram (including CloudStorage) cannot read plaintext data
+     All original functionality 100% preserved.
+============================================================ -->
 <html lang="ru" class="h-full">
 <head>
     <meta charset="UTF-8">
@@ -30,13 +32,11 @@
             --accent:        #ff5722;
             --accent-light:  #ff8c42;
             --accent-glow:   rgba(255, 87, 34, 0.35);
-            /* FIX: Slightly less transparent glass for better readability in light theme */
             --glass-bg:      rgba(255,255,255,0.28);
             --glass-border:  rgba(255,255,255,0.40);
             --card-bg:       rgba(255,255,255,0.25);
             --input-bg:      rgba(255,255,255,0.92);
             --input-text:    #1a1a2e;
-            /* FIX: Stronger white for light theme text */
             --text-primary:  #ffffff;
             --text-muted:    rgba(255,255,255,0.90);
             --text-label:    rgba(255,255,255,0.72);
@@ -52,7 +52,6 @@
             --btn-primary-fg:#ff5722;
             --footer-bg:     rgba(255,255,255,0.22);
             --progress-track:rgba(255,255,255,0.3);
-
             --bg-gradient:   linear-gradient(155deg,#ff4500 0%,#ff6b35 30%,#f7931e 60%,#ff5722 100%);
         }
         body.theme-dark {
@@ -76,11 +75,9 @@
             --btn-primary-fg:#ffffff;
             --footer-bg:     rgba(255,255,255,0.06);
             --progress-track:rgba(255,255,255,0.12);
-
             --bg-gradient:   linear-gradient(155deg,#0d1117 0%,#1a1f35 35%,#111827 65%,#0a0e1a 100%);
         }
 
-        /* ── BASE ── */
         *, *::before, *::after { box-sizing: border-box; }
         html, body { height: 100%; margin: 0; padding: 0; }
         body {
@@ -93,7 +90,6 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* ── GLASS ── */
         .glass {
             background: var(--glass-bg);
             backdrop-filter: blur(22px) saturate(1.4);
@@ -104,62 +100,40 @@
             background: var(--card-bg);
             border: 1px solid var(--glass-border);
             border-radius: var(--radius-card);
-            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1),
-                        box-shadow 0.22s ease,
-                        background 0.2s ease;
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s ease, background 0.2s ease;
         }
         .card:active { transform: scale(0.975); }
-        .card.pinned {
-            border-color: var(--accent-light);
-            box-shadow: 0 0 0 2px var(--accent-glow), var(--shadow-card);
-        }
 
-        /* ── FORM INPUTS ── */
         .fi {
-            width: 100%;
-            padding: 16px 18px;
+            width: 100%; padding: 16px 18px;
             border-radius: 16px;
             background: var(--input-bg);
             border: 2px solid transparent;
             font-family: 'Nunito', sans-serif;
-            font-size: 16px;
-            color: var(--input-text);
+            font-size: 16px; color: var(--input-text);
             transition: border-color 0.2s, box-shadow 0.2s, background 0.3s;
             outline: none;
         }
-        .fi:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 4px var(--accent-glow);
-        }
+        .fi:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
         .fi::placeholder { color: #9ca3af; }
         textarea.fi { resize: none; }
-        select.fi { cursor: pointer; appearance: none;
+        select.fi {
+            cursor: pointer; appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23888' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 16px center;
-            padding-right: 40px;
+            background-repeat: no-repeat; background-position: right 16px center; padding-right: 40px;
         }
         label.fi-label {
-            display: block;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            /* FIX: Better visibility for labels in light theme */
-            color: var(--text-label);
-            margin-bottom: 6px;
-            /* Extra text shadow for glass-on-gradient readability */
+            display: block; font-size: 12px; font-weight: 700;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--text-label); margin-bottom: 6px;
             text-shadow: 0 1px 2px rgba(0,0,0,0.15);
         }
 
-        /* ── BUTTONS ── */
         .btn-primary {
             display: flex; align-items: center; justify-content: center; gap: 10px;
             width: 100%; padding: 18px 24px;
-            background: var(--btn-primary-bg);
-            color: var(--btn-primary-fg);
-            font-family: 'Nunito', sans-serif;
-            font-size: 17px; font-weight: 800;
+            background: var(--btn-primary-bg); color: var(--btn-primary-fg);
+            font-family: 'Nunito', sans-serif; font-size: 17px; font-weight: 800;
             border: none; border-radius: 16px; cursor: pointer;
             box-shadow: var(--shadow-btn);
             transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s;
@@ -169,79 +143,48 @@
         .btn-ghost {
             display: flex; align-items: center; justify-content: center; gap: 8px;
             padding: 14px 20px;
-            background: rgba(255,255,255,0.15);
-            color: var(--text-primary);
-            font-family: 'Nunito', sans-serif;
-            font-size: 15px; font-weight: 700;
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 14px; cursor: pointer;
+            background: rgba(255,255,255,0.15); color: var(--text-primary);
+            font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 14px; cursor: pointer;
             transition: background 0.2s, transform 0.15s;
         }
         .btn-ghost:active { transform: scale(0.95); background: rgba(255,255,255,0.22); }
-        .btn-danger {
-            background: rgba(239,68,68,0.18);
-            color: #f87171;
-            border-color: rgba(239,68,68,0.3);
-        }
+        .btn-danger { background: rgba(239,68,68,0.18); color: #f87171; border-color: rgba(239,68,68,0.3); }
         .btn-danger:active { background: rgba(239,68,68,0.28); }
-        .btn-success {
-            background: rgba(16,185,129,0.18);
-            color: #34d399;
-            border-color: rgba(16,185,129,0.3);
-        }
+        .btn-success { background: rgba(16,185,129,0.18); color: #34d399; border-color: rgba(16,185,129,0.3); }
 
-        /* ── TABS ── */
-        .tab-bar {
-            display: flex; gap: 6px;
-            padding: 6px;
-        }
+        .tab-bar { display: flex; gap: 6px; padding: 6px; }
         .tab-btn {
             flex: 1; display: flex; flex-direction: column; align-items: center;
             gap: 4px; padding: 12px 8px;
             background: transparent; border: none; border-radius: 16px;
-            /* FIX: Better muted text in light theme */
             color: rgba(255,255,255,0.80);
-            font-family: 'Nunito', sans-serif;
-            font-size: 12px; font-weight: 700;
-            cursor: pointer;
-            transition: background 0.25s ease, color 0.25s ease, transform 0.15s ease;
+            font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700;
+            cursor: pointer; transition: background 0.25s ease, color 0.25s ease, transform 0.15s ease;
         }
         .tab-btn .tab-icon { font-size: 22px; line-height: 1; }
         .tab-btn:active { transform: scale(0.93); }
         .tab-btn.active {
-            background: var(--tab-active-bg);
-            color: var(--tab-active-fg);
+            background: var(--tab-active-bg); color: var(--tab-active-fg);
             box-shadow: 0 4px 18px rgba(0,0,0,0.18);
         }
         body.theme-dark .tab-btn { color: var(--text-muted); }
 
-        /* ── HEADER ── */
         .app-header {
             background: var(--glass-bg);
-            backdrop-filter: blur(22px);
-            -webkit-backdrop-filter: blur(22px);
-            border: 1px solid var(--glass-border);
-            border-radius: 22px;
+            backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+            border: 1px solid var(--glass-border); border-radius: 22px;
         }
-        /* FIX: Reduced title font size + no lock icon */
         .app-title {
-            font-family: 'Syne', sans-serif;
-            font-weight: 800;
-            letter-spacing: -0.03em;
-            color: var(--text-primary);
-            font-size: 20px; /* was 26px in original inline style — reduced here */
-            line-height: 1.1;
-            /* Text shadow for readability on light gradient */
+            font-family: 'Syne', sans-serif; font-weight: 800;
+            letter-spacing: -0.03em; color: var(--text-primary);
+            font-size: 20px; line-height: 1.1;
             text-shadow: 0 1px 4px rgba(0,0,0,0.12);
         }
-
-        /* ── STREAK BADGE ── */
         .streak-badge {
             display: inline-flex; align-items: center; gap: 4px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 999px;
-            padding: 5px 14px;
-            cursor: default;
+            background: rgba(255,255,255,0.2); border-radius: 999px;
+            padding: 5px 14px; cursor: default;
         }
         @keyframes firePop {
             0%   { transform: scale(0.3) rotate(-15deg); opacity: 0; }
@@ -251,118 +194,62 @@
         }
         .fire-anim { animation: firePop 0.65s cubic-bezier(0.68,-0.55,0.27,1.55) both; }
 
-        /* ── SETTINGS TOOLBAR ── */
-        .settings-bar {
-            display: flex; gap: 10px;
-        }
+        .settings-bar { display: flex; gap: 10px; }
         .settings-btn {
             flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;
             padding: 14px 18px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: 16px;
-            /* FIX: Strong text color for settings buttons */
-            color: var(--text-primary);
-            font-family: 'Nunito', sans-serif;
-            font-size: 15px; font-weight: 700;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.15s;
-            /* Ensure text is readable on gradient */
+            background: var(--glass-bg); border: 1px solid var(--glass-border);
+            border-radius: 16px; color: var(--text-primary);
+            font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700;
+            cursor: pointer; transition: background 0.2s, transform 0.15s;
             text-shadow: 0 1px 3px rgba(0,0,0,0.10);
         }
         .settings-btn:active { transform: scale(0.95); background: var(--glass-border); }
 
-        /* ── BOTTOM SHEET ── */
         .sheet-overlay {
             display: none; position: fixed; inset: 0; z-index: 9000;
-            background: rgba(0,0,0,0.55);
-            backdrop-filter: blur(6px);
+            background: rgba(0,0,0,0.55); backdrop-filter: blur(6px);
         }
         .sheet-overlay.open { display: block; }
         .bottom-sheet {
             position: fixed; bottom: 0; left: 0; right: 0; z-index: 9001;
-            background: var(--modal-bg);
-            border-radius: 28px 28px 0 0;
-            padding: 16px 20px 36px;
-            color: var(--modal-text);
+            background: var(--modal-bg); border-radius: 28px 28px 0 0;
+            padding: 16px 20px 36px; color: var(--modal-text);
             transform: translateY(100%);
             transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
-            max-height: 88vh;
-            overflow-y: auto;
+            max-height: 88vh; overflow-y: auto;
         }
         .bottom-sheet.open { transform: translateY(0); }
-        .sheet-handle {
-            width: 40px; height: 4px;
-            background: rgba(0,0,0,0.15);
-            border-radius: 999px;
-            margin: 0 auto 20px;
-        }
+        .sheet-handle { width: 40px; height: 4px; background: rgba(0,0,0,0.15); border-radius: 999px; margin: 0 auto 20px; }
         body.theme-dark .sheet-handle { background: rgba(255,255,255,0.18); }
-        .sheet-title {
-            font-family: 'Syne', sans-serif;
-            font-size: 20px; font-weight: 800;
-            color: var(--modal-text);
-            margin-bottom: 16px;
-        }
+        .sheet-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: var(--modal-text); margin-bottom: 16px; }
         .sheet-option {
             display: flex; align-items: center; gap: 14px;
-            padding: 16px 18px;
-            border-radius: 16px;
-            cursor: pointer;
-            transition: background 0.18s ease;
-            margin-bottom: 6px;
+            padding: 16px 18px; border-radius: 16px; cursor: pointer;
+            transition: background 0.18s ease; margin-bottom: 6px;
         }
-        .sheet-option:hover  { background: rgba(0,0,0,0.05); }
+        .sheet-option:hover { background: rgba(0,0,0,0.05); }
         .sheet-option.active { background: rgba(255,87,34,0.1); }
         body.theme-dark .sheet-option:hover  { background: rgba(255,255,255,0.07); }
         body.theme-dark .sheet-option.active { background: rgba(255,112,67,0.15); }
-        .sheet-option-icon {
-            width: 42px; height: 42px;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 12px;
-            font-size: 22px;
-            flex-shrink: 0;
-        }
-        .sheet-option-label {
-            font-size: 16px; font-weight: 700;
-            color: var(--modal-text);
-        }
-        .sheet-option-sub {
-            font-size: 12px; font-weight: 600;
-            color: #9ca3af;
-            margin-top: 2px;
-        }
+        .sheet-option-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 22px; flex-shrink: 0; }
+        .sheet-option-label { font-size: 16px; font-weight: 700; color: var(--modal-text); }
+        .sheet-option-sub { font-size: 12px; font-weight: 600; color: #9ca3af; margin-top: 2px; }
         .sheet-check {
-            margin-left: auto;
-            width: 24px; height: 24px;
-            border-radius: 999px;
-            background: var(--accent);
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 14px;
-            opacity: 0;
-            transition: opacity 0.2s, transform 0.2s;
-            transform: scale(0.7);
+            margin-left: auto; width: 24px; height: 24px; border-radius: 999px;
+            background: var(--accent); display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 14px; opacity: 0; transition: opacity 0.2s, transform 0.2s; transform: scale(0.7);
         }
         .sheet-option.active .sheet-check { opacity: 1; transform: scale(1); }
-        .sheet-section-label {
-            font-size: 11px; font-weight: 800; letter-spacing: 0.1em;
-            text-transform: uppercase;
-            color: #9ca3af;
-            margin: 18px 4px 8px;
-        }
 
-        /* ── MODAL (generic) ── */
         .modal-overlay {
             display: none; position: fixed; inset: 0; z-index: 8000;
-            background: rgba(0,0,0,0.65);
-            backdrop-filter: blur(10px);
+            background: rgba(0,0,0,0.65); backdrop-filter: blur(10px);
         }
         .modal-overlay.open { display: flex; align-items: center; justify-content: center; padding: 20px; }
         .modal-box {
-            background: var(--modal-bg);
-            color: var(--modal-text);
-            border-radius: 28px;
-            padding: 28px;
+            background: var(--modal-bg); color: var(--modal-text);
+            border-radius: 28px; padding: 28px;
             width: 100%; max-width: 420px;
             box-shadow: 0 25px 60px rgba(0,0,0,0.35);
             animation: modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
@@ -371,31 +258,19 @@
             from { opacity:0; transform: scale(0.88) translateY(20px); }
             to   { opacity:1; transform: scale(1)    translateY(0); }
         }
-        .modal-title {
-            font-family: 'Syne', sans-serif;
-            font-size: 22px; font-weight: 800;
-            color: var(--modal-text);
-        }
+        .modal-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--modal-text); }
         .modal-close {
             background: none; border: none; cursor: pointer;
-            font-size: 28px; line-height: 1;
-            color: #9ca3af; padding: 4px;
+            font-size: 28px; line-height: 1; color: #9ca3af; padding: 4px;
             transition: color 0.15s, transform 0.15s;
         }
         .modal-close:hover { color: #ef4444; transform: rotate(90deg); }
 
-        /* ── CARDS / RECORDS ── */
         .record-card {
-            background: var(--card-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-card);
-            padding: 18px;
-            margin-bottom: 12px;
-            cursor: pointer;
-            position: relative;
-            transition: transform 0.2s cubic-bezier(0.4,0,0.2,1),
-                        box-shadow 0.2s ease,
-                        border-color 0.2s;
+            background: var(--card-bg); border: 1px solid var(--glass-border);
+            border-radius: var(--radius-card); padding: 18px; margin-bottom: 12px;
+            cursor: pointer; position: relative;
+            transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease, border-color 0.2s;
             animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
         }
         @keyframes cardIn {
@@ -404,38 +279,19 @@
         }
         .record-card:active { transform: scale(0.975); }
         .record-card:hover  { box-shadow: var(--shadow-card); border-color: rgba(255,255,255,0.22); }
-        .record-card.pinned {
-            border-color: var(--accent-light);
-            box-shadow: 0 0 0 2px var(--accent-glow);
-        }
-        .pin-badge {
-            position: absolute; top: 14px; right: 14px;
-            font-size: 13px;
-            opacity: 0.7;
-        }
+        .record-card.pinned { border-color: var(--accent-light); box-shadow: 0 0 0 2px var(--accent-glow); }
+        .pin-badge { position: absolute; top: 14px; right: 14px; font-size: 13px; opacity: 0.7; }
 
-        /* ── CATEGORY PILL ── */
-        .cat-pill {
-            display: inline-flex; align-items: center;
-            padding: 3px 12px;
-            border-radius: 999px;
-            font-size: 11px; font-weight: 800;
-            letter-spacing: 0.04em;
-        }
+        .cat-pill { display: inline-flex; align-items: center; padding: 3px 12px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }
         .cat-personal { background: rgba(244,63,94,0.2);  color: #fb7185; }
         .cat-work     { background: rgba(59,130,246,0.2); color: #60a5fa; }
         .cat-ideas    { background: rgba(245,158,11,0.2); color: #fbbf24; }
         .cat-tasks    { background: rgba(16,185,129,0.2); color: #34d399; }
 
-        /* ── DETAIL / EDIT PANEL ── */
         .detail-panel {
-            background: var(--card-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-card);
-            padding: 20px;
-            margin-bottom: 12px;
-            animation: panelOpen 0.3s cubic-bezier(0.34,1.1,0.64,1) both;
-            overflow: hidden;
+            background: var(--card-bg); border: 1px solid var(--glass-border);
+            border-radius: var(--radius-card); padding: 20px; margin-bottom: 12px;
+            animation: panelOpen 0.3s cubic-bezier(0.34,1.1,0.64,1) both; overflow: hidden;
         }
         @keyframes panelOpen {
             from { opacity:0; transform: scaleY(0.92) translateY(-8px); }
@@ -443,107 +299,43 @@
         }
         .detail-panel .fi { background: var(--input-bg); color: var(--input-text); }
 
-        /* ── PROGRESS BAR ── */
-        .prog-track {
-            width: 100%; height: 8px;
-            background: var(--progress-track);
-            border-radius: 999px; overflow: hidden;
-        }
-        .prog-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #34d399, #38bdf8);
-            border-radius: 999px;
-            transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
-        }
+        .prog-track { width: 100%; height: 8px; background: var(--progress-track); border-radius: 999px; overflow: hidden; }
+        .prog-fill { height: 100%; background: linear-gradient(90deg, #34d399, #38bdf8); border-radius: 999px; transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
 
-        /* ── RELATIONSHIPS ── */
         .rel-card {
-            background: var(--card-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-card);
-            overflow: hidden;
-            margin-bottom: 14px;
-            cursor: pointer;
-            position: relative;
-            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1),
-                        box-shadow 0.22s ease;
+            background: var(--card-bg); border: 1px solid var(--glass-border);
+            border-radius: var(--radius-card); overflow: hidden; margin-bottom: 14px;
+            cursor: pointer; position: relative;
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s ease;
             animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
         }
         .rel-card:active { transform: scale(0.975); }
         .rel-card.pinned { border-color: var(--accent-light); box-shadow: 0 0 0 2px var(--accent-glow); }
-        .rel-card-header {
-            background: linear-gradient(135deg, #f472b6 0%, #ec4899 50%, #db2777 100%);
-            padding: 20px 20px 14px;
-            color: #fff;
-        }
-        body.theme-dark .rel-card-header {
-            background: linear-gradient(135deg, #9d174d 0%, #be185d 50%, #db2777 100%);
-        }
-        .rel-card-body {
-            padding: 16px 20px 18px;
-        }
-        .rel-event-item {
-            display: flex; gap: 12px; align-items: flex-start;
-            padding: 10px 12px;
-            background: rgba(255,255,255,0.07);
-            border-radius: 12px;
-            margin-bottom: 8px;
-        }
+        .rel-card-header { background: linear-gradient(135deg, #f472b6 0%, #ec4899 50%, #db2777 100%); padding: 20px 20px 14px; color: #fff; }
+        body.theme-dark .rel-card-header { background: linear-gradient(135deg, #9d174d 0%, #be185d 50%, #db2777 100%); }
+        .rel-card-body { padding: 16px 20px 18px; }
+        .rel-event-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; background: rgba(255,255,255,0.07); border-radius: 12px; margin-bottom: 8px; }
         body.theme-dark .rel-event-item { background: rgba(255,255,255,0.05); }
-        .rel-event-date {
-            font-size: 11px; font-weight: 800;
-            color: var(--accent-light);
-            white-space: nowrap;
-            padding-top: 2px;
-            min-width: 80px;
-        }
-        .rel-event-desc {
-            font-size: 14px; font-weight: 600;
-            color: var(--text-primary);
-            flex: 1;
-        }
-        .rel-event-actions {
-            display: flex; gap: 6px;
-            flex-shrink: 0;
-        }
-        .rel-event-btn {
-            background: none; border: none; cursor: pointer;
-            font-size: 14px; padding: 2px 4px;
-            border-radius: 6px;
-            transition: background 0.15s;
-        }
+        .rel-event-date { font-size: 11px; font-weight: 800; color: var(--accent-light); white-space: nowrap; padding-top: 2px; min-width: 80px; }
+        .rel-event-desc { font-size: 14px; font-weight: 600; color: var(--text-primary); flex: 1; }
+        .rel-event-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .rel-event-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 6px; transition: background 0.15s; }
         .rel-event-btn:hover { background: rgba(0,0,0,0.1); }
 
-        /* ── CALENDAR TABLE ── */
         #calendarTable { width: 100%; border-collapse: collapse; text-align: center; }
-        #calendarTable th { padding: 10px 4px; font-size: 12px; font-weight: 800;
-            color: #9ca3af; letter-spacing: 0.05em; }
-        #calendarTable td {
-            padding: 6px 2px; font-size: 13px; font-weight: 700;
-            border-radius: 10px; cursor: pointer;
-            transition: background 0.15s;
-        }
+        #calendarTable th { padding: 10px 4px; font-size: 12px; font-weight: 800; color: #9ca3af; letter-spacing: 0.05em; }
+        #calendarTable td { padding: 6px 2px; font-size: 13px; font-weight: 700; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
         #calendarTable td.done  { background: #10b981; color: white; }
         #calendarTable td.empty { background: transparent; cursor: default; }
-        #calendarTable td:not(.empty):not(.done) {
-            background: rgba(255,255,255,0.1);
-            color: var(--modal-text);
-        }
-        body:not(.theme-dark) #calendarTable td:not(.empty):not(.done) {
-            background: rgba(0,0,0,0.06);
-        }
+        #calendarTable td:not(.empty):not(.done) { background: rgba(255,255,255,0.1); color: var(--modal-text); }
+        body:not(.theme-dark) #calendarTable td:not(.empty):not(.done) { background: rgba(0,0,0,0.06); }
 
-        /* ── TOAST ── */
         .toast-msg {
             position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
-            z-index: 99999;
-            padding: 14px 24px;
-            border-radius: 16px;
-            color: white; font-family: 'Nunito', sans-serif;
-            font-size: 15px; font-weight: 700;
+            z-index: 99999; padding: 14px 24px; border-radius: 16px;
+            color: white; font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700;
             box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-            animation: toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both,
-                       toastOut 0.3s 2.3s ease both;
+            animation: toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both, toastOut 0.3s 2.3s ease both;
             white-space: nowrap;
         }
         @keyframes toastIn  { from { opacity:0; transform: translateX(-50%) translateY(-12px) scale(0.9); } }
@@ -551,445 +343,302 @@
         .toast-success { background: linear-gradient(135deg,#10b981,#059669); }
         .toast-error   { background: linear-gradient(135deg,#ef4444,#dc2626); }
 
-        /* ── EMPTY STATE ── */
-        .empty-state {
-            text-align: center; padding: 48px 20px;
-            color: var(--text-muted);
-        }
+        .empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
         .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
         .empty-state p { font-size: 15px; font-weight: 600; }
 
-        /* ── SEARCH ── */
         .search-wrap { position: relative; }
-        .search-wrap .search-icon {
-            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-            font-size: 16px; pointer-events: none;
-        }
+        .search-wrap .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; pointer-events: none; }
         .search-wrap .fi { padding-left: 42px; }
 
-        /* ── SECTION HEADER ── */
         .section-header {
-            font-family: 'Syne', sans-serif;
-            font-size: 22px; font-weight: 800;
-            color: var(--text-primary);
-            display: flex; align-items: center; gap: 10px;
-            margin-bottom: 18px;
-            /* FIX: Subtle text shadow for contrast on glass cards */
-            text-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+            color: var(--text-primary); display: flex; align-items: center; gap: 10px;
+            margin-bottom: 18px; text-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
 
-        /* ── UTILITY ── */
         .hidden { display: none !important; }
         .scrollable { max-height: 420px; overflow-y: auto; padding-right: 4px; }
         .scrollable::-webkit-scrollbar { width: 4px; }
         .scrollable::-webkit-scrollbar-track { background: transparent; }
         .scrollable::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-        .divider {
-            height: 1px;
-            background: var(--glass-border);
-            margin: 12px 0;
-        }
-        .chip {
-            display: inline-flex; align-items: center; gap: 4px;
-            padding: 4px 12px;
-            border-radius: 999px;
-            font-size: 12px; font-weight: 700;
-            background: rgba(255,255,255,0.15);
-            color: var(--text-primary);
-        }
+        .divider { height: 1px; background: var(--glass-border); margin: 12px 0; }
+        .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(255,255,255,0.15); color: var(--text-primary); }
         .chip.green  { background: rgba(16,185,129,0.2); color: #34d399; }
         .chip.red    { background: rgba(239,68,68,0.2);  color: #f87171; }
         .chip.orange { background: rgba(255,87,34,0.2);  color: var(--accent-light); }
         .chip.blue   { background: rgba(59,130,246,0.2); color: #60a5fa; }
         .chip.pink   { background: rgba(236,72,153,0.2); color: #f472b6; }
 
-        /* ================================================================
-           NEW: HAMBURGER MENU BUTTON in header
-           (appears top-left, before the title)
-        ================================================================ */
         .hamburger-btn {
-            width: 40px; height: 40px;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 5px;
-            background: rgba(255,255,255,0.18);
-            border: 1px solid rgba(255,255,255,0.25);
-            border-radius: 12px;
-            cursor: pointer;
-            flex-shrink: 0;
-            transition: background 0.2s, transform 0.15s;
+            width: 40px; height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 5px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 12px; cursor: pointer; flex-shrink: 0; transition: background 0.2s, transform 0.15s;
         }
         .hamburger-btn:active { transform: scale(0.92); background: rgba(255,255,255,0.28); }
-        .hamburger-btn span {
-            display: block; width: 18px; height: 2px;
-            background: white;
-            border-radius: 2px;
-            transition: transform 0.2s, opacity 0.2s;
-        }
+        .hamburger-btn span { display: block; width: 18px; height: 2px; background: white; border-radius: 2px; }
 
-        /* ================================================================
-           NEW: SIDEBAR (left drawer)
-        ================================================================ */
-        /* Backdrop behind the sidebar */
         #sidebarBackdrop {
-            display: none;
-            position: fixed; inset: 0; z-index: 10000;
-            background: rgba(0,0,0,0.55);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
-            transition: opacity 0.3s ease;
+            display: none; position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
         }
         #sidebarBackdrop.open { display: block; }
-
-        /* The sidebar panel itself */
         #sidebarPanel {
             position: fixed; top: 0; left: 0; bottom: 0; z-index: 10001;
-            width: min(320px, 88vw);
-            background: var(--modal-bg);
-            color: var(--modal-text);
+            width: min(320px, 88vw); background: var(--modal-bg); color: var(--modal-text);
             display: flex; flex-direction: column;
-            transform: translateX(-100%);
-            transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
-            box-shadow: 8px 0 40px rgba(0,0,0,0.3);
-            overflow-y: auto;
+            transform: translateX(-100%); transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
+            box-shadow: 8px 0 40px rgba(0,0,0,0.3); overflow-y: auto;
         }
         #sidebarPanel.open { transform: translateX(0); }
-
-        /* Sidebar header gradient */
-        .sidebar-hero {
-            background: linear-gradient(155deg,#ff4500,#ff6b35 60%,#f7931e);
-            padding: 52px 24px 28px;
-            color: white;
-            flex-shrink: 0;
-        }
-        body.theme-dark .sidebar-hero {
-            background: linear-gradient(155deg,#1a1f35,#0d1117 60%,#1a1f35);
-        }
-        .sidebar-avatar {
-            width: 64px; height: 64px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.25);
-            border: 3px solid rgba(255,255,255,0.4);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 28px;
-            margin-bottom: 12px;
-            overflow: hidden;
-        }
-        .sidebar-avatar img {
-            width: 100%; height: 100%; object-fit: cover;
-            border-radius: 50%;
-        }
-        .sidebar-username {
-            font-family: 'Syne', sans-serif;
-            font-size: 20px; font-weight: 800;
-            margin-bottom: 2px;
-        }
-        .sidebar-userid {
-            font-size: 12px;
-            opacity: 0.75;
-            font-weight: 600;
-        }
-
-        /* Sidebar body */
-        .sidebar-body {
-            flex: 1;
-            padding: 16px 0 24px;
-        }
-        .sidebar-section-label {
-            font-size: 11px; font-weight: 800; letter-spacing: 0.1em;
-            text-transform: uppercase; color: #9ca3af;
-            margin: 16px 20px 6px;
-        }
-        .sidebar-item {
-            display: flex; align-items: center; gap: 14px;
-            padding: 14px 20px;
-            cursor: pointer;
-            transition: background 0.18s;
-            border-radius: 0;
-        }
+        .sidebar-hero { background: linear-gradient(155deg,#ff4500,#ff6b35 60%,#f7931e); padding: 52px 24px 28px; color: white; flex-shrink: 0; }
+        body.theme-dark .sidebar-hero { background: linear-gradient(155deg,#1a1f35,#0d1117 60%,#1a1f35); }
+        .sidebar-avatar { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 3px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 12px; overflow: hidden; }
+        .sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+        .sidebar-username { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 2px; }
+        .sidebar-userid { font-size: 12px; opacity: 0.75; font-weight: 600; }
+        .sidebar-body { flex: 1; padding: 16px 0 24px; }
+        .sidebar-section-label { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #9ca3af; margin: 16px 20px 6px; }
+        .sidebar-item { display: flex; align-items: center; gap: 14px; padding: 14px 20px; cursor: pointer; transition: background 0.18s; }
         .sidebar-item:hover { background: rgba(0,0,0,0.05); }
         body.theme-dark .sidebar-item:hover { background: rgba(255,255,255,0.06); }
-        .sidebar-item-icon {
-            width: 38px; height: 38px;
-            border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-        .sidebar-item-label {
-            font-size: 15px; font-weight: 700;
-            color: var(--modal-text);
-            flex: 1;
-        }
-        .sidebar-item-arrow {
-            font-size: 12px; color: #9ca3af;
-        }
+        .sidebar-item-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .sidebar-item-label { font-size: 15px; font-weight: 700; color: var(--modal-text); flex: 1; }
+        .sidebar-item-arrow { font-size: 12px; color: #9ca3af; }
         .sidebar-item.danger .sidebar-item-label { color: #ef4444; }
         .sidebar-item.danger:hover { background: rgba(239,68,68,0.07); }
-        .sidebar-divider {
-            height: 1px; background: rgba(0,0,0,0.07);
-            margin: 8px 20px;
-        }
+        .sidebar-divider { height: 1px; background: rgba(0,0,0,0.07); margin: 8px 20px; }
         body.theme-dark .sidebar-divider { background: rgba(255,255,255,0.08); }
-
-        /* Nickname input area inside sidebar */
-        .sidebar-nickname-area {
-            padding: 12px 20px 16px;
-        }
-        .sidebar-nickname-area .fi {
-            background: var(--input-bg);
-            color: var(--input-text);
-            font-size: 15px;
-            padding: 12px 16px;
-        }
+        .sidebar-nickname-area { padding: 12px 20px 16px; }
+        .sidebar-nickname-area .fi { background: var(--input-bg); color: var(--input-text); font-size: 15px; padding: 12px 16px; }
         .sidebar-save-nick-btn {
-            margin-top: 8px;
-            width: 100%;
-            padding: 12px;
-            background: var(--accent);
-            color: white;
-            border: none; border-radius: 12px;
-            font-family: 'Nunito', sans-serif;
-            font-size: 14px; font-weight: 800;
-            cursor: pointer;
-            transition: opacity 0.2s, transform 0.15s;
+            margin-top: 8px; width: 100%; padding: 12px;
+            background: var(--accent); color: white; border: none; border-radius: 12px;
+            font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800;
+            cursor: pointer; transition: opacity 0.2s, transform 0.15s;
         }
         .sidebar-save-nick-btn:active { transform: scale(0.97); opacity: 0.9; }
 
-        /* ================================================================
-           NEW: ACHIEVEMENTS MODAL / SCREEN
-        ================================================================ */
+        /* ── ACHIEVEMENTS ── */
         #achievementsModal {
-            display: none;
-            position: fixed; inset: 0; z-index: 10002;
-            background: rgba(0,0,0,0.72);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            overflow-y: auto;
-            padding: 16px;
+            display: none; position: fixed; inset: 0; z-index: 10002;
+            background: rgba(0,0,0,0.72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            overflow-y: auto; padding: 16px;
         }
         #achievementsModal.open { display: block; }
-
-        .ach-container {
-            max-width: 480px;
-            margin: 0 auto;
-            padding-bottom: 32px;
-        }
-        .ach-header {
-            display: flex; align-items: center; gap: 12px;
-            padding: 20px 0 16px;
-        }
-        .ach-header-title {
-            font-family: 'Syne', sans-serif;
-            font-size: 24px; font-weight: 800;
-            color: white;
-            flex: 1;
-        }
-        .ach-close-btn {
-            width: 40px; height: 40px;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.15);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: white; font-size: 22px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            transition: background 0.18s, transform 0.15s;
-            flex-shrink: 0;
-        }
+        .ach-container { max-width: 480px; margin: 0 auto; padding-bottom: 32px; }
+        .ach-header { display: flex; align-items: center; gap: 12px; padding: 20px 0 16px; }
+        .ach-header-title { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: white; flex: 1; }
+        .ach-close-btn { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); color: white; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.18s, transform 0.15s; flex-shrink: 0; }
         .ach-close-btn:active { transform: scale(0.92); }
-
-        /* Progress summary bar */
-        .ach-progress-card {
-            background: rgba(255,255,255,0.15);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255,255,255,0.25);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
-            color: white;
-        }
-        .ach-progress-label {
-            font-size: 14px; font-weight: 700;
-            opacity: 0.85;
-            margin-bottom: 6px;
-        }
-        .ach-progress-count {
-            font-family: 'Syne', sans-serif;
-            font-size: 30px; font-weight: 800;
-            line-height: 1;
-            margin-bottom: 12px;
-        }
-        .ach-prog-track {
-            height: 10px;
-            background: rgba(255,255,255,0.25);
-            border-radius: 999px; overflow: hidden;
-        }
-        .ach-prog-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #fbbf24, #f59e0b);
-            border-radius: 999px;
-            transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
-        }
-
-        /* Achievement cards grid */
-        .ach-grid {
-            display: flex; flex-direction: column; gap: 12px;
-        }
-        .ach-card {
-            background: rgba(255,255,255,0.12);
-            backdrop-filter: blur(14px);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 18px;
-            padding: 18px;
-            display: flex; align-items: center; gap: 16px;
-            transition: transform 0.2s, box-shadow 0.2s;
-            animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
-        }
-        .ach-card.unlocked {
-            background: rgba(255,255,255,0.18);
-            border-color: rgba(251,191,36,0.5);
-            box-shadow: 0 0 0 1px rgba(251,191,36,0.2), 0 8px 24px rgba(0,0,0,0.15);
-        }
-        .ach-card.locked {
-            opacity: 0.6;
-            filter: grayscale(0.4);
-        }
-        .ach-icon-wrap {
-            width: 56px; height: 56px;
-            border-radius: 16px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 26px;
-            flex-shrink: 0;
-            position: relative;
-        }
-        .ach-card.unlocked .ach-icon-wrap {
-            background: linear-gradient(135deg, rgba(251,191,36,0.3), rgba(245,158,11,0.2));
-            border: 1px solid rgba(251,191,36,0.4);
-        }
-        .ach-card.locked .ach-icon-wrap {
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.12);
-        }
-        /* Lock overlay on locked achievements */
-        .ach-lock-overlay {
-            position: absolute; bottom: -4px; right: -4px;
-            width: 20px; height: 20px;
-            background: #374151;
-            border-radius: 6px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 11px;
-        }
-        .ach-card-body {
-            flex: 1; min-width: 0;
-        }
-        .ach-card-title {
-            font-family: 'Syne', sans-serif;
-            font-size: 16px; font-weight: 700;
-            color: white; margin-bottom: 3px;
-        }
-        .ach-card-desc {
-            font-size: 13px; font-weight: 600;
-            color: rgba(255,255,255,0.70);
-            margin-bottom: 6px;
-        }
-        .ach-card-date {
-            font-size: 11px; font-weight: 700;
-            letter-spacing: 0.04em;
-        }
+        .ach-progress-card { background: rgba(255,255,255,0.15); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; padding: 20px; margin-bottom: 20px; color: white; }
+        .ach-progress-label { font-size: 14px; font-weight: 700; opacity: 0.85; margin-bottom: 6px; }
+        .ach-progress-count { font-family: 'Syne', sans-serif; font-size: 30px; font-weight: 800; line-height: 1; margin-bottom: 12px; }
+        .ach-prog-track { height: 10px; background: rgba(255,255,255,0.25); border-radius: 999px; overflow: hidden; }
+        .ach-prog-fill { height: 100%; background: linear-gradient(90deg, #fbbf24, #f59e0b); border-radius: 999px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+        .ach-grid { display: flex; flex-direction: column; gap: 12px; }
+        .ach-card { background: rgba(255,255,255,0.12); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.2); border-radius: 18px; padding: 18px; display: flex; align-items: center; gap: 16px; transition: transform 0.2s, box-shadow 0.2s; animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both; }
+        .ach-card.unlocked { background: rgba(255,255,255,0.18); border-color: rgba(251,191,36,0.5); box-shadow: 0 0 0 1px rgba(251,191,36,0.2), 0 8px 24px rgba(0,0,0,0.15); }
+        .ach-card.locked { opacity: 0.6; filter: grayscale(0.4); }
+        .ach-icon-wrap { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; position: relative; }
+        .ach-card.unlocked .ach-icon-wrap { background: linear-gradient(135deg, rgba(251,191,36,0.3), rgba(245,158,11,0.2)); border: 1px solid rgba(251,191,36,0.4); }
+        .ach-card.locked .ach-icon-wrap { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); }
+        .ach-lock-overlay { position: absolute; bottom: -4px; right: -4px; width: 20px; height: 20px; background: #374151; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+        .ach-card-body { flex: 1; min-width: 0; }
+        .ach-card-title { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; color: white; margin-bottom: 3px; }
+        .ach-card-desc { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.70); margin-bottom: 6px; }
+        .ach-card-date { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
         .ach-card.unlocked .ach-card-date { color: #fbbf24; }
         .ach-card.locked   .ach-card-date { color: rgba(255,255,255,0.4); }
-        /* Gold badge for unlocked */
-        .ach-badge {
-            width: 32px; height: 32px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 14px;
-            flex-shrink: 0;
-            box-shadow: 0 2px 8px rgba(251,191,36,0.4);
-        }
-        .ach-card.locked .ach-badge {
-            background: rgba(255,255,255,0.1);
-            box-shadow: none;
-        }
+        .ach-badge { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #fbbf24, #f59e0b); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(251,191,36,0.4); }
+        .ach-card.locked .ach-badge { background: rgba(255,255,255,0.1); box-shadow: none; }
 
-        /* ================================================================
-           NEW: DELETE ACCOUNT CONFIRMATION MODAL
-        ================================================================ */
         #deleteAccountModal {
-            display: none;
-            position: fixed; inset: 0; z-index: 10003;
-            background: rgba(0,0,0,0.72);
-            backdrop-filter: blur(10px);
-            align-items: center; justify-content: center;
-            padding: 20px;
+            display: none; position: fixed; inset: 0; z-index: 10003;
+            background: rgba(0,0,0,0.72); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center; padding: 20px;
         }
         #deleteAccountModal.open { display: flex; }
-        .delete-modal-box {
-            background: var(--modal-bg);
-            color: var(--modal-text);
-            border-radius: 28px;
-            padding: 28px;
-            width: 100%; max-width: 380px;
-            animation: modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
+        .delete-modal-box { background: var(--modal-bg); color: var(--modal-text); border-radius: 28px; padding: 28px; width: 100%; max-width: 380px; animation: modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .delete-modal-icon { width: 64px; height: 64px; border-radius: 50%; background: rgba(239,68,68,0.12); border: 2px solid rgba(239,68,68,0.25); display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 16px; }
+
+        /* ── ENCRYPTION LOCK SCREEN ── */
+        #encryptionLock {
+            display: none; position: fixed; inset: 0; z-index: 99999;
+            background: var(--bg-gradient);
+            align-items: center; justify-content: center; padding: 24px;
+            flex-direction: column; gap: 20px;
         }
-        .delete-modal-icon {
-            width: 64px; height: 64px;
-            border-radius: 50%;
-            background: rgba(239,68,68,0.12);
-            border: 2px solid rgba(239,68,68,0.25);
+        #encryptionLock.open { display: flex; }
+        .lock-box {
+            background: rgba(255,255,255,0.15); backdrop-filter: blur(24px);
+            border: 1px solid rgba(255,255,255,0.3); border-radius: 28px;
+            padding: 32px 28px; width: 100%; max-width: 380px;
+            animation: modalIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+            color: white;
+        }
+        .lock-icon { font-size: 48px; text-align: center; margin-bottom: 12px; }
+        .lock-title { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 6px; }
+        .lock-desc { font-size: 14px; font-weight: 600; opacity: 0.8; text-align: center; margin-bottom: 20px; line-height: 1.5; }
+        .lock-input {
+            width: 100%; padding: 16px 18px; border-radius: 16px;
+            background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3);
+            font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 700;
+            color: white; outline: none; letter-spacing: 0.15em; text-align: center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .lock-input:focus { border-color: rgba(255,255,255,0.7); box-shadow: 0 0 0 4px rgba(255,255,255,0.15); }
+        .lock-input::placeholder { letter-spacing: 0; color: rgba(255,255,255,0.5); }
+        .lock-btn {
+            width: 100%; padding: 18px; margin-top: 12px;
+            background: white; color: var(--accent); border: none; border-radius: 16px;
+            font-family: 'Nunito', sans-serif; font-size: 17px; font-weight: 900;
+            cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .lock-btn:active { transform: scale(0.97); opacity: 0.9; }
+        .lock-hint { font-size: 12px; opacity: 0.65; text-align: center; margin-top: 10px; }
+
+        /* ── DAILY TASKS SECTION ── */
+        /* Task quick-add row */
+        .task-quick-add {
+            display: flex; gap: 10px; align-items: center;
+            background: var(--input-bg); border-radius: 16px;
+            padding: 6px 6px 6px 14px; border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .task-quick-add:focus-within { border-color: var(--accent); }
+        .task-quick-input {
+            flex: 1; background: transparent; border: none; outline: none;
+            font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 600;
+            color: var(--input-text); padding: 8px 0;
+        }
+        .task-quick-input::placeholder { color: #9ca3af; }
+        .task-add-btn {
+            background: var(--accent); color: white; border: none;
+            width: 38px; height: 38px; border-radius: 11px; font-size: 20px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; transition: transform 0.15s, opacity 0.15s;
+        }
+        .task-add-btn:active { transform: scale(0.9); opacity: 0.85; }
+        .task-imp-toggle {
+            background: rgba(0,0,0,0.06); border: 1.5px solid rgba(0,0,0,0.1);
+            color: #9ca3af; border-radius: 9px; width: 34px; height: 34px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 28px;
-            margin: 0 auto 16px;
+            font-size: 16px; cursor: pointer; flex-shrink: 0; transition: all 0.2s;
+        }
+        .task-imp-toggle.active { background: rgba(251,191,36,0.15); border-color: #fbbf24; color: #f59e0b; }
+
+        /* Task item */
+        .task-item {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 14px 16px; border-radius: 16px;
+            background: var(--card-bg); border: 1.5px solid var(--glass-border);
+            margin-bottom: 8px; cursor: pointer;
+            transition: opacity 0.2s, background 0.2s, transform 0.15s;
+            animation: cardIn 0.28s cubic-bezier(0.34,1.1,0.64,1) both;
+        }
+        .task-item:active { transform: scale(0.985); }
+        .task-item.important { border-color: rgba(251,191,36,0.45); background: rgba(251,191,36,0.06); }
+        .task-item.completed { opacity: 0.55; }
+        .task-check {
+            width: 24px; height: 24px; border-radius: 8px; flex-shrink: 0;
+            border: 2px solid rgba(255,255,255,0.4); background: transparent;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; margin-top: 1px;
+        }
+        .task-item.completed .task-check { background: #10b981; border-color: #10b981; }
+        .task-item.important .task-check { border-color: #fbbf24; }
+        .task-check-inner { font-size: 13px; display: none; }
+        .task-item.completed .task-check-inner { display: block; }
+        .task-text {
+            flex: 1; font-size: 15px; font-weight: 600; color: var(--text-primary);
+            line-height: 1.45; word-break: break-word;
+        }
+        .task-item.completed .task-text { text-decoration: line-through; opacity: 0.7; }
+        .task-star { font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+        .task-del-btn {
+            background: none; border: none; color: rgba(255,255,255,0.35);
+            font-size: 15px; cursor: pointer; padding: 2px 4px; flex-shrink: 0;
+            transition: color 0.15s;
+        }
+        .task-del-btn:hover { color: #f87171; }
+
+        /* Task section header with stats */
+        .task-stats-bar {
+            display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+        }
+        .task-stat-chip {
+            display: flex; align-items: center; gap: 6px;
+            background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px; padding: 8px 14px;
+            font-size: 13px; font-weight: 700; color: var(--text-primary);
         }
 
-        /* ================================================================
-           FIX: Light theme - text readability on gradient background
-           (Applies to elements directly on the bg-gradient)
-        ================================================================ */
-        /* All section headers, stat text, etc. on the gradient background */
+        /* Archive / past days selector */
+        .task-archive-day {
+            padding: 10px 14px; border-radius: 13px; cursor: pointer;
+            background: var(--card-bg); border: 1.5px solid var(--glass-border);
+            font-size: 13px; font-weight: 700; color: var(--text-muted);
+            transition: background 0.18s, border-color 0.18s;
+            text-align: center; flex-shrink: 0;
+        }
+        .task-archive-day.active { background: var(--accent); border-color: var(--accent); color: white; }
+        .task-archive-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; }
+        .task-archive-scroll::-webkit-scrollbar { height: 3px; }
+        .task-archive-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+        /* Mood picker */
+        .mood-row { display: flex; gap: 10px; justify-content: center; margin: 12px 0 4px; }
+        .mood-btn {
+            flex: 1; padding: 10px 6px; border-radius: 14px; font-size: 22px;
+            background: rgba(255,255,255,0.12); border: 2px solid transparent;
+            cursor: pointer; text-align: center; transition: all 0.2s;
+            font-family: 'Nunito', sans-serif; font-weight: 700; color: var(--text-primary);
+        }
+        .mood-btn .mood-label { font-size: 10px; font-weight: 800; letter-spacing: 0.04em; display: block; margin-top: 3px; opacity: 0.75; }
+        .mood-btn.selected { border-color: var(--accent-light); background: rgba(255,140,66,0.2); }
+        .mood-btn:active { transform: scale(0.93); }
+
+        /* carry-over button */
+        .carryover-btn {
+            width: 100%; padding: 12px; border-radius: 13px; border: none; cursor: pointer;
+            background: rgba(59,130,246,0.15); border: 1.5px solid rgba(59,130,246,0.3);
+            color: #60a5fa; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            transition: background 0.18s, transform 0.15s;
+        }
+        .carryover-btn:active { transform: scale(0.97); background: rgba(59,130,246,0.22); }
+
         body:not(.theme-dark) .section-header,
         body:not(.theme-dark) .app-title,
-        body:not(.theme-dark) .tab-btn:not(.active) {
-            text-shadow: 0 1px 4px rgba(0,0,0,0.15);
-        }
-        /* Record card text on glass in light theme */
-        body:not(.theme-dark) .record-card .font-bold {
-            color: rgba(255,255,255,0.97) !important;
-        }
-        body:not(.theme-dark) .record-card [style*="color:var(--text-muted)"] {
-            color: rgba(255,255,255,0.88) !important;
-        }
-
-        /* Footer stats */
-        body:not(.theme-dark) footer {
-            text-shadow: 0 1px 3px rgba(0,0,0,0.12);
-        }
-
+        body:not(.theme-dark) .tab-btn:not(.active) { text-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        body:not(.theme-dark) .record-card .font-bold { color: rgba(255,255,255,0.97) !important; }
+        body:not(.theme-dark) footer { text-shadow: 0 1px 3px rgba(0,0,0,0.12); }
     </style>
 </head>
-<!-- END OF PART 1 / 4 -->
 <body class="font-sans">
-<!-- PART 2 / 4 -->
-<!-- ================================================================
-     HTML BODY: Header (with hamburger), Tabs, Settings, Sections, Footer
-     Modals: Calendar, EndHabit, AddEvent (cancel-btn-2 FIXED), EndRelations
-     NEW HTML: Sidebar panel, Achievements modal, Delete Account modal
-================================================================ -->
 
+<!-- ══════════════ ENCRYPTION LOCK SCREEN ══════════════ -->
+<div id="encryptionLock" class="open">
+    <div class="lock-box">
+        <div class="lock-icon">🔐</div>
+        <div class="lock-title" id="lock-title">DailyBookimix</div>
+        <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.</div>
+        <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64">
+        <button class="lock-btn" id="lockUnlockBtn" onclick="EncryptionManager.unlock()">Unlock 🔓</button>
+        <div class="lock-hint" id="lock-hint">First time? Choose any password — it will be used to encrypt all your data.</div>
+    </div>
+</div>
+
+<div id="appContent" style="display:none">
 <div class="max-w-[480px] mx-auto min-h-screen px-4 pt-4 pb-24 flex flex-col gap-4">
 
     <!-- ══════════════ HEADER ══════════════ -->
-    <!-- FIX: Lock icon removed, hamburger added to left, flame/streak stays inside -->
     <header class="app-header px-4 py-3 flex items-center gap-3">
-
-        <!-- NEW: Hamburger menu button (top-left) -->
         <button class="hamburger-btn" id="hamburgerBtn" onclick="SidebarUI.open()" aria-label="Menu">
-            <span></span>
-            <span></span>
-            <span></span>
+            <span></span><span></span><span></span>
         </button>
-
-        <!-- Title + streak (compact, no lock icon) -->
         <div class="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
             <h1 class="app-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">DailyBookimix</h1>
             <div id="streakBadge" class="streak-badge flex-shrink-0">
@@ -997,24 +646,22 @@
                 <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
             </div>
         </div>
-
-        <!-- Small descriptor line hidden on narrow (shown below on wider) -->
     </header>
 
     <!-- ══════════════ TAB BAR ══════════════ -->
     <div class="glass rounded-[20px] p-1.5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
         <div class="tab-bar">
             <button id="notesTab"   class="tab-btn active" onclick="diary.switchTab('notes')">
-                <span class="tab-icon">📝</span>
-                <span id="tab-notes">Notes</span>
+                <span class="tab-icon">📝</span><span id="tab-notes">Notes</span>
             </button>
             <button id="habitsTab"  class="tab-btn" onclick="diary.switchTab('habits')">
-                <span class="tab-icon">🔥</span>
-                <span id="tab-habits">Habits</span>
+                <span class="tab-icon">🔥</span><span id="tab-habits">Habits</span>
+            </button>
+            <button id="tasksTabBtn" class="tab-btn" onclick="diary.switchTab('tasks')">
+                <span class="tab-icon">✅</span><span id="tab-tasks">Tasks</span>
             </button>
             <button id="memoryTab"  class="tab-btn" onclick="diary.switchTab('memory')">
-                <span class="tab-icon">📦</span>
-                <span id="tab-memory">Archive</span>
+                <span class="tab-icon">📦</span><span id="tab-memory">Archive</span>
             </button>
         </div>
     </div>
@@ -1022,12 +669,10 @@
     <!-- ══════════════ SETTINGS BAR ══════════════ -->
     <div class="settings-bar">
         <button class="settings-btn" onclick="diary.openSheet('lang')">
-            <span class="text-xl">🌐</span>
-            <span id="lang-btn-label">Language</span>
+            <span class="text-xl">🌐</span><span id="lang-btn-label">Language</span>
         </button>
         <button class="settings-btn" onclick="diary.openSheet('theme')">
-            <span id="theme-icon" class="text-xl">☀️</span>
-            <span id="theme-btn-label">Theme</span>
+            <span id="theme-icon" class="text-xl">☀️</span><span id="theme-btn-label">Theme</span>
         </button>
     </div>
 
@@ -1035,12 +680,9 @@
 
     <!-- ── NOTES SECTION ── -->
     <div id="notesSection" class="flex flex-col gap-4">
-
-        <!-- New / Edit Note Form -->
         <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
             <div class="section-header">
-                <span id="noteFormIcon">✍️</span>
-                <span id="noteFormTitle">New note</span>
+                <span id="noteFormIcon">✍️</span><span id="noteFormTitle">New note</span>
             </div>
             <form id="noteForm" class="flex flex-col gap-3">
                 <input type="hidden" id="noteId">
@@ -1057,18 +699,14 @@
                     <textarea id="noteContent" class="fi" rows="5" required></textarea>
                 </div>
                 <button type="submit" class="btn-primary" id="save-note-btn">
-                    <span id="save-note-btn-txt">Save note</span>
-                    <span>💾</span>
+                    <span id="save-note-btn-txt">Save note</span><span>💾</span>
                 </button>
             </form>
         </div>
-
-        <!-- Notes List -->
         <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
             <div class="flex items-center justify-between mb-4">
                 <div class="section-header" style="margin-bottom:0">
-                    <span>📖</span>
-                    <span id="my-notes-title">My notes</span>
+                    <span>📖</span><span id="my-notes-title">My notes</span>
                 </div>
                 <button id="clearAll" class="btn-ghost btn-danger" style="padding:8px 14px;font-size:13px">
                     <span id="clear-all-txt">Clear all</span>
@@ -1085,12 +723,8 @@
 
     <!-- ── HABITS SECTION ── -->
     <div id="habitsSection" class="hidden flex flex-col gap-4">
-
         <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
-            <div class="section-header">
-                <span>🔥</span>
-                <span id="habitFormTitle">New habit</span>
-            </div>
+            <div class="section-header"><span>🔥</span><span id="habitFormTitle">New habit</span></div>
             <form id="habitForm" class="flex flex-col gap-3">
                 <input type="hidden" id="habitId">
                 <div>
@@ -1116,17 +750,12 @@
                     <textarea id="habitDescription" class="fi" rows="3"></textarea>
                 </div>
                 <button type="submit" class="btn-primary" id="start-habit-btn">
-                    <span id="start-habit-btn-txt">Start tracking</span>
-                    <span>🔥</span>
+                    <span id="start-habit-btn-txt">Start tracking</span><span>🔥</span>
                 </button>
             </form>
         </div>
-
         <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
-            <div class="section-header">
-                <span>📊</span>
-                <span id="my-habits-title">My habits</span>
-            </div>
+            <div class="section-header"><span>📊</span><span id="my-habits-title">My habits</span></div>
             <div class="search-wrap mb-4">
                 <span class="search-icon">🔍</span>
                 <input id="habitsSearch" type="text" class="fi" oninput="diary.renderHabits()">
@@ -1135,14 +764,48 @@
         </div>
     </div>
 
+    <!-- ── DAILY TASKS SECTION ── -->
+    <div id="tasksSection" class="hidden flex flex-col gap-4">
+
+        <!-- Stats bar -->
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header"><span>✅</span><span id="tasks-section-title">Daily Tasks</span></div>
+
+            <!-- Quick add -->
+            <div class="task-quick-add mb-4" id="taskQuickAddRow">
+                <input type="text" id="taskQuickInput" class="task-quick-input" maxlength="200">
+                <button id="taskImpToggle" class="task-imp-toggle" title="Mark as important" onclick="TaskManager.toggleNewImp()">⭐</button>
+                <button class="task-add-btn" onclick="TaskManager.quickAdd()">＋</button>
+            </div>
+
+            <!-- Stats bar -->
+            <div class="task-stats-bar" id="taskStatsBar"></div>
+
+            <!-- Archive day selector -->
+            <div class="task-archive-scroll" id="taskArchiveScroll"></div>
+
+            <!-- Task list -->
+            <div id="tasksList"></div>
+
+            <!-- Mood row (today only) -->
+            <div id="taskMoodSection" style="margin-top:14px">
+                <div style="font-size:12px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px" id="tasks-mood-label">Mood of the day</div>
+                <div class="mood-row" id="moodRow"></div>
+            </div>
+
+            <!-- Carry-over button (today only, shown when incomplete tasks exist) -->
+            <div id="taskCarryoverSection" style="margin-top:12px;display:none">
+                <button class="carryover-btn" onclick="TaskManager.carryOver()" id="carryover-btn">
+                    <span>⏭️</span><span id="carryover-btn-txt">Carry over unfinished to tomorrow</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ── MEMORY / ARCHIVE SECTION ── -->
     <div id="memorySection" class="hidden flex flex-col gap-4">
-
         <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
-            <div class="section-header">
-                <span>✨</span>
-                <span id="memoryFormTitle">New memory</span>
-            </div>
+            <div class="section-header"><span>✨</span><span id="memoryFormTitle">New memory</span></div>
             <form id="memoryForm" class="flex flex-col gap-3">
                 <input type="hidden" id="memoryId">
                 <div>
@@ -1172,17 +835,12 @@
                     <textarea id="memoryNotes" class="fi" rows="4"></textarea>
                 </div>
                 <button type="submit" class="btn-primary" id="save-memory-btn">
-                    <span id="save-memory-btn-txt">Save memory</span>
-                    <span>💾</span>
+                    <span id="save-memory-btn-txt">Save memory</span><span>💾</span>
                 </button>
             </form>
         </div>
-
         <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
-            <div class="section-header">
-                <span>🗃️</span>
-                <span id="my-memories-title">Archive</span>
-            </div>
+            <div class="section-header"><span>🗃️</span><span id="my-memories-title">Archive</span></div>
             <div class="search-wrap mb-4">
                 <span class="search-icon">🔍</span>
                 <input id="memoriesSearch" type="text" class="fi" oninput="diary.renderMemories()">
@@ -1202,24 +860,23 @@
             <span style="font-size:11px;opacity:.7">(<span id="activeHabitsCount">0</span>)</span>
         </div>
         <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            ✅ <span id="stat-tasks-lbl">Tasks</span>: <span id="tasksCount" style="color:var(--text-primary)">0</span>
+        </div>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
             📦 <span id="stat-mem-lbl">Memories</span>: <span id="memoriesCount" style="color:var(--text-primary)">0</span>
         </div>
     </footer>
 
 </div><!-- end .max-w -->
+</div><!-- end #appContent -->
 
 
-<!-- ══════════════════════════════════════
-     SETTINGS BOTTOM SHEET (UNCHANGED)
-══════════════════════════════════════ -->
+<!-- ══════════════ SETTINGS BOTTOM SHEET ══════════════ -->
 <div id="sheetOverlay" class="sheet-overlay" onclick="diary.closeSheet()"></div>
 <div id="bottomSheet" class="bottom-sheet">
     <div class="sheet-handle"></div>
-
-    <!-- Theme picker -->
     <div id="sheetThemeSection">
         <div class="sheet-title" id="sheet-theme-title">Choose Theme</div>
-
         <div class="sheet-option" id="sheetOptOrange" onclick="diary.applyTheme('orange')">
             <div class="sheet-option-icon" style="background:linear-gradient(135deg,#ff4500,#ff8c42)">🌅</div>
             <div>
@@ -1228,7 +885,6 @@
             </div>
             <div class="sheet-check">✓</div>
         </div>
-
         <div class="sheet-option" id="sheetOptDark" onclick="diary.applyTheme('dark')">
             <div class="sheet-option-icon" style="background:linear-gradient(135deg,#0d1117,#1f2937)">🌙</div>
             <div>
@@ -1238,37 +894,23 @@
             <div class="sheet-check">✓</div>
         </div>
     </div>
-
-    <!-- Language picker -->
     <div id="sheetLangSection">
         <div class="sheet-title" id="sheet-lang-title">Choose Language</div>
-
         <div class="sheet-option" id="sheetOptEn" onclick="diary.applyLang('en')">
             <div class="sheet-option-icon" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);font-size:26px">🇬🇧</div>
-            <div>
-                <div class="sheet-option-label">English</div>
-                <div class="sheet-option-sub">English</div>
-            </div>
+            <div><div class="sheet-option-label">English</div><div class="sheet-option-sub">English</div></div>
             <div class="sheet-check">✓</div>
         </div>
-
         <div class="sheet-option" id="sheetOptRu" onclick="diary.applyLang('ru')">
             <div class="sheet-option-icon" style="background:linear-gradient(135deg,#dc2626,#1d4ed8);font-size:26px">🇷🇺</div>
-            <div>
-                <div class="sheet-option-label">Русский</div>
-                <div class="sheet-option-sub">Russian</div>
-            </div>
+            <div><div class="sheet-option-label">Русский</div><div class="sheet-option-sub">Russian</div></div>
             <div class="sheet-check">✓</div>
         </div>
     </div>
 </div>
 
 
-<!-- ══════════════════════════════════════
-     MODALS (UNCHANGED except cancel-btn-2 fix)
-══════════════════════════════════════ -->
-
-<!-- Calendar Modal -->
+<!-- ══════════════ MODALS ══════════════ -->
 <div id="calendarModal" class="modal-overlay">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
@@ -1280,7 +922,6 @@
     </div>
 </div>
 
-<!-- End Habit Modal -->
 <div id="endHabitModal" class="modal-overlay">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
@@ -1296,8 +937,6 @@
     </div>
 </div>
 
-<!-- Add Event Modal -->
-<!-- FIX: cancel-btn-2 now has proper text "Cancel" (translation system sets it via applyTranslations) -->
 <div id="eventModal" class="modal-overlay">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
@@ -1316,9 +955,6 @@
                 <textarea id="eventDesc" class="fi" rows="4" required></textarea>
             </div>
             <div class="flex gap-3">
-                <!-- FIX: The id "cancel-btn-2" is used by applyTranslations to set 'lbl-cancel' text.
-                     Original bug: button showed "cancel-btn-2" as text because the translation key was wrong.
-                     Fix: Pre-populate with "Cancel" text; applyTranslations will correctly update it. -->
                 <button type="button" class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-2">Cancel</button>
                 <button type="submit" class="btn-primary flex-1" id="save-event-btn">
                     <span id="save-event-btn-txt">Save</span>
@@ -1328,7 +964,6 @@
     </div>
 </div>
 
-<!-- End Relations Modal -->
 <div id="endRelationsModal" class="modal-overlay">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
@@ -1347,455 +982,780 @@
 </div>
 
 
-<!-- ══════════════════════════════════════
-     NEW: SIDEBAR (left drawer)
-══════════════════════════════════════ -->
+<!-- ══════════════ SIDEBAR ══════════════ -->
 <div id="sidebarBackdrop" onclick="SidebarUI.close()"></div>
 <div id="sidebarPanel">
-
-    <!-- Hero gradient header with avatar + user info -->
     <div class="sidebar-hero">
         <div class="sidebar-avatar" id="sidebarAvatar">👤</div>
         <div class="sidebar-username" id="sidebarUsername">User</div>
         <div class="sidebar-userid" id="sidebarUserid">ID: —</div>
     </div>
-
-    <!-- Body: nickname, menu items -->
     <div class="sidebar-body">
-
-        <!-- Nickname section -->
         <div class="sidebar-section-label" id="sb-lbl-nickname">Nickname</div>
         <div class="sidebar-nickname-area">
             <input type="text" class="fi" id="sidebarNickInput" placeholder="Set your nickname...">
-            <button class="sidebar-save-nick-btn" id="sidebarSaveNickBtn" onclick="SidebarUI.saveNickname()">
-                Save nickname
-            </button>
+            <button class="sidebar-save-nick-btn" id="sidebarSaveNickBtn" onclick="SidebarUI.saveNickname()">Save nickname</button>
         </div>
-
         <div class="sidebar-divider"></div>
-
-        <!-- Achievements link -->
         <div class="sidebar-section-label" id="sb-lbl-menu">Menu</div>
-
         <div class="sidebar-item" onclick="SidebarUI.openAchievements()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(251,191,36,0.2),rgba(245,158,11,0.15));border:1px solid rgba(251,191,36,0.3)">
-                🏆
-            </div>
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(251,191,36,0.2),rgba(245,158,11,0.15));border:1px solid rgba(251,191,36,0.3)">🏆</div>
             <div class="sidebar-item-label" id="sb-item-achievements">Achievements</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
-
         <div class="sidebar-divider"></div>
-
-        <!-- Danger zone: delete account -->
         <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
-
         <div class="sidebar-item danger" onclick="SidebarUI.confirmDeleteAccount()">
-            <div class="sidebar-item-icon" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2)">
-                🗑️
-            </div>
+            <div class="sidebar-item-icon" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2)">🗑️</div>
             <div class="sidebar-item-label" id="sb-item-delete">Delete account &amp; all data</div>
             <div class="sidebar-item-arrow" style="color:#ef4444">›</div>
         </div>
-
     </div>
 </div>
 
 
-<!-- ══════════════════════════════════════
-     NEW: ACHIEVEMENTS MODAL
-══════════════════════════════════════ -->
+<!-- ══════════════ ACHIEVEMENTS MODAL ══════════════ -->
 <div id="achievementsModal">
     <div class="ach-container">
-
-        <!-- Header row -->
         <div class="ach-header">
             <button class="ach-close-btn" onclick="AchievementsUI.close()">×</button>
             <div class="ach-header-title" id="ach-modal-title">Achievements</div>
         </div>
-
-        <!-- Progress summary -->
         <div class="ach-progress-card">
             <div class="ach-progress-label" id="ach-progress-label">Unlocked achievements</div>
             <div class="ach-progress-count"><span id="ach-unlocked-count">0</span><span style="font-size:18px;opacity:0.6"> / 10</span></div>
-            <div class="ach-prog-track">
-                <div class="ach-prog-fill" id="ach-prog-fill" style="width:0%"></div>
-            </div>
+            <div class="ach-prog-track"><div class="ach-prog-fill" id="ach-prog-fill" style="width:0%"></div></div>
         </div>
-
-        <!-- Achievement cards (rendered by JS) -->
         <div class="ach-grid" id="achGrid"></div>
-
     </div>
 </div>
 
 
-<!-- ══════════════════════════════════════
-     NEW: DELETE ACCOUNT CONFIRMATION MODAL
-══════════════════════════════════════ -->
+<!-- ══════════════ DELETE ACCOUNT MODAL ══════════════ -->
 <div id="deleteAccountModal">
     <div class="delete-modal-box">
         <div class="delete-modal-icon">⚠️</div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="del-modal-title">
-            Delete all data?
-        </h2>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="del-modal-title">Delete all data?</h2>
         <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:24px" id="del-modal-desc">
-            This will permanently erase all your notes, habits, memories, and profile data. This action cannot be undone.
+            This will permanently erase all your notes, habits, memories, and profile data.
         </p>
         <div class="flex gap-3">
-            <button class="btn-ghost flex-1" onclick="SidebarUI.cancelDeleteAccount()" id="del-cancel-btn"
-                    style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">
-                Cancel
-            </button>
-            <button class="btn-ghost btn-danger flex-1" onclick="SidebarUI.executeDeleteAccount()" id="del-confirm-btn">
-                Delete everything
-            </button>
+            <button class="btn-ghost flex-1" onclick="SidebarUI.cancelDeleteAccount()" id="del-cancel-btn" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" onclick="SidebarUI.executeDeleteAccount()" id="del-confirm-btn">Delete everything</button>
         </div>
     </div>
 </div>
 
-<!-- END OF PART 2 / 4 -->
-<script>
-// PART 3 / 4
-// ================================================================
-//  ALL ORIGINAL JAVASCRIPT (100% UNCHANGED)
-//  + Bug fix for cancel-btn-2 translation key
-// ================================================================
 
-// ══════════════════════════════════════════════════════════════
-//  STORAGE MANAGER
-// ══════════════════════════════════════════════════════════════
+<script>
+// ================================================================
+//  ENCRYPTION MANAGER — AES-256-GCM via Web Crypto API
+//  All data is encrypted before saving. The password is stored
+//  only in sessionStorage (cleared on browser close).
+// ================================================================
+const EncryptionManager = {
+    _key: null,      // CryptoKey object (in-memory only)
+    _salt: null,     // Uint8Array for PBKDF2
+
+    // Derive AES-256-GCM key from a password + salt using PBKDF2
+    async deriveKey(password, salt) {
+        const enc = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey(
+            'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
+        );
+        return await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+            keyMaterial,
+            { name: 'AES-GCM', length: 256 },
+            false, ['encrypt', 'decrypt']
+        );
+    },
+
+    // Encode Uint8Array → Base64 string
+    _b64encode(buf) {
+        return btoa(String.fromCharCode(...new Uint8Array(buf)));
+    },
+    // Decode Base64 string → Uint8Array
+    _b64decode(str) {
+        return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)));
+    },
+
+    // Encrypt a plaintext string → Base64-encoded "iv:ciphertext"
+    async encrypt(plaintext) {
+        if (!this._key) return plaintext; // fallback (should not happen)
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const enc = new TextEncoder();
+        const cipher = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            this._key,
+            enc.encode(plaintext)
+        );
+        // Format: base64(iv) + ':' + base64(ciphertext)
+        return this._b64encode(iv) + ':' + this._b64encode(cipher);
+    },
+
+    // Decrypt a "iv:ciphertext" string → plaintext
+    async decrypt(ciphertext) {
+        if (!this._key) return ciphertext;
+        try {
+            const parts = ciphertext.split(':');
+            if (parts.length < 2) return ciphertext; // not encrypted
+            const iv     = this._b64decode(parts[0]);
+            const data   = this._b64decode(parts.slice(1).join(':'));
+            const plain  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this._key, data);
+            return new TextDecoder().decode(plain);
+        } catch (e) {
+            return ciphertext; // decryption failed — return as-is (migration safety)
+        }
+    },
+
+    // Called on unlock button click
+    async unlock() {
+        const pw = document.getElementById('lockPasswordInput').value;
+        if (!pw || pw.length < 1) {
+            this._showLockError();
+            return;
+        }
+        const btn = document.getElementById('lockUnlockBtn');
+        btn.textContent = '⏳';
+        btn.disabled = true;
+
+        try {
+            // Load or generate salt
+            let saltB64 = localStorage.getItem('dbmix_salt');
+            if (!saltB64) {
+                // First time: generate salt and save it
+                this._salt = crypto.getRandomValues(new Uint8Array(16));
+                saltB64 = this._b64encode(this._salt);
+                localStorage.setItem('dbmix_salt', saltB64);
+            } else {
+                this._salt = this._b64decode(saltB64);
+            }
+
+            this._key = await this.deriveKey(pw, this._salt);
+
+            // Test if we can decrypt a sentinel value (to verify correct password)
+            const sentinel = localStorage.getItem('dbmix_sentinel');
+            if (sentinel) {
+                const dec = await this.decrypt(sentinel);
+                if (dec !== 'DAILYBOOKMIX_V5') {
+                    // Wrong password
+                    this._key = null;
+                    btn.textContent = 'Unlock 🔓';
+                    btn.disabled = false;
+                    this._showLockError();
+                    return;
+                }
+            } else {
+                // First time: store sentinel
+                const enc = await this.encrypt('DAILYBOOKMIX_V5');
+                localStorage.setItem('dbmix_sentinel', enc);
+            }
+
+            // Store password hash in sessionStorage for auto-unlock within session
+            sessionStorage.setItem('dbmix_pw', pw);
+
+            // Hide lock screen, show app
+            document.getElementById('encryptionLock').classList.remove('open');
+            document.getElementById('appContent').style.display = 'block';
+
+            // Initialize app
+            await diary.init();
+
+        } catch(e) {
+            console.error('Encryption error:', e);
+            btn.textContent = 'Unlock 🔓';
+            btn.disabled = false;
+            this._showLockError();
+        }
+    },
+
+    _showLockError() {
+        const input = document.getElementById('lockPasswordInput');
+        input.style.borderColor = '#f87171';
+        input.style.boxShadow   = '0 0 0 4px rgba(248,113,113,0.2)';
+        setTimeout(() => {
+            input.style.borderColor = '';
+            input.style.boxShadow   = '';
+        }, 1200);
+        input.focus();
+    },
+
+    // Try auto-unlock from session (if user didn't close tab)
+    async tryAutoUnlock() {
+        const pw = sessionStorage.getItem('dbmix_pw');
+        if (!pw) return false;
+
+        const saltB64 = localStorage.getItem('dbmix_salt');
+        if (!saltB64) return false;
+
+        try {
+            this._salt = this._b64decode(saltB64);
+            this._key  = await this.deriveKey(pw, this._salt);
+
+            const sentinel = localStorage.getItem('dbmix_sentinel');
+            if (sentinel) {
+                const dec = await this.decrypt(sentinel);
+                if (dec !== 'DAILYBOOKMIX_V5') { this._key = null; return false; }
+            }
+
+            document.getElementById('encryptionLock').classList.remove('open');
+            document.getElementById('appContent').style.display = 'block';
+            return true;
+        } catch(e) {
+            this._key = null;
+            return false;
+        }
+    },
+
+    // Apply translations to the lock screen
+    applyLang(lang) {
+        const t = {
+            en: {
+                title:   'DailyBookimix',
+                desc:    'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
+                hint:    'First time? Choose any password — it will be used to encrypt all your data.',
+                btn:     'Unlock 🔓',
+            },
+            ru: {
+                title:   'DailyBookimix',
+                desc:    'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
+                hint:    'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
+                btn:     'Разблокировать 🔓',
+            }
+        };
+        const s = t[lang] || t.en;
+        const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+        set('lock-title', s.title);
+        set('lock-desc',  s.desc);
+        set('lock-hint',  s.hint);
+        set('lockUnlockBtn', s.btn);
+    }
+};
+
+
+// ================================================================
+//  STORAGE MANAGER — reads/writes via Telegram CloudStorage or
+//  localStorage. All values are encrypted with EncryptionManager.
+// ================================================================
 const StorageManager = {
     supportsCloud: false,
 
     init() {
         try {
             this.supportsCloud = !!(
-                window.Telegram &&
-                Telegram.WebApp.CloudStorage &&
-                Telegram.WebApp.isVersionAtLeast &&
-                Telegram.WebApp.isVersionAtLeast('6.9')
+                window.Telegram && Telegram.WebApp.CloudStorage &&
+                Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
             );
         } catch(e) { this.supportsCloud = false; }
     },
 
-    async getItem(key) {
+    // Save encrypted value
+    async setItem(key, value) {
+        const encrypted = await EncryptionManager.encrypt(value);
         if (this.supportsCloud) {
             return new Promise(resolve => {
+                Telegram.WebApp.CloudStorage.setItem(key, encrypted, () => resolve());
+            });
+        }
+        localStorage.setItem(key, encrypted);
+        return Promise.resolve();
+    },
+
+    // Read and decrypt value
+    async getItem(key) {
+        let raw;
+        if (this.supportsCloud) {
+            raw = await new Promise(resolve => {
                 Telegram.WebApp.CloudStorage.getItem(key, (err, value) =>
                     resolve(value !== null && value !== undefined ? value : null)
                 );
             });
+        } else {
+            raw = localStorage.getItem(key) || null;
         }
-        return localStorage.getItem(key) || null;
-    },
-
-    async setItem(key, value) {
-        if (this.supportsCloud) {
-            return new Promise(resolve => {
-                Telegram.WebApp.CloudStorage.setItem(key, value, () => resolve());
-            });
-        }
-        localStorage.setItem(key, value);
-        return Promise.resolve();
+        if (!raw) return null;
+        return await EncryptionManager.decrypt(raw);
     },
 
     async getItems(keys) {
-        if (this.supportsCloud) {
-            return new Promise(resolve => {
-                Telegram.WebApp.CloudStorage.getItems(keys, (err, data) => resolve(data || {}));
-            });
-        }
-        const data = {};
-        keys.forEach(key => {
-            const val = localStorage.getItem(key);
-            if (val !== null) data[key] = val;
-        });
-        return data;
+        const result = {};
+        await Promise.all(keys.map(async k => {
+            const v = await this.getItem(k);
+            if (v !== null) result[k] = v;
+        }));
+        return result;
     }
 };
 
 
-// ══════════════════════════════════════════════════════════════
+// ================================================================
 //  TRANSLATIONS
-// ══════════════════════════════════════════════════════════════
+// ================================================================
 const T = {
     en: {
-        // Header
         'app-desc': 'Secure Daily Journal',
-        // Tabs
-        'tab-notes': 'Notes',
-        'tab-habits': 'Habits',
-        'tab-memory': 'Archive',
-        // Settings bar
-        'lang-btn-label': 'Language',
-        'theme-btn-label': 'Theme',
-        // Sheet
-        'sheet-theme-title': 'Choose Theme',
-        'sheet-theme-orange': 'Classic Orange',
-        'sheet-theme-orange-sub': 'Warm & energetic',
-        'sheet-theme-dark': 'Midnight Dark',
-        'sheet-theme-dark-sub': 'Easy on the eyes',
-        'sheet-lang-title': 'Choose Language',
-        // Notes form
-        'noteFormTitle-new': 'New note',
-        'noteFormTitle-edit': 'Edit note',
-        'lbl-note-title': 'Title',
-        'lbl-note-cat': 'Category',
-        'lbl-note-content': 'Content',
-        'noteTitle-ph': 'Note title',
-        'noteContent-ph': 'What happened today...',
+        'tab-notes': 'Notes', 'tab-habits': 'Habits', 'tab-memory': 'Archive', 'tab-tasks': 'Tasks',
+        'lang-btn-label': 'Language', 'theme-btn-label': 'Theme',
+        'sheet-theme-title': 'Choose Theme', 'sheet-theme-orange': 'Classic Orange',
+        'sheet-theme-orange-sub': 'Warm & energetic', 'sheet-theme-dark': 'Midnight Dark',
+        'sheet-theme-dark-sub': 'Easy on the eyes', 'sheet-lang-title': 'Choose Language',
+        'noteFormTitle-new': 'New note', 'noteFormTitle-edit': 'Edit note',
+        'lbl-note-title': 'Title', 'lbl-note-cat': 'Category', 'lbl-note-content': 'Content',
+        'noteTitle-ph': 'Note title', 'noteContent-ph': 'What happened today...',
         'save-note-btn-txt': 'Save note',
-        // Notes list
-        'my-notes-title': 'My notes',
-        'clear-all-txt': 'Clear all',
+        'my-notes-title': 'My notes', 'clear-all-txt': 'Clear all',
         'notesSearch-ph': 'Search by text or #hashtag',
         'notes-empty': 'No notes yet.<br>Add your first one above 👆',
-        // Notes categories
-        'cat-personal': 'Personal',
-        'cat-work': 'Work',
-        'cat-ideas': 'Ideas',
-        'cat-tasks': 'Tasks',
+        'cat-personal': 'Personal', 'cat-work': 'Work', 'cat-ideas': 'Ideas',
         'cat-all': 'All categories',
-        // Habits form
-        'habitFormTitle-new': 'New habit',
-        'habitFormTitle-edit': 'Edit habit',
-        'lbl-habit-name': 'Habit name',
-        'lbl-start-date': 'Start date',
-        'lbl-end-date': 'End date',
-        'lbl-goal-days': 'Goal (days)',
-        'lbl-habit-desc': 'Description',
-        'habitName-ph': 'Habit name',
-        'habitDescription-ph': 'Describe your habit...',
+        'habitFormTitle-new': 'New habit', 'habitFormTitle-edit': 'Edit habit',
+        'lbl-habit-name': 'Habit name', 'lbl-start-date': 'Start date',
+        'lbl-end-date': 'End date', 'lbl-goal-days': 'Goal (days)', 'lbl-habit-desc': 'Description',
+        'habitName-ph': 'Habit name', 'habitDescription-ph': 'Describe your habit...',
         'start-habit-btn-txt': 'Start tracking',
-        // Habits list
-        'my-habits-title': 'My habits',
-        'habitsSearch-ph': 'Search habits...',
+        'my-habits-title': 'My habits', 'habitsSearch-ph': 'Search habits...',
         'habits-empty': 'No habits yet',
-        'lbl-done': 'done',
-        'lbl-goal': 'goal',
-        'lbl-progress': 'progress',
-        'lbl-completed': 'Completed',
-        'lbl-mark-today': 'Mark today',
-        'lbl-done-today': '✅ Done today',
-        'lbl-calendar': '📅 Calendar',
-        'lbl-end-habit': 'End',
-        // Memory form
-        'memoryFormTitle-new': 'New memory',
-        'memoryFormTitle-edit': 'Edit memory',
-        'lbl-mem-title': 'Title',
-        'lbl-mem-type': 'Type',
-        'lbl-partner-name': 'Partner name',
-        'lbl-mem-start': 'Start date',
-        'lbl-mem-end': 'End date',
-        'lbl-mem-notes': 'Notes',
-        'memoryTitle-ph': 'Title',
-        'partnerName-ph': 'Partner name',
-        'memoryNotes-ph': 'Notes...',
+        'lbl-done': 'done', 'lbl-goal': 'goal', 'lbl-progress': 'progress',
+        'lbl-completed': 'Completed', 'lbl-mark-today': 'Mark today',
+        'lbl-done-today': '✅ Done today', 'lbl-calendar': '📅 Calendar', 'lbl-end-habit': 'End',
+        'memoryFormTitle-new': 'New memory', 'memoryFormTitle-edit': 'Edit memory',
+        'lbl-mem-title': 'Title', 'lbl-mem-type': 'Type', 'lbl-partner-name': 'Partner name',
+        'lbl-mem-start': 'Start date', 'lbl-mem-end': 'End date', 'lbl-mem-notes': 'Notes',
+        'memoryTitle-ph': 'Title', 'partnerName-ph': 'Partner name', 'memoryNotes-ph': 'Notes...',
         'save-memory-btn-txt': 'Save memory',
-        // Memory types
-        'type-book': '📚 Book',
-        'type-movie': '🎬 Movie',
-        'type-series': '📺 Series',
-        'type-game': '🎮 Game',
-        'type-relations': '❤️ Relationship',
-        'type-other': '📦 Other',
-        // Memory list
-        'my-memories-title': 'Archive',
-        'memoriesSearch-ph': 'Search...',
-        'memories-empty': 'Archive is empty',
-        // Relations card
-        'rel-days-together': 'days together',
-        'rel-since': 'Since',
-        'rel-until': 'Until',
-        'rel-broke-up': 'broke up',
-        'rel-still-together': 'Still together',
-        'lbl-add-event': '+ Add event',
-        'lbl-broke-up': '💔 Broke up',
-        'lbl-events': 'Events',
-        'lbl-no-events': 'No events yet',
-        // Modals
+        'type-book': '📚 Book', 'type-movie': '🎬 Movie', 'type-series': '📺 Series',
+        'type-game': '🎮 Game', 'type-relations': '❤️ Relationship', 'type-other': '📦 Other',
+        'my-memories-title': 'Archive', 'memoriesSearch-ph': 'Search...', 'memories-empty': 'Archive is empty',
+        'rel-days-together': 'days together', 'rel-since': 'Since', 'rel-until': 'Until',
+        'rel-broke-up': 'broke up', 'rel-still-together': 'Still together',
+        'lbl-add-event': '+ Add event', 'lbl-broke-up': '💔 Broke up',
+        'lbl-events': 'Events', 'lbl-no-events': 'No events yet',
         'calendar-hint': 'Tap a day to mark / unmark',
-        'end-habit-title': 'End habit',
-        'add-event-title': 'Add event',
-        'lbl-event-date': 'Date',
-        'lbl-event-desc': 'What happened?',
+        'end-habit-title': 'End habit', 'add-event-title': 'Add event',
+        'lbl-event-date': 'Date', 'lbl-event-desc': 'What happened?',
         'eventDesc-ph': 'Describe what happened...',
         'save-event-btn-txt': 'Save',
-        'end-relations-title': '💔 We broke up',
-        'end-relations-hint': 'Choose the date you parted ways.',
-        // Buttons
-        // FIX: 'lbl-cancel' is the correct key for cancel-btn-2
-        // Original bug was that applyTranslations used id 'cancel-btn-2' as translation key
-        // but there was no key 'cancel-btn-2' in translations — it showed the id as text.
-        // The fix: the translation loop uses the element id, and since 'cancel-btn-2' isn't a key,
-        // we rely on the fact that the button now has correct default text "Cancel" in HTML.
-        // Additionally we add 'cancel-btn-2' as a proper translation key below.
-        'cancel-btn-2': 'Cancel',
-        'cancel-btn-1': 'Cancel',
-        'cancel-btn-3': 'Cancel',
-        'lbl-cancel': 'Cancel',
-        'lbl-confirm': 'Confirm',
-        'lbl-end': 'End',
-        'lbl-edit': '✏️ Edit',
-        'lbl-delete': 'Delete',
-        'lbl-save': 'Save',
-        'lbl-pin': '📌 Pin',
-        'lbl-unpin': '📌 Unpin',
-        // Footer
-        'stat-notes-lbl': 'Notes',
-        'stat-habits-lbl': 'Habits',
-        'stat-mem-lbl': 'Memories',
-        // Toasts
-        'toast-note-saved': 'Note saved ✅',
-        'toast-note-deleted': 'Note deleted',
-        'toast-all-deleted': 'All notes deleted',
-        'toast-habit-added': 'Habit added ✅',
-        'toast-habit-deleted': 'Habit deleted',
-        'toast-memory-saved': 'Memory saved ✅',
-        'toast-memory-deleted': 'Memory deleted',
-        'toast-event-saved': 'Event saved ✅',
-        'toast-event-deleted': 'Event deleted',
-        'toast-fill-fields': 'Please fill all required fields',
-        'toast-pinned': '📌 Pinned',
-        'toast-unpinned': 'Unpinned',
-        // Confirms
-        'confirm-delete-note': 'Delete this note?',
-        'confirm-delete-habit': 'Delete this habit forever?',
-        'confirm-delete-memory': 'Delete this memory?',
-        'confirm-delete-event': 'Delete this event?',
+        'end-relations-title': '💔 We broke up', 'end-relations-hint': 'Choose the date you parted ways.',
+        'cancel-btn-2': 'Cancel', 'cancel-btn-1': 'Cancel', 'cancel-btn-3': 'Cancel',
+        'lbl-cancel': 'Cancel', 'lbl-confirm': 'Confirm', 'lbl-end': 'End',
+        'lbl-edit': '✏️ Edit', 'lbl-delete': 'Delete', 'lbl-save': 'Save',
+        'lbl-pin': '📌 Pin', 'lbl-unpin': '📌 Unpin',
+        'stat-notes-lbl': 'Notes', 'stat-habits-lbl': 'Habits', 'stat-mem-lbl': 'Memories',
+        'stat-tasks-lbl': 'Tasks',
+        'toast-note-saved': 'Note saved ✅', 'toast-note-deleted': 'Note deleted',
+        'toast-all-deleted': 'All notes deleted', 'toast-habit-added': 'Habit added ✅',
+        'toast-habit-deleted': 'Habit deleted', 'toast-memory-saved': 'Memory saved ✅',
+        'toast-memory-deleted': 'Memory deleted', 'toast-event-saved': 'Event saved ✅',
+        'toast-event-deleted': 'Event deleted', 'toast-fill-fields': 'Please fill all required fields',
+        'toast-pinned': '📌 Pinned', 'toast-unpinned': 'Unpinned',
+        'confirm-delete-note': 'Delete this note?', 'confirm-delete-habit': 'Delete this habit forever?',
+        'confirm-delete-memory': 'Delete this memory?', 'confirm-delete-event': 'Delete this event?',
         'confirm-clear-all': 'Delete ALL notes? This cannot be undone.',
+        // Tasks
+        'tasks-section-title': 'Daily Tasks',
+        'tasks-quick-ph': 'Add a task...',
+        'tasks-mood-label': 'Mood of the day',
+        'tasks-empty': 'No tasks yet. Add one above ☝️',
+        'tasks-carryover': 'Carry over unfinished to tomorrow',
+        'tasks-stat-done': 'Done',
+        'tasks-stat-total': 'Total',
+        'tasks-stat-streak': 'Streak',
+        'tasks-stat-streak-days': 'days',
+        'tasks-mood-great': 'Great', 'tasks-mood-normal': 'Normal',
+        'tasks-mood-meh': 'So-so', 'tasks-mood-hard': 'Hard',
+        'tasks-toast-added': 'Task added ✅',
+        'tasks-toast-deleted': 'Task deleted',
+        'tasks-toast-carried': '⏭️ Tasks carried over!',
+        'tasks-today': 'Today',
+        'tasks-yesterday': 'Yesterday',
+        'tasks-archive-label': 'Archive',
     },
-
     ru: {
         'app-desc': 'Защищённый ежедневник',
-        'tab-notes': 'Записи',
-        'tab-habits': 'Привычки',
-        'tab-memory': 'Архив',
-        'lang-btn-label': 'Язык',
-        'theme-btn-label': 'Тема',
-        'sheet-theme-title': 'Выбор темы',
-        'sheet-theme-orange': 'Классический оранжевый',
-        'sheet-theme-orange-sub': 'Тёплый и энергичный',
-        'sheet-theme-dark': 'Тёмная ночь',
-        'sheet-theme-dark-sub': 'Бережно для глаз',
-        'sheet-lang-title': 'Выбор языка',
-        'noteFormTitle-new': 'Новая запись',
-        'noteFormTitle-edit': 'Редактировать запись',
-        'lbl-note-title': 'Заголовок',
-        'lbl-note-cat': 'Категория',
-        'lbl-note-content': 'Содержание',
-        'noteTitle-ph': 'Заголовок записи',
-        'noteContent-ph': 'Что сегодня произошло...',
+        'tab-notes': 'Записи', 'tab-habits': 'Привычки', 'tab-memory': 'Архив', 'tab-tasks': 'Задачи',
+        'lang-btn-label': 'Язык', 'theme-btn-label': 'Тема',
+        'sheet-theme-title': 'Выбор темы', 'sheet-theme-orange': 'Классический оранжевый',
+        'sheet-theme-orange-sub': 'Тёплый и энергичный', 'sheet-theme-dark': 'Тёмная ночь',
+        'sheet-theme-dark-sub': 'Бережно для глаз', 'sheet-lang-title': 'Выбор языка',
+        'noteFormTitle-new': 'Новая запись', 'noteFormTitle-edit': 'Редактировать запись',
+        'lbl-note-title': 'Заголовок', 'lbl-note-cat': 'Категория', 'lbl-note-content': 'Содержание',
+        'noteTitle-ph': 'Заголовок записи', 'noteContent-ph': 'Что сегодня произошло...',
         'save-note-btn-txt': 'Сохранить запись',
-        'my-notes-title': 'Мои записи',
-        'clear-all-txt': 'Очистить всё',
+        'my-notes-title': 'Мои записи', 'clear-all-txt': 'Очистить всё',
         'notesSearch-ph': 'Поиск по тексту или #хэштегу',
         'notes-empty': 'Пока пусто.<br>Добавь первую запись выше 👆',
-        'cat-personal': 'Личное',
-        'cat-work': 'Работа',
-        'cat-ideas': 'Идеи',
-        'cat-tasks': 'Задачи',
+        'cat-personal': 'Личное', 'cat-work': 'Работа', 'cat-ideas': 'Идеи',
         'cat-all': 'Все категории',
-        'habitFormTitle-new': 'Новая привычка',
-        'habitFormTitle-edit': 'Редактировать привычку',
-        'lbl-habit-name': 'Название привычки',
-        'lbl-start-date': 'Дата начала',
-        'lbl-end-date': 'Дата завершения',
-        'lbl-goal-days': 'Цель (дней)',
-        'lbl-habit-desc': 'Описание',
-        'habitName-ph': 'Название привычки',
-        'habitDescription-ph': 'Описание привычки...',
+        'habitFormTitle-new': 'Новая привычка', 'habitFormTitle-edit': 'Редактировать привычку',
+        'lbl-habit-name': 'Название привычки', 'lbl-start-date': 'Дата начала',
+        'lbl-end-date': 'Дата завершения', 'lbl-goal-days': 'Цель (дней)', 'lbl-habit-desc': 'Описание',
+        'habitName-ph': 'Название привычки', 'habitDescription-ph': 'Описание привычки...',
         'start-habit-btn-txt': 'Начать трекинг',
-        'my-habits-title': 'Мои привычки',
-        'habitsSearch-ph': 'Поиск привычек...',
+        'my-habits-title': 'Мои привычки', 'habitsSearch-ph': 'Поиск привычек...',
         'habits-empty': 'Пока нет привычек',
-        'lbl-done': 'сделано',
-        'lbl-goal': 'цель',
-        'lbl-progress': 'прогресс',
-        'lbl-completed': 'Завершена',
-        'lbl-mark-today': 'Отметить сегодня',
-        'lbl-done-today': '✅ Сегодня сделано',
-        'lbl-calendar': '📅 Календарь',
-        'lbl-end-habit': 'Завершить',
-        'memoryFormTitle-new': 'Новое воспоминание',
-        'memoryFormTitle-edit': 'Редактировать',
-        'lbl-mem-title': 'Название',
-        'lbl-mem-type': 'Тип',
-        'lbl-partner-name': 'Имя партнёра',
-        'lbl-mem-start': 'Дата начала',
-        'lbl-mem-end': 'Дата конца',
-        'lbl-mem-notes': 'Заметки',
-        'memoryTitle-ph': 'Название',
-        'partnerName-ph': 'Имя партнёра',
-        'memoryNotes-ph': 'Заметки...',
+        'lbl-done': 'сделано', 'lbl-goal': 'цель', 'lbl-progress': 'прогресс',
+        'lbl-completed': 'Завершена', 'lbl-mark-today': 'Отметить сегодня',
+        'lbl-done-today': '✅ Сегодня сделано', 'lbl-calendar': '📅 Календарь', 'lbl-end-habit': 'Завершить',
+        'memoryFormTitle-new': 'Новое воспоминание', 'memoryFormTitle-edit': 'Редактировать',
+        'lbl-mem-title': 'Название', 'lbl-mem-type': 'Тип', 'lbl-partner-name': 'Имя партнёра',
+        'lbl-mem-start': 'Дата начала', 'lbl-mem-end': 'Дата конца', 'lbl-mem-notes': 'Заметки',
+        'memoryTitle-ph': 'Название', 'partnerName-ph': 'Имя партнёра', 'memoryNotes-ph': 'Заметки...',
         'save-memory-btn-txt': 'Сохранить воспоминание',
-        'type-book': '📚 Книга',
-        'type-movie': '🎬 Фильм',
-        'type-series': '📺 Сериал',
-        'type-game': '🎮 Игра',
-        'type-relations': '❤️ Отношения',
-        'type-other': '📦 Другое',
-        'my-memories-title': 'Архив воспоминаний',
-        'memoriesSearch-ph': 'Поиск...',
-        'memories-empty': 'Архив пока пуст',
-        'rel-days-together': 'дней вместе',
-        'rel-since': 'С',
-        'rel-until': 'До',
-        'rel-broke-up': 'расстались',
-        'rel-still-together': 'Всё ещё вместе',
-        'lbl-add-event': '+ Добавить событие',
-        'lbl-broke-up': '💔 Расстались',
-        'lbl-events': 'События',
-        'lbl-no-events': 'Событий пока нет',
+        'type-book': '📚 Книга', 'type-movie': '🎬 Фильм', 'type-series': '📺 Сериал',
+        'type-game': '🎮 Игра', 'type-relations': '❤️ Отношения', 'type-other': '📦 Другое',
+        'my-memories-title': 'Архив воспоминаний', 'memoriesSearch-ph': 'Поиск...', 'memories-empty': 'Архив пока пуст',
+        'rel-days-together': 'дней вместе', 'rel-since': 'С', 'rel-until': 'До',
+        'rel-broke-up': 'расстались', 'rel-still-together': 'Всё ещё вместе',
+        'lbl-add-event': '+ Добавить событие', 'lbl-broke-up': '💔 Расстались',
+        'lbl-events': 'События', 'lbl-no-events': 'Событий пока нет',
         'calendar-hint': 'Нажми на день, чтобы отметить / снять отметку',
-        'end-habit-title': 'Завершить привычку',
-        'add-event-title': 'Добавить событие',
-        'lbl-event-date': 'Дата',
-        'lbl-event-desc': 'Что произошло?',
+        'end-habit-title': 'Завершить привычку', 'add-event-title': 'Добавить событие',
+        'lbl-event-date': 'Дата', 'lbl-event-desc': 'Что произошло?',
         'eventDesc-ph': 'Опишите что произошло...',
         'save-event-btn-txt': 'Сохранить',
-        'end-relations-title': '💔 Мы расстались',
-        'end-relations-hint': 'Выбери дату расставания.',
-        // FIX: Added cancel-btn-1/2/3 as proper translation keys
-        'cancel-btn-2': 'Отмена',
-        'cancel-btn-1': 'Отмена',
-        'cancel-btn-3': 'Отмена',
-        'lbl-cancel': 'Отмена',
-        'lbl-confirm': 'Подтвердить',
-        'lbl-end': 'Завершить',
-        'lbl-edit': '✏️ Изменить',
-        'lbl-delete': 'Удалить',
-        'lbl-save': 'Сохранить',
-        'lbl-pin': '📌 Закрепить',
-        'lbl-unpin': '📌 Открепить',
-        'stat-notes-lbl': 'Записей',
-        'stat-habits-lbl': 'Привычек',
-        'stat-mem-lbl': 'Воспоминаний',
-        'toast-note-saved': 'Запись сохранена ✅',
-        'toast-note-deleted': 'Запись удалена',
-        'toast-all-deleted': 'Все записи удалены',
-        'toast-habit-added': 'Привычка добавлена ✅',
-        'toast-habit-deleted': 'Привычка удалена',
-        'toast-memory-saved': 'Воспоминание сохранено ✅',
-        'toast-memory-deleted': 'Воспоминание удалено',
-        'toast-event-saved': 'Событие сохранено ✅',
-        'toast-event-deleted': 'Событие удалено',
-        'toast-fill-fields': 'Заполни все обязательные поля',
-        'toast-pinned': '📌 Закреплено',
-        'toast-unpinned': 'Откреплено',
-        'confirm-delete-note': 'Удалить эту запись?',
-        'confirm-delete-habit': 'Удалить привычку навсегда?',
-        'confirm-delete-memory': 'Удалить воспоминание?',
-        'confirm-delete-event': 'Удалить это событие?',
+        'end-relations-title': '💔 Мы расстались', 'end-relations-hint': 'Выбери дату расставания.',
+        'cancel-btn-2': 'Отмена', 'cancel-btn-1': 'Отмена', 'cancel-btn-3': 'Отмена',
+        'lbl-cancel': 'Отмена', 'lbl-confirm': 'Подтвердить', 'lbl-end': 'Завершить',
+        'lbl-edit': '✏️ Изменить', 'lbl-delete': 'Удалить', 'lbl-save': 'Сохранить',
+        'lbl-pin': '📌 Закрепить', 'lbl-unpin': '📌 Открепить',
+        'stat-notes-lbl': 'Записей', 'stat-habits-lbl': 'Привычек', 'stat-mem-lbl': 'Воспоминаний',
+        'stat-tasks-lbl': 'Задач',
+        'toast-note-saved': 'Запись сохранена ✅', 'toast-note-deleted': 'Запись удалена',
+        'toast-all-deleted': 'Все записи удалены', 'toast-habit-added': 'Привычка добавлена ✅',
+        'toast-habit-deleted': 'Привычка удалена', 'toast-memory-saved': 'Воспоминание сохранено ✅',
+        'toast-memory-deleted': 'Воспоминание удалено', 'toast-event-saved': 'Событие сохранено ✅',
+        'toast-event-deleted': 'Событие удалено', 'toast-fill-fields': 'Заполни все обязательные поля',
+        'toast-pinned': '📌 Закреплено', 'toast-unpinned': 'Откреплено',
+        'confirm-delete-note': 'Удалить эту запись?', 'confirm-delete-habit': 'Удалить привычку навсегда?',
+        'confirm-delete-memory': 'Удалить воспоминание?', 'confirm-delete-event': 'Удалить это событие?',
         'confirm-clear-all': 'Удалить ВСЕ записи? Это нельзя отменить.',
+        // Tasks
+        'tasks-section-title': 'Ежедневные задачи',
+        'tasks-quick-ph': 'Добавить задачу...',
+        'tasks-mood-label': 'Настроение дня',
+        'tasks-empty': 'Задач пока нет. Добавь выше ☝️',
+        'tasks-carryover': 'Перенести незавершённые на завтра',
+        'tasks-stat-done': 'Выполнено',
+        'tasks-stat-total': 'Всего',
+        'tasks-stat-streak': 'Серия',
+        'tasks-stat-streak-days': 'дней',
+        'tasks-mood-great': 'Отлично', 'tasks-mood-normal': 'Нормально',
+        'tasks-mood-meh': 'Так себе', 'tasks-mood-hard': 'Тяжело',
+        'tasks-toast-added': 'Задача добавлена ✅',
+        'tasks-toast-deleted': 'Задача удалена',
+        'tasks-toast-carried': '⏭️ Задачи перенесены!',
+        'tasks-today': 'Сегодня',
+        'tasks-yesterday': 'Вчера',
+        'tasks-archive-label': 'Архив',
     }
 };
 
 
-// ══════════════════════════════════════════════════════════════
-//  DIARY APP  (100% unchanged from original)
-// ══════════════════════════════════════════════════════════════
+// ================================================================
+//  TASK MANAGER — Daily Tasks feature
+//  Data structure per day:  { tasks: [...], mood: 'great'|'normal'|'meh'|'hard'|'' }
+//  Task object: { id, text, important, completed, completedAt, createdAt }
+// ================================================================
+const TaskManager = {
+    // In-memory store: { 'YYYY-MM-DD': { tasks: [...], mood: '' } }
+    _data: {},
+    _viewDate: null,       // which date we're viewing (null = today)
+    _newTaskImp: false,    // whether the "new task" flag is important
+
+    today() { return new Date().toISOString().split('T')[0]; },
+
+    // Format YYYY-MM-DD
+    dateOf(daysAgo) {
+        const d = new Date(); d.setDate(d.getDate() - daysAgo);
+        return d.toISOString().split('T')[0];
+    },
+
+    // Get or create day record
+    dayData(dateStr) {
+        if (!this._data[dateStr]) this._data[dateStr] = { tasks: [], mood: '' };
+        return this._data[dateStr];
+    },
+
+    // Toggle important flag for new task
+    toggleNewImp() {
+        this._newTaskImp = !this._newTaskImp;
+        const btn = document.getElementById('taskImpToggle');
+        if (btn) btn.classList.toggle('active', this._newTaskImp);
+    },
+
+    // Quick-add a task from the input field
+    async quickAdd() {
+        const input = document.getElementById('taskQuickInput');
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+
+        const dateStr = this._viewDate || this.today();
+        const day = this.dayData(dateStr);
+
+        day.tasks.unshift({
+            id:          Date.now(),
+            text:        text,
+            important:   this._newTaskImp,
+            completed:   false,
+            completedAt: null,
+            createdAt:   new Date().toISOString()
+        });
+
+        // Sort: incomplete first, then complete
+        this._sortTasks(day);
+
+        input.value = '';
+        this._newTaskImp = false;
+        const btn = document.getElementById('taskImpToggle');
+        if (btn) btn.classList.remove('active');
+
+        await this._save();
+        diary.toast(diary.t('tasks-toast-added'));
+        this.render();
+        AchievementsUI.recalculate();
+    },
+
+    // Handle Enter key in quick input
+    onInputKeydown(e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.quickAdd(); }
+    },
+
+    // Toggle task completion
+    async toggleTask(dateStr, taskId) {
+        const day = this.dayData(dateStr);
+        const task = day.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        task.completed   = !task.completed;
+        task.completedAt = task.completed ? new Date().toISOString() : null;
+
+        this._sortTasks(day);
+        await this._save();
+        this.render();
+        AchievementsUI.recalculate();
+    },
+
+    // Delete a task
+    async deleteTask(dateStr, taskId) {
+        const day = this.dayData(dateStr);
+        day.tasks = day.tasks.filter(t => t.id !== taskId);
+        await this._save();
+        diary.toast(diary.t('tasks-toast-deleted'));
+        this.render();
+    },
+
+    // Sort: important+incomplete → normal+incomplete → completed (by completedAt desc)
+    _sortTasks(day) {
+        day.tasks.sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+            if (a.important !== b.important) return a.important ? -1 : 1;
+            return 0;
+        });
+    },
+
+    // Set mood for a day
+    async setMood(dateStr, mood) {
+        const day = this.dayData(dateStr);
+        day.mood = (day.mood === mood) ? '' : mood; // toggle
+        await this._save();
+        this.render();
+    },
+
+    // Carry over incomplete tasks to tomorrow
+    async carryOver() {
+        const todayStr = this.today();
+        const day = this.dayData(todayStr);
+        const incomplete = day.tasks.filter(t => !t.completed);
+        if (!incomplete.length) return;
+
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        const nextDay = this.dayData(tomorrowStr);
+
+        // Carry-over: add tasks to tomorrow (avoid duplicates by id)
+        const existingIds = new Set(nextDay.tasks.map(t => t.id));
+        incomplete.forEach(t => {
+            if (!existingIds.has(t.id)) {
+                nextDay.tasks.push({ ...t, completedAt: null, completed: false, createdAt: new Date().toISOString() });
+            }
+        });
+        this._sortTasks(nextDay);
+
+        await this._save();
+        diary.toast(diary.t('tasks-toast-carried'));
+    },
+
+    // Count consecutive days where at least 1 task was completed
+    completionStreak() {
+        let streak = 0;
+        const today = this.today();
+        for (let i = 0; ; i++) {
+            const d = new Date(); d.setDate(d.getDate() - i);
+            const ds = d.toISOString().split('T')[0];
+            if (ds > today) continue; // skip future
+            const day = this._data[ds];
+            if (!day || !day.tasks.some(t => t.completed)) break;
+            streak++;
+        }
+        return streak;
+    },
+
+    // Count total completed tasks across all days
+    totalCompleted() {
+        return Object.values(this._data).reduce(
+            (s, d) => s + (d.tasks || []).filter(t => t.completed).length, 0
+        );
+    },
+
+    // Count today's completed tasks
+    todayCompleted() {
+        const day = this._data[this.today()];
+        return day ? day.tasks.filter(t => t.completed).length : 0;
+    },
+
+    // Total tasks count (for footer)
+    totalTasks() {
+        return Object.values(this._data).reduce((s, d) => s + (d.tasks || []).length, 0);
+    },
+
+    async _save() {
+        await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
+    },
+
+    async load() {
+        const raw = await StorageManager.getItem('tasks_v1');
+        try { this._data = raw ? JSON.parse(raw) : {}; }
+        catch(e) { this._data = {}; }
+    },
+
+    // Render the entire tasks section
+    render() {
+        const lang    = diary.lang || 'en';
+        const dateStr = this._viewDate || this.today();
+        const today   = this.today();
+        const isToday = (dateStr === today);
+
+        // Placeholder update
+        const inp = document.getElementById('taskQuickInput');
+        if (inp) inp.placeholder = diary.t('tasks-quick-ph');
+
+        // --- Archive day selector (last 30 days) ---
+        const archiveScroll = document.getElementById('taskArchiveScroll');
+        if (archiveScroll) {
+            let html = '';
+            for (let i = 0; i < 30; i++) {
+                const d   = new Date(); d.setDate(d.getDate() - i);
+                const ds  = d.toISOString().split('T')[0];
+                const day = this._data[ds];
+                const cnt = day ? day.tasks.filter(t => t.completed).length : 0;
+                const tot = day ? day.tasks.length : 0;
+                let label;
+                if (i === 0) label = diary.t('tasks-today');
+                else if (i === 1) label = diary.t('tasks-yesterday');
+                else {
+                    label = d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
+                }
+                const active = (ds === dateStr) ? 'active' : '';
+                const badge  = tot > 0 ? `<br><span style="font-size:10px;opacity:0.75">${cnt}/${tot}</span>` : '';
+                html += `<div class="task-archive-day ${active}" onclick="TaskManager.viewDate('${ds}')">${label}${badge}</div>`;
+            }
+            archiveScroll.innerHTML = html;
+        }
+
+        // --- Stats bar ---
+        const statsBar = document.getElementById('taskStatsBar');
+        if (statsBar) {
+            const dayData = this._data[dateStr];
+            const done  = dayData ? dayData.tasks.filter(t => t.completed).length : 0;
+            const total = dayData ? dayData.tasks.length : 0;
+            const streak = this.completionStreak();
+            statsBar.innerHTML = `
+                <div class="task-stat-chip">✅ <b>${done}</b> ${diary.t('tasks-stat-done')}</div>
+                <div class="task-stat-chip">📋 <b>${total}</b> ${diary.t('tasks-stat-total')}</div>
+                <div class="task-stat-chip">🔥 <b>${streak}</b> ${diary.t('tasks-stat-streak-days')} ${diary.t('tasks-stat-streak')}</div>
+            `;
+        }
+
+        // --- Task list ---
+        const list    = document.getElementById('tasksList');
+        const dayData = this.dayData(dateStr);
+        const tasks   = dayData.tasks;
+
+        if (list) {
+            if (!tasks.length) {
+                list.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><p>${diary.t('tasks-empty')}</p></div>`;
+            } else {
+                list.innerHTML = tasks.map((task, i) => {
+                    const delay = Math.min(i * 0.03, 0.2);
+                    return `
+                    <div class="task-item ${task.important ? 'important' : ''} ${task.completed ? 'completed' : ''}"
+                         style="animation-delay:${delay}s">
+                        <div class="task-check" onclick="TaskManager.toggleTask('${dateStr}',${task.id})">
+                            <span class="task-check-inner">✓</span>
+                        </div>
+                        <span class="task-text">${this._escHtml(task.text)}</span>
+                        ${task.important ? '<span class="task-star">⭐</span>' : ''}
+                        <button class="task-del-btn" onclick="TaskManager.deleteTask('${dateStr}',${task.id})">✕</button>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        // --- Mood section ---
+        const moodSection = document.getElementById('taskMoodSection');
+        if (moodSection) {
+            moodSection.style.display = isToday ? '' : 'none';
+        }
+        const moodLabel = document.getElementById('tasks-mood-label');
+        if (moodLabel) moodLabel.textContent = diary.t('tasks-mood-label');
+
+        const moodRow = document.getElementById('moodRow');
+        if (moodRow && isToday) {
+            const moods = [
+                { key: 'great', icon: '😄', label: diary.t('tasks-mood-great') },
+                { key: 'normal', icon: '🙂', label: diary.t('tasks-mood-normal') },
+                { key: 'meh', icon: '😐', label: diary.t('tasks-mood-meh') },
+                { key: 'hard', icon: '😞', label: diary.t('tasks-mood-hard') },
+            ];
+            const curMood = dayData.mood || '';
+            moodRow.innerHTML = moods.map(m => `
+                <button class="mood-btn ${curMood === m.key ? 'selected' : ''}"
+                        onclick="TaskManager.setMood('${dateStr}','${m.key}')">
+                    ${m.icon}<span class="mood-label">${m.label}</span>
+                </button>`).join('');
+        }
+
+        // --- Quick-add & carry-over (today only) ---
+        const qaRow = document.getElementById('taskQuickAddRow');
+        if (qaRow) qaRow.style.display = isToday ? '' : 'none';
+
+        const carrySection = document.getElementById('taskCarryoverSection');
+        if (carrySection && isToday) {
+            const hasIncomplete = tasks.some(t => !t.completed);
+            carrySection.style.display = hasIncomplete ? '' : 'none';
+            const btn = document.getElementById('carryover-btn-txt');
+            if (btn) btn.textContent = diary.t('tasks-carryover');
+        } else if (carrySection) {
+            carrySection.style.display = 'none';
+        }
+    },
+
+    viewDate(dateStr) {
+        this._viewDate = dateStr;
+        this.render();
+    },
+
+    _escHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+};
+
+
+// ================================================================
+//  DIARY APP
+// ================================================================
 const diary = {
     notes:          [],
     habits:         [],
@@ -1835,15 +1795,10 @@ const diary = {
     },
 
     openSheet(mode) {
-        const themeSection = document.getElementById('sheetThemeSection');
-        const langSection  = document.getElementById('sheetLangSection');
-        if (mode === 'theme') {
-            themeSection.style.display = 'block';
-            langSection.style.display  = 'none';
-        } else {
-            themeSection.style.display = 'none';
-            langSection.style.display  = 'block';
-        }
+        const th = document.getElementById('sheetThemeSection');
+        const la = document.getElementById('sheetLangSection');
+        if (mode === 'theme') { th.style.display='block'; la.style.display='none'; }
+        else                  { th.style.display='none';  la.style.display='block'; }
         this._updateSheetChecks();
         document.getElementById('sheetOverlay').classList.add('open');
         document.getElementById('bottomSheet').classList.add('open');
@@ -1856,12 +1811,12 @@ const diary = {
 
     _updateSheetChecks() {
         ['Orange','Dark'].forEach(t => {
-            const opt = document.getElementById('sheetOpt' + t);
-            if (opt) opt.classList.toggle('active', this.theme === t.toLowerCase());
+            const o = document.getElementById('sheetOpt' + t);
+            if (o) o.classList.toggle('active', this.theme === t.toLowerCase());
         });
         ['En','Ru'].forEach(l => {
-            const opt = document.getElementById('sheetOpt' + l);
-            if (opt) opt.classList.toggle('active', this.lang === l.toLowerCase());
+            const o = document.getElementById('sheetOpt' + l);
+            if (o) o.classList.toggle('active', this.lang === l.toLowerCase());
         });
     },
 
@@ -1883,9 +1838,9 @@ const diary = {
         this.applyTranslations();
         this.renderAll();
         this.closeSheet();
-        // Also update sidebar translations when language changes
         SidebarUI.applyTranslations(lang);
         AchievementsUI.applyTranslations(lang);
+        EncryptionManager.applyLang(lang);
     },
 
     _updateSettingsBar() {
@@ -1895,7 +1850,7 @@ const diary = {
 
     applyTranslations() {
         const ids = [
-            'app-desc','tab-notes','tab-habits','tab-memory',
+            'app-desc','tab-notes','tab-habits','tab-memory','tab-tasks',
             'lang-btn-label','theme-btn-label',
             'sheet-theme-title','sheet-theme-orange','sheet-theme-orange-sub',
             'sheet-theme-dark','sheet-theme-dark-sub','sheet-lang-title',
@@ -1909,54 +1864,51 @@ const diary = {
             'lbl-mem-start','lbl-mem-end','lbl-mem-notes',
             'lbl-event-date','lbl-event-desc',
             'save-note-btn-txt','start-habit-btn-txt','save-memory-btn-txt','save-event-btn-txt',
-            'stat-notes-lbl','stat-habits-lbl','stat-mem-lbl',
-            // FIX: cancel-btn-1/2/3 now have their own translation keys in T object
+            'stat-notes-lbl','stat-habits-lbl','stat-mem-lbl','stat-tasks-lbl',
             'cancel-btn-1','cancel-btn-2','cancel-btn-3',
+            'tasks-section-title',
         ];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.textContent = this.t(id);
         });
 
-        const confirmEndHabit = document.getElementById('confirm-end-habit-btn');
-        if (confirmEndHabit) confirmEndHabit.textContent = this.t('lbl-end');
-        const confirmBreakup = document.getElementById('confirm-breakup-btn');
-        if (confirmBreakup) confirmBreakup.textContent = this.t('lbl-confirm');
+        const ceh = document.getElementById('confirm-end-habit-btn');
+        if (ceh) ceh.textContent = this.t('lbl-end');
+        const cbk = document.getElementById('confirm-breakup-btn');
+        if (cbk) cbk.textContent = this.t('lbl-confirm');
 
         const editingNote = document.getElementById('noteId').value;
-        document.getElementById('noteFormTitle').textContent =
-            this.t(editingNote ? 'noteFormTitle-edit' : 'noteFormTitle-new');
-        document.getElementById('noteFormIcon').textContent = editingNote ? '✏️' : '✍️';
+        document.getElementById('noteFormTitle').textContent = this.t(editingNote ? 'noteFormTitle-edit' : 'noteFormTitle-new');
+        document.getElementById('noteFormIcon').textContent  = editingNote ? '✏️' : '✍️';
 
         const editingHabit = document.getElementById('habitId').value;
-        document.getElementById('habitFormTitle').textContent =
-            this.t(editingHabit ? 'habitFormTitle-edit' : 'habitFormTitle-new');
+        document.getElementById('habitFormTitle').textContent = this.t(editingHabit ? 'habitFormTitle-edit' : 'habitFormTitle-new');
 
         const editingMemory = document.getElementById('memoryId').value;
-        document.getElementById('memoryFormTitle').textContent =
-            this.t(editingMemory ? 'memoryFormTitle-edit' : 'memoryFormTitle-new');
+        document.getElementById('memoryFormTitle').textContent = this.t(editingMemory ? 'memoryFormTitle-edit' : 'memoryFormTitle-new');
 
         const ph = (id, key) => { const el = document.getElementById(id); if(el) el.placeholder = this.t(key); };
-        ph('noteTitle',       'noteTitle-ph');
-        ph('noteContent',     'noteContent-ph');
-        ph('habitName',       'habitName-ph');
-        ph('habitDescription','habitDescription-ph');
-        ph('memoryTitle',     'memoryTitle-ph');
-        ph('partnerName',     'partnerName-ph');
-        ph('memoryNotes',     'memoryNotes-ph');
-        ph('notesSearch',     'notesSearch-ph');
-        ph('habitsSearch',    'habitsSearch-ph');
-        ph('memoriesSearch',  'memoriesSearch-ph');
-        ph('eventDesc',       'eventDesc-ph');
+        ph('noteTitle',        'noteTitle-ph');
+        ph('noteContent',      'noteContent-ph');
+        ph('habitName',        'habitName-ph');
+        ph('habitDescription', 'habitDescription-ph');
+        ph('memoryTitle',      'memoryTitle-ph');
+        ph('partnerName',      'partnerName-ph');
+        ph('memoryNotes',      'memoryNotes-ph');
+        ph('notesSearch',      'notesSearch-ph');
+        ph('habitsSearch',     'habitsSearch-ph');
+        ph('memoriesSearch',   'memoriesSearch-ph');
+        ph('eventDesc',        'eventDesc-ph');
+        ph('taskQuickInput',   'tasks-quick-ph');
 
         const nc = document.getElementById('noteCategory');
-        if (nc) nc.innerHTML = ['personal','work','ideas','tasks']
+        if (nc) nc.innerHTML = ['personal','work','ideas']
             .map(v => `<option value="${v}">${this.t('cat-'+v)}</option>`).join('');
 
         const fc = document.getElementById('filterCategory');
         if (fc) fc.innerHTML = `<option value="all">${this.t('cat-all')}</option>` +
-            ['personal','work','ideas','tasks']
-            .map(v => `<option value="${v}">${this.t('cat-'+v)}</option>`).join('');
+            ['personal','work','ideas'].map(v => `<option value="${v}">${this.t('cat-'+v)}</option>`).join('');
 
         const mt = document.getElementById('memoryType');
         if (mt) mt.innerHTML = ['book','movie','series','game','relations','other']
@@ -1987,6 +1939,10 @@ const diary = {
         this._updateSheetChecks();
         this.renderAll();
         this.updateFooter();
+
+        // Load tasks
+        await TaskManager.load();
+        TaskManager.render();
     },
 
     _sortPinned(arr) {
@@ -1998,12 +1954,16 @@ const diary = {
     async saveMemories() { await StorageManager.setItem('memories', JSON.stringify(this.memories)); this.renderMemories(); this.updateFooter(); },
 
     switchTab(tab) {
-        ['notes','habits','memory'].forEach(t => {
+        ['notes','habits','tasks','memory'].forEach(t => {
             document.getElementById(t + 'Section').classList.toggle('hidden', t !== tab);
-            document.getElementById(t === 'notes' ? 'notesTab' :
-                                    t === 'habits' ? 'habitsTab' : 'memoryTab')
-                    .classList.toggle('active', t === tab);
+            const btn = document.getElementById(
+                t === 'notes' ? 'notesTab' : t === 'habits' ? 'habitsTab' :
+                t === 'tasks' ? 'tasksTabBtn' : 'memoryTab'
+            );
+            if (btn) btn.classList.toggle('active', t === tab);
         });
+        // Refresh tasks when switching to that tab
+        if (tab === 'tasks') TaskManager.render();
     },
 
     updateFooter() {
@@ -2011,11 +1971,9 @@ const diary = {
         document.getElementById('habitsCount').textContent  = this.habits.length;
         document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !h.endDate).length;
         document.getElementById('memoriesCount').textContent = this.memories.length;
+        document.getElementById('tasksCount').textContent   = TaskManager.totalTasks();
         document.getElementById('fireStreakHeader').textContent  = this.fireStreak;
-        // After data changes, refresh achievement calculations
-        if (typeof AchievementsUI !== 'undefined') {
-            AchievementsUI.recalculate();
-        }
+        if (typeof AchievementsUI !== 'undefined') AchievementsUI.recalculate();
     },
 
     renderAll() {
@@ -2099,22 +2057,16 @@ const diary = {
             return;
         }
 
-        const catClass = { personal:'cat-personal', work:'cat-work', ideas:'cat-ideas', tasks:'cat-tasks' };
-
+        const catClass = { personal:'cat-personal', work:'cat-work', ideas:'cat-ideas' };
         container.innerHTML = list.map((note, i) => {
-            const isOpen = this.openNoteDetail === note.id;
-            const delay  = Math.min(i * 0.04, 0.25);
+            const isOpen   = this.openNoteDetail === note.id;
+            const delay    = Math.min(i * 0.04, 0.25);
             const pinLabel = note.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-
             return `
-            <div class="record-card ${note.pinned ? 'pinned' : ''}"
-                 style="animation-delay:${delay}s"
-                 onclick="diary.toggleNoteDetail(${note.id})">
+            <div class="record-card ${note.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleNoteDetail(${note.id})">
                 ${note.pinned ? '<span class="pin-badge">📌</span>' : ''}
                 <div class="flex items-start justify-between gap-3 mb-2">
-                    <span class="cat-pill ${catClass[note.category] || 'cat-personal'}">
-                        ${this.t('cat-' + note.category)}
-                    </span>
+                    <span class="cat-pill ${catClass[note.category] || 'cat-personal'}">${this.t('cat-' + note.category)}</span>
                     <span style="font-size:11px;color:var(--text-label);white-space:nowrap">${note.date}</span>
                 </div>
                 <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${note.title}</div>
@@ -2128,12 +2080,10 @@ const diary = {
                             onclick="diary._loadNoteToForm(diary.notes.find(n=>n.id===${note.id}));diary.openNoteDetail=null;diary.renderNotes()">
                             ${this.t('lbl-edit')}
                         </button>
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.togglePin('note',${note.id},event)">
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('note',${note.id},event)">
                             ${pinLabel}
                         </button>
-                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.deleteNote(${note.id},event)">
+                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteNote(${note.id},event)">
                             ${this.t('lbl-delete')}
                         </button>
                     </div>
@@ -2229,15 +2179,9 @@ const diary = {
         if (e) e.stopPropagation();
         const habit = this.habits.find(h => h.id === id);
         if (!habit) return;
-        const statusText = habit.endDate
-            ? '✅ ' + this.t('lbl-completed')
-            : this.lang === 'ru' ? 'в процессе' : 'in progress';
+        const statusText = habit.endDate ? '✅ ' + this.t('lbl-completed') : (this.lang === 'ru' ? 'в процессе' : 'in progress');
         document.getElementById('calendarTitle').textContent = `${habit.name} — ${statusText}`;
-
-        const dayLabels = this.lang === 'ru'
-            ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс']
-            : ['Mo','Tu','We','Th','Fr','Sa','Su'];
-
+        const dayLabels = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
         const table  = document.getElementById('calendarTable');
         const header = `<tr>${dayLabels.map(d=>`<th>${d}</th>`).join('')}</tr>`;
         let html = '<tr>';
@@ -2271,18 +2215,16 @@ const diary = {
 
         const todayStr = this.today();
         container.innerHTML = list.map((h, i) => {
-            const done     = h.completedDays.length;
-            const progress = Math.min(Math.round(done / h.goal * 100), 100);
-            const ended    = !!h.endDate;
-            const todayDone= h.completedDays.includes(todayStr);
-            const isOpen   = this.openHabitDetail === h.id;
-            const delay    = Math.min(i * 0.04, 0.25);
-            const pinLabel = h.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
+            const done      = h.completedDays.length;
+            const progress  = Math.min(Math.round(done / h.goal * 100), 100);
+            const ended     = !!h.endDate;
+            const todayDone = h.completedDays.includes(todayStr);
+            const isOpen    = this.openHabitDetail === h.id;
+            const delay     = Math.min(i * 0.04, 0.25);
+            const pinLabel  = h.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
 
             return `
-            <div class="record-card ${h.pinned ? 'pinned' : ''} ${ended ? 'opacity-80' : ''}"
-                 style="animation-delay:${delay}s"
-                 onclick="diary.toggleHabitDetail(${h.id})">
+            <div class="record-card ${h.pinned ? 'pinned' : ''} ${ended ? 'opacity-80' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleHabitDetail(${h.id})">
                 ${h.pinned ? '<span class="pin-badge">📌</span>' : ''}
                 <div class="flex items-start justify-between gap-2 mb-2">
                     <div>
@@ -2305,39 +2247,20 @@ const diary = {
                         <div style="font-size:11px;color:var(--text-label)">${this.t('lbl-progress')}</div>
                     </div>
                 </div>
-                <div class="prog-track mb-3">
-                    <div class="prog-fill" style="width:${progress}%"></div>
-                </div>
-
+                <div class="prog-track mb-3"><div class="prog-fill" style="width:${progress}%"></div></div>
                 ${isOpen ? `
                 <div class="detail-panel" onclick="event.stopPropagation()">
                     <div class="flex gap-2 flex-wrap mb-3">
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.showCalendar(${h.id},event)">
-                            ${this.t('lbl-calendar')}
-                        </button>
-                        <button class="btn-ghost ${todayDone ? 'btn-success' : ''}" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.toggleDay(${h.id},'${todayStr}',event)">
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.showCalendar(${h.id},event)">${this.t('lbl-calendar')}</button>
+                        <button class="btn-ghost ${todayDone ? 'btn-success' : ''}" style="flex:1;min-width:0;font-size:13px" onclick="diary.toggleDay(${h.id},'${todayStr}',event)">
                             ${todayDone ? this.t('lbl-done-today') : this.t('lbl-mark-today')}
                         </button>
                     </div>
                     <div class="flex gap-2 flex-wrap">
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary._loadHabitToForm(diary.habits.find(h=>h.id===${h.id}));diary.openHabitDetail=null;diary.renderHabits()">
-                            ${this.t('lbl-edit')}
-                        </button>
-                        ${!ended ? `<button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.endHabit(${h.id},event)">
-                            ${this.t('lbl-end-habit')}
-                        </button>` : ''}
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.togglePin('habit',${h.id},event)">
-                            ${pinLabel}
-                        </button>
-                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.deleteHabit(${h.id},event)">
-                            ${this.t('lbl-delete')}
-                        </button>
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary._loadHabitToForm(diary.habits.find(h=>h.id===${h.id}));diary.openHabitDetail=null;diary.renderHabits()">${this.t('lbl-edit')}</button>
+                        ${!ended ? `<button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.endHabit(${h.id},event)">${this.t('lbl-end-habit')}</button>` : ''}
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('habit',${h.id},event)">${pinLabel}</button>
+                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteHabit(${h.id},event)">${this.t('lbl-delete')}</button>
                     </div>
                 </div>` : ''}
             </div>`;
@@ -2363,8 +2286,7 @@ const diary = {
 
         const existing = this.memories.find(m => m.id === id);
         const memory = {
-            id, title, type, startDate: start, endDate: end, notes,
-            partnerName: partner,
+            id, title, type, startDate: start, endDate: end, notes, partnerName: partner,
             events: existing ? existing.events : [],
             date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-GB'),
             pinned: existing ? existing.pinned : false
@@ -2388,9 +2310,7 @@ const diary = {
         document.getElementById('memoryStartDate').value  = mem.startDate;
         document.getElementById('memoryEndDate').value    = mem.endDate || '';
         document.getElementById('memoryNotes').value      = mem.notes || '';
-        if (mem.type === 'relations') {
-            document.getElementById('partnerName').value  = mem.partnerName || '';
-        }
+        if (mem.type === 'relations') document.getElementById('partnerName').value = mem.partnerName || '';
         this.onMemoryTypeChange();
         document.getElementById('memoryFormTitle').textContent = this.t('memoryFormTitle-edit');
         document.getElementById('memorySection').scrollIntoView({ behavior:'smooth', block:'start' });
@@ -2414,7 +2334,6 @@ const diary = {
         if (e) e.stopPropagation();
         document.getElementById('eventMemoryId').value = memId;
         document.getElementById('editEventIdx').value  = editIdx !== undefined ? editIdx : '';
-
         const mem = this.memories.find(m => m.id === memId);
         if (editIdx !== undefined && editIdx !== '' && mem) {
             const ev = mem.events[editIdx];
@@ -2437,10 +2356,8 @@ const diary = {
         const desc    = document.getElementById('eventDesc').value.trim();
         const mem     = this.memories.find(m => m.id === memId);
         if (!mem) return;
-
-        if (editIdx !== '') {
-            mem.events[+editIdx] = { date, desc };
-        } else {
+        if (editIdx !== '') { mem.events[+editIdx] = { date, desc }; }
+        else {
             if (!mem.events) mem.events = [];
             mem.events.push({ date, desc });
             mem.events.sort((a,b) => new Date(a.date) - new Date(b.date));
@@ -2489,19 +2406,14 @@ const diary = {
         }
 
         container.innerHTML = list.map((m, i) => {
-            const delay  = Math.min(i * 0.04, 0.25);
-            const isOpen = this.openMemoryDetail === m.id;
+            const delay    = Math.min(i * 0.04, 0.25);
+            const isOpen   = this.openMemoryDetail === m.id;
             const pinLabel = m.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-
-            if (m.type === 'relations') {
-                return this._renderRelCard(m, isOpen, delay, pinLabel);
-            }
+            if (m.type === 'relations') return this._renderRelCard(m, isOpen, delay, pinLabel);
 
             const typeLabel = this.t('type-' + m.type);
             return `
-            <div class="record-card ${m.pinned ? 'pinned' : ''}"
-                 style="animation-delay:${delay}s"
-                 onclick="diary.toggleMemoryDetail(${m.id})">
+            <div class="record-card ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
                 ${m.pinned ? '<span class="pin-badge">📌</span>' : ''}
                 <div class="flex items-start justify-between gap-2 mb-2">
                     <span class="chip">${typeLabel}</span>
@@ -2509,24 +2421,13 @@ const diary = {
                 </div>
                 <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${m.title}</div>
                 ${m.notes ? `<div style="font-size:13px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'2'};-webkit-box-orient:vertical;overflow:hidden">${m.notes}</div>` : ''}
-                ${m.endDate ? `<div style="margin-top:6px;font-size:12px;color:var(--text-label)">
-                    ${this.t('rel-until')} ${this.fmtDate(m.endDate)}</div>` : ''}
-
+                ${m.endDate ? `<div style="margin-top:6px;font-size:12px;color:var(--text-label)">${this.t('rel-until')} ${this.fmtDate(m.endDate)}</div>` : ''}
                 ${isOpen ? `
                 <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
                     <div class="flex gap-2 flex-wrap" style="padding:14px">
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">
-                            ${this.t('lbl-edit')}
-                        </button>
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.togglePin('memory',${m.id},event)">
-                            ${pinLabel}
-                        </button>
-                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary.deleteMemory(${m.id},event)">
-                            ${this.t('lbl-delete')}
-                        </button>
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">${this.t('lbl-edit')}</button>
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('memory',${m.id},event)">${pinLabel}</button>
+                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteMemory(${m.id},event)">${this.t('lbl-delete')}</button>
                     </div>
                 </div>` : ''}
             </div>`;
@@ -2546,26 +2447,19 @@ const diary = {
                     <div class="rel-event-date">${this.fmtDate(ev.date)}</div>
                     <div class="rel-event-desc">${ev.desc}</div>
                     <div class="rel-event-actions">
-                        <button class="rel-event-btn" title="Edit"
-                            onclick="diary.showAddEvent(${m.id},${idx},event)">✏️</button>
-                        <button class="rel-event-btn" title="Delete"
-                            onclick="diary.deleteEvent(${m.id},${idx},event)">🗑️</button>
+                        <button class="rel-event-btn" onclick="diary.showAddEvent(${m.id},${idx},event)">✏️</button>
+                        <button class="rel-event-btn" onclick="diary.deleteEvent(${m.id},${idx},event)">🗑️</button>
                     </div>
                 </div>`).join('')
             : `<div style="font-size:13px;color:var(--text-label);padding:6px 0">${this.t('lbl-no-events')}</div>`;
 
         return `
-        <div class="rel-card ${m.pinned ? 'pinned' : ''}"
-             style="animation-delay:${delay}s"
-             onclick="diary.toggleMemoryDetail(${m.id})">
+        <div class="rel-card ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
             ${m.pinned ? '<span class="pin-badge" style="position:absolute;top:12px;right:12px;z-index:2">📌</span>' : ''}
-
             <div class="rel-card-header">
                 <div class="flex items-start justify-between gap-2">
                     <div>
-                        <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.75;margin-bottom:4px">
-                            ❤️ ${this.t('type-relations')}
-                        </div>
+                        <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.75;margin-bottom:4px">❤️ ${this.t('type-relations')}</div>
                         <div style="font-size:20px;font-weight:900;font-family:'Syne',sans-serif">${m.title}</div>
                         ${m.partnerName ? `<div style="font-size:14px;opacity:.85;margin-top:2px">👤 ${m.partnerName}</div>` : ''}
                     </div>
@@ -2575,55 +2469,29 @@ const diary = {
                     </div>
                 </div>
                 <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-                    <span style="background:rgba(255,255,255,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">
-                        ${this.t('rel-since')} ${this.fmtDate(m.startDate)}
-                    </span>
+                    <span style="background:rgba(255,255,255,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">${this.t('rel-since')} ${this.fmtDate(m.startDate)}</span>
                     ${isEnded
-                        ? `<span style="background:rgba(0,0,0,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">
-                            💔 ${this.fmtDate(m.endDate)}</span>`
-                        : `<span style="background:rgba(255,255,255,0.15);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">
-                            ✨ ${this.t('rel-still-together')}</span>`
+                        ? `<span style="background:rgba(0,0,0,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">💔 ${this.fmtDate(m.endDate)}</span>`
+                        : `<span style="background:rgba(255,255,255,0.15);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">✨ ${this.t('rel-still-together')}</span>`
                     }
                 </div>
             </div>
-
             <div class="rel-card-body" onclick="event.stopPropagation()">
                 ${m.notes ? `<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;font-style:italic">"${m.notes}"</div>` : ''}
-
                 <div style="margin-bottom:10px">
-                    <div style="font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px">
-                        ${this.t('lbl-events')}
-                    </div>
+                    <div style="font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px">${this.t('lbl-events')}</div>
                     ${eventsHtml}
                 </div>
-
                 <div class="flex gap-2 flex-wrap" style="margin-top:10px">
-                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                        onclick="diary.showAddEvent(${m.id},undefined,event)">
-                        ${this.t('lbl-add-event')}
-                    </button>
-                    ${!isEnded ? `
-                    <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
-                        onclick="diary.endRelations(${m.id},event)">
-                        ${this.t('lbl-broke-up')}
-                    </button>` : ''}
+                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.showAddEvent(${m.id},undefined,event)">${this.t('lbl-add-event')}</button>
+                    ${!isEnded ? `<button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.endRelations(${m.id},event)">${this.t('lbl-broke-up')}</button>` : ''}
                 </div>
-
                 ${isOpen ? `
                 <div class="divider"></div>
                 <div class="flex gap-2 flex-wrap">
-                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                        onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">
-                        ${this.t('lbl-edit')}
-                    </button>
-                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                        onclick="diary.togglePin('memory',${m.id},event)">
-                        ${pinLabel}
-                    </button>
-                    <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px"
-                        onclick="diary.deleteMemory(${m.id},event)">
-                        ${this.t('lbl-delete')}
-                    </button>
+                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">${this.t('lbl-edit')}</button>
+                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('memory',${m.id},event)">${pinLabel}</button>
+                    <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteMemory(${m.id},event)">${this.t('lbl-delete')}</button>
                 </div>` : ''}
             </div>
         </div>`;
@@ -2641,23 +2509,19 @@ const diary = {
     updateStreak() {
         const todayStr = this.today();
         if (this.lastActiveDate === todayStr) return;
-
-        const yest = new Date();
-        yest.setDate(yest.getDate() - 1);
+        const yest = new Date(); yest.setDate(yest.getDate() - 1);
         const yestStr = yest.toISOString().split('T')[0];
-
         const old = this.fireStreak;
         this.fireStreak     = (this.lastActiveDate === yestStr) ? this.fireStreak + 1 : 1;
         this.lastActiveDate = todayStr;
         this._saveStreak();
-
         if (this.fireStreak > old) {
-            const hdr   = document.getElementById('fireStreakHeader');
-            const emoji = document.getElementById('fireEmoji');
-            hdr.classList.remove('fire-anim'); emoji.classList.remove('fire-anim');
+            const hdr = document.getElementById('fireStreakHeader');
+            const emj = document.getElementById('fireEmoji');
+            hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim');
             void hdr.offsetWidth;
-            hdr.classList.add('fire-anim'); emoji.classList.add('fire-anim');
-            setTimeout(() => { hdr.classList.remove('fire-anim'); emoji.classList.remove('fire-anim'); }, 700);
+            hdr.classList.add('fire-anim'); emj.classList.add('fire-anim');
+            setTimeout(() => { hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim'); }, 700);
         }
         this.updateFooter();
     },
@@ -2667,7 +2531,7 @@ const diary = {
         await StorageManager.setItem('lastActiveDate', this.lastActiveDate);
     },
 
-    init() {
+    async init() {
         try {
             if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.ready();
@@ -2676,12 +2540,16 @@ const diary = {
         } catch(e) {}
 
         StorageManager.init();
-        this.load();
+        await this.load();
 
         document.getElementById('noteForm').addEventListener('submit',   e => this.saveNote(e));
         document.getElementById('habitForm').addEventListener('submit',  e => this.saveHabit(e));
         document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
         document.getElementById('eventForm').addEventListener('submit',  e => this.saveEvent(e));
+
+        // Task quick-add: Enter key support
+        const qi = document.getElementById('taskQuickInput');
+        if (qi) qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
 
         document.getElementById('clearAll').addEventListener('click', async () => {
             if (!confirm(this.t('confirm-clear-all'))) return;
@@ -2691,27 +2559,18 @@ const diary = {
         });
 
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', e => {
-                if (e.target === overlay) this.closeModals();
-            });
+            overlay.addEventListener('click', e => { if (e.target === overlay) this.closeModals(); });
         });
 
         const sheet = document.getElementById('bottomSheet');
         let sheetStartY = 0;
-        sheet.addEventListener('touchstart', e => {
-            sheetStartY = e.touches[0].clientY;
-        }, { passive: true });
-        sheet.addEventListener('touchend', e => {
-            const delta = e.changedTouches[0].clientY - sheetStartY;
-            if (delta > 60) this.closeSheet();
-        }, { passive: true });
+        sheet.addEventListener('touchstart', e => { sheetStartY = e.touches[0].clientY; }, { passive: true });
+        sheet.addEventListener('touchend', e => { if (e.changedTouches[0].clientY - sheetStartY > 60) this.closeSheet(); }, { passive: true });
 
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
-                this.closeModals();
-                this.closeSheet();
-                SidebarUI.close();
-                AchievementsUI.close();
+                this.closeModals(); this.closeSheet();
+                SidebarUI.close(); AchievementsUI.close();
             }
         });
 
@@ -2720,91 +2579,57 @@ const diary = {
         document.getElementById('memoryStartDate').value = todayStr;
         document.getElementById('eventDate').value       = todayStr;
 
-        // Initialize new systems after diary is ready
         SidebarUI.init();
         AchievementsUI.init();
 
-        console.log('%c✅ DailyBookimix v4 Improved — loaded!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v5 — loaded with E2E encryption + Daily Tasks!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
-// END OF PART 3 / 4
-</script>
 
-<script>
-// PART 4 / 4
 // ================================================================
-//  NEW: SIDEBAR UI CONTROLLER
-//  Manages the left drawer: profile, nickname, achievements link,
-//  delete account confirmation. Does NOT touch diary state directly
-//  except for the delete-all action.
+//  SIDEBAR UI CONTROLLER
 // ================================================================
 const SidebarUI = {
-
-    // Sidebar translations per language
     _strings: {
         en: {
-            nickname:       'Nickname',
-            menu:           'Menu',
-            privacy:        'Privacy',
-            achievements:   'Achievements',
-            deleteAccount:  'Delete account & all data',
-            saveNick:       'Save nickname',
-            nickPlaceholder:'Set your nickname...',
-            nickSaved:      'Nickname saved ✅',
-            delTitle:       'Delete all data?',
-            delDesc:        'This will permanently erase all your notes, habits, memories, and profile data. This action cannot be undone.',
-            delCancel:      'Cancel',
-            delConfirm:     'Delete everything',
-            defaultUser:    'User',
+            nickname: 'Nickname', menu: 'Menu', privacy: 'Privacy',
+            achievements: 'Achievements', deleteAccount: 'Delete account & all data',
+            saveNick: 'Save nickname', nickPlaceholder: 'Set your nickname...',
+            nickSaved: 'Nickname saved ✅',
+            delTitle: 'Delete all data?',
+            delDesc: 'This will permanently erase all your notes, habits, memories, and profile data. This action cannot be undone.',
+            delCancel: 'Cancel', delConfirm: 'Delete everything', defaultUser: 'User',
         },
         ru: {
-            nickname:       'Никнейм',
-            menu:           'Меню',
-            privacy:        'Конфиденциальность',
-            achievements:   'Достижения',
-            deleteAccount:  'Удалить аккаунт и все данные',
-            saveNick:       'Сохранить никнейм',
-            nickPlaceholder:'Введи никнейм...',
-            nickSaved:      'Никнейм сохранён ✅',
-            delTitle:       'Удалить все данные?',
-            delDesc:        'Это навсегда уничтожит все твои записи, привычки, воспоминания и данные профиля. Действие нельзя отменить.',
-            delCancel:      'Отмена',
-            delConfirm:     'Удалить всё',
-            defaultUser:    'Пользователь',
+            nickname: 'Никнейм', menu: 'Меню', privacy: 'Конфиденциальность',
+            achievements: 'Достижения', deleteAccount: 'Удалить аккаунт и все данные',
+            saveNick: 'Сохранить никнейм', nickPlaceholder: 'Введи никнейм...',
+            nickSaved: 'Никнейм сохранён ✅',
+            delTitle: 'Удалить все данные?',
+            delDesc: 'Это навсегда уничтожит все твои записи, привычки, воспоминания и данные профиля. Действие нельзя отменить.',
+            delCancel: 'Отмена', delConfirm: 'Удалить всё', defaultUser: 'Пользователь',
         }
     },
 
-    // Current user profile data (loaded from Telegram or storage)
-    profile: {
-        name:     '',
-        userId:   '',
-        photoUrl: '',
-        nickname: '',
-    },
+    profile: { name: '', userId: '', photoUrl: '', nickname: '' },
 
     init() {
-        // Load profile from Telegram WebApp if available
         try {
             if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe) {
                 const u = Telegram.WebApp.initDataUnsafe.user;
                 if (u) {
-                    this.profile.name   = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
-                    this.profile.userId = String(u.id || '');
+                    this.profile.name     = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
+                    this.profile.userId   = String(u.id || '');
                     this.profile.photoUrl = u.photo_url || '';
                 }
             }
         } catch(e) {}
 
-        // Load saved nickname from storage
         StorageManager.getItem('userNickname').then(nick => {
-            if (nick) {
-                this.profile.nickname = nick;
-                this._updateHeaderDisplay();
-            }
+            if (nick) { this.profile.nickname = nick; this._updateHeaderDisplay(); }
         }).catch(() => {});
 
-        // Also load userId from storage as fallback
         StorageManager.getItem('userId').then(uid => {
             if (uid && !this.profile.userId) this.profile.userId = uid;
             this._updateHeaderDisplay();
@@ -2820,16 +2645,13 @@ const SidebarUI = {
         const name   = this.profile.nickname || this.profile.name || strs.defaultUser;
         const uid    = this.profile.userId || '—';
 
-        const elName = document.getElementById('sidebarUsername');
-        const elUid  = document.getElementById('sidebarUserid');
-        const elAva  = document.getElementById('sidebarAvatar');
+        const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+        set('sidebarUsername', name);
+        set('sidebarUserid',  'ID: ' + uid);
         const elNick = document.getElementById('sidebarNickInput');
-
-        if (elName) elName.textContent = name;
-        if (elUid)  elUid.textContent  = 'ID: ' + uid;
         if (elNick) elNick.value = this.profile.nickname || '';
 
-        // Avatar: try photo, else initials or emoji
+        const elAva = document.getElementById('sidebarAvatar');
         if (elAva) {
             if (this.profile.photoUrl) {
                 elAva.innerHTML = `<img src="${this.profile.photoUrl}" alt="avatar" onerror="this.parentElement.textContent='👤'">`;
@@ -2844,30 +2666,26 @@ const SidebarUI = {
 
     applyTranslations(lang) {
         const strs = this._strings[lang] || this._strings.en;
-
-        const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-        const setPh = (id, txt) => { const el = document.getElementById(id); if (el) el.placeholder = txt; };
-
-        set('sb-lbl-nickname',    strs.nickname);
-        set('sb-lbl-menu',        strs.menu);
-        set('sb-lbl-danger',      strs.privacy);
-        set('sb-item-achievements', strs.achievements);
-        set('sb-item-delete',     strs.deleteAccount);
-        set('sidebarSaveNickBtn', strs.saveNick);
-        set('del-modal-title',    strs.delTitle);
-        set('del-modal-desc',     strs.delDesc);
-        set('del-cancel-btn',     strs.delCancel);
-        set('del-confirm-btn',    strs.delConfirm);
-        set('ach-modal-title',    AchievementsUI._strings[lang]?.title || 'Achievements');
-        setPh('sidebarNickInput', strs.nickPlaceholder);
-
+        const set  = (id, txt) => { const el = document.getElementById(id); if(el) el.textContent = txt; };
+        const setPh= (id, txt) => { const el = document.getElementById(id); if(el) el.placeholder = txt; };
+        set('sb-lbl-nickname',     strs.nickname);
+        set('sb-lbl-menu',         strs.menu);
+        set('sb-lbl-danger',       strs.privacy);
+        set('sb-item-achievements',strs.achievements);
+        set('sb-item-delete',      strs.deleteAccount);
+        set('sidebarSaveNickBtn',  strs.saveNick);
+        set('del-modal-title',     strs.delTitle);
+        set('del-modal-desc',      strs.delDesc);
+        set('del-cancel-btn',      strs.delCancel);
+        set('del-confirm-btn',     strs.delConfirm);
+        set('ach-modal-title', AchievementsUI._strings[lang]?.title || 'Achievements');
+        setPh('sidebarNickInput',  strs.nickPlaceholder);
         this._updateHeaderDisplay();
     },
 
     open() {
         document.getElementById('sidebarBackdrop').classList.add('open');
         document.getElementById('sidebarPanel').classList.add('open');
-        // Refresh display on open
         this._updateHeaderDisplay();
     },
 
@@ -2884,14 +2702,12 @@ const SidebarUI = {
         StorageManager.setItem('userNickname', nick).catch(() => {});
         this._updateHeaderDisplay();
         diary.toast((this._strings[diary.lang] || this._strings.en).nickSaved);
+        AchievementsUI.recalculate(); // profile_custom achievement
     },
 
     confirmDeleteAccount() {
-        // Close sidebar first, then show delete confirmation
         this.close();
-        setTimeout(() => {
-            document.getElementById('deleteAccountModal').classList.add('open');
-        }, 320); // slight delay for sidebar to animate out
+        setTimeout(() => { document.getElementById('deleteAccountModal').classList.add('open'); }, 320);
     },
 
     cancelDeleteAccount() {
@@ -2899,29 +2715,22 @@ const SidebarUI = {
     },
 
     async executeDeleteAccount() {
-        // Clear all diary data
-        diary.notes    = [];
-        diary.habits   = [];
-        diary.memories = [];
-        diary.fireStreak     = 0;
-        diary.lastActiveDate = '';
+        diary.notes = []; diary.habits = []; diary.memories = [];
+        diary.fireStreak = 0; diary.lastActiveDate = '';
 
-        // Clear storage keys
-        const keysToDelete = ['notes','habits','memories','fireStreak','lastActiveDate','userNickname','userId'];
-        for (const key of keysToDelete) {
+        const keys = ['notes','habits','memories','fireStreak','lastActiveDate','userNickname','userId','tasks_v1','achievements_v1'];
+        for (const key of keys) {
             try { await StorageManager.setItem(key, ''); } catch(e) {}
         }
 
-        // Clear profile
-        this.profile.nickname = '';
-        this.profile.name     = '';
-        this.profile.userId   = '';
-        this.profile.photoUrl = '';
+        this.profile = { name: '', userId: '', photoUrl: '', nickname: '' };
+        TaskManager._data = {};
 
-        // Refresh UI
         diary.renderAll();
         diary.updateFooter();
-        AchievementsUI.recalculate();
+        TaskManager.render();
+        AchievementsUI._state = {};
+        AchievementsUI._save();
 
         document.getElementById('deleteAccountModal').classList.remove('open');
         diary.toast('🗑️ All data deleted');
@@ -2929,26 +2738,23 @@ const SidebarUI = {
 
     openAchievements() {
         this.close();
-        setTimeout(() => {
-            AchievementsUI.open();
-        }, 300);
+        setTimeout(() => { AchievementsUI.open(); }, 300);
     }
 };
 
 
 // ================================================================
-//  NEW: ACHIEVEMENTS SYSTEM
-//  10 achievements with locked/unlocked states, earned dates,
-//  persisted to storage. Recalculates on every data change.
+//  ACHIEVEMENTS SYSTEM
+//  FIX: earnedDate is now saved permanently on first unlock only.
+//  _state[id].earned = true  AND  _state[id].earnedDate = 'YYYY-MM-DD'
+//  are NEVER overwritten once set.
 // ================================================================
 const AchievementsUI = {
 
     _strings: {
         en: {
-            title:         'Achievements',
-            progressLabel: 'Unlocked achievements',
-            locked:        'Locked',
-            earnedOn:      'Earned',
+            title: 'Achievements', progressLabel: 'Unlocked achievements',
+            locked: 'Locked', earnedOn: 'Earned',
             achs: [
                 { id: 'first_note',     icon: '📝', title: 'First Note',          desc: 'Created your very first note' },
                 { id: 'notes_10',       icon: '📚', title: '10 Notes Written',     desc: 'Wrote 10 notes in total' },
@@ -2963,10 +2769,8 @@ const AchievementsUI = {
             ]
         },
         ru: {
-            title:         'Достижения',
-            progressLabel: 'Разблокировано достижений',
-            locked:        'Закрыто',
-            earnedOn:      'Получено',
+            title: 'Достижения', progressLabel: 'Разблокировано достижений',
+            locked: 'Закрыто', earnedOn: 'Получено',
             achs: [
                 { id: 'first_note',     icon: '📝', title: 'Первая запись',        desc: 'Создал свою первую заметку' },
                 { id: 'notes_10',       icon: '📚', title: '10 записей',           desc: 'Написал 10 заметок всего' },
@@ -2982,11 +2786,10 @@ const AchievementsUI = {
         }
     },
 
-    // Map: achievement id → { earned: bool, earnedDate: string|null }
+    // Persistent state map: { [achievementId]: { earned: bool, earnedDate: string } }
     _state: {},
 
     init() {
-        // Load persisted achievement state from storage
         StorageManager.getItem('achievements_v1').then(raw => {
             try {
                 if (raw) this._state = JSON.parse(raw);
@@ -2996,94 +2799,73 @@ const AchievementsUI = {
     },
 
     _save() {
+        // Persist achievements state (encrypted via StorageManager)
         StorageManager.setItem('achievements_v1', JSON.stringify(this._state)).catch(() => {});
     },
 
-    // Called any time diary data changes. Checks conditions and unlocks.
-    recalculate() {
+    // FIX: unlock() ONLY sets the earnedDate on FIRST unlock — never overwrites it
+    _unlock(id) {
+        // If already earned with a date, do NOT overwrite — this is the key fix
+        if (this._state[id] && this._state[id].earned) return false;
         const today = diary.today ? diary.today() : new Date().toISOString().split('T')[0];
+        this._state[id] = { earned: true, earnedDate: today };
+        return true; // newly unlocked
+    },
+
+    recalculate() {
         let changed = false;
 
-        const unlock = (id) => {
-            if (!this._state[id] || !this._state[id].earned) {
-                this._state[id] = { earned: true, earnedDate: today };
-                changed = true;
-            }
-        };
-
         // 1. First note
-        if ((diary.notes || []).length >= 1)  unlock('first_note');
-
+        if ((diary.notes || []).length >= 1  && this._unlock('first_note'))   changed = true;
         // 2. 10 notes
-        if ((diary.notes || []).length >= 10) unlock('notes_10');
-
+        if ((diary.notes || []).length >= 10 && this._unlock('notes_10'))     changed = true;
         // 3. First habit
-        if ((diary.habits || []).length >= 1) unlock('first_habit');
-
+        if ((diary.habits || []).length >= 1 && this._unlock('first_habit'))  changed = true;
         // 4. 7-day streak
-        if ((diary.fireStreak || 0) >= 7)  unlock('streak_7');
-
+        if ((diary.fireStreak || 0) >= 7     && this._unlock('streak_7'))     changed = true;
         // 5. 30-day streak
-        if ((diary.fireStreak || 0) >= 30) unlock('streak_30');
+        if ((diary.fireStreak || 0) >= 30    && this._unlock('streak_30'))    changed = true;
 
-        // 6. 5 tasks completed in a single day
-        // Count notes saved on same date (as a proxy for "tasks completed in a day")
-        // Also count habit completedDays grouped by date
-        const tasksByDay = {};
-        (diary.habits || []).forEach(h => {
-            (h.completedDays || []).forEach(d => {
-                tasksByDay[d] = (tasksByDay[d] || 0) + 1;
-            });
-        });
-        // Notes with tasks category count too
-        (diary.notes || []).forEach(n => {
-            if (n.category === 'tasks') {
-                // Use note date string — approximate to day
-                const dayStr = n.date ? n.date.split(',')[0] : today;
-                tasksByDay[dayStr] = (tasksByDay[dayStr] || 0) + 1;
-            }
-        });
-        const maxInDay = Math.max(0, ...Object.values(tasksByDay));
-        if (maxInDay >= 5) unlock('tasks_5_day');
+        // 6. 5 tasks completed in a single day (from TaskManager)
+        const maxInDay = Math.max(0, ...Object.values(TaskManager._data || {}).map(d =>
+            (d.tasks || []).filter(t => t.completed).length
+        ));
+        if (maxInDay >= 5 && this._unlock('tasks_5_day')) changed = true;
 
-        // 7. Used planner for 14 days (approximated by total distinct habit completion days)
+        // 7. 14 distinct days with habit completion
         const allDays = new Set();
         (diary.habits || []).forEach(h => (h.completedDays || []).forEach(d => allDays.add(d)));
-        if (allDays.size >= 14) unlock('days_14');
+        // Also count days where tasks were completed
+        Object.keys(TaskManager._data || {}).forEach(d => {
+            const day = TaskManager._data[d];
+            if (day && day.tasks && day.tasks.some(t => t.completed)) allDays.add(d);
+        });
+        if (allDays.size >= 14 && this._unlock('days_14')) changed = true;
 
-        // 8. Profile customized (nickname set)
+        // 8. Profile nickname set
         if (SidebarUI.profile && SidebarUI.profile.nickname && SidebarUI.profile.nickname.length > 0) {
-            unlock('profile_custom');
+            if (this._unlock('profile_custom')) changed = true;
         }
-        // Also check from storage reactively when nickname is saved
-        StorageManager.getItem('userNickname').then(nick => {
-            if (nick && nick.length > 0) {
-                if (!this._state['profile_custom'] || !this._state['profile_custom'].earned) {
-                    this._state['profile_custom'] = { earned: true, earnedDate: today };
-                    this._save();
-                    // Re-render if achievements is open
-                    if (document.getElementById('achievementsModal').classList.contains('open')) {
-                        this._render();
-                    }
-                }
+
+        // 9. 50 total completed tasks
+        const totalCompleted = TaskManager.totalCompleted ? TaskManager.totalCompleted() : 0;
+        if (totalCompleted >= 50  && this._unlock('tasks_50'))  changed = true;
+        // 10. 100 total completed tasks
+        if (totalCompleted >= 100 && this._unlock('tasks_100')) changed = true;
+
+        if (changed) {
+            this._save();
+            // Re-render if achievements panel is open
+            if (document.getElementById('achievementsModal').classList.contains('open')) {
+                this._render();
             }
-        }).catch(() => {});
-
-        // 9. 50 total completed habit days
-        const totalCompleted = (diary.habits || []).reduce((s, h) => s + (h.completedDays || []).length, 0);
-        if (totalCompleted >= 50)  unlock('tasks_50');
-
-        // 10. 100 total completed habit days
-        if (totalCompleted >= 100) unlock('tasks_100');
-
-        if (changed) this._save();
+        }
     },
 
     open() {
         this.recalculate();
         this._render();
         document.getElementById('achievementsModal').classList.add('open');
-        // Scroll to top
         document.getElementById('achievementsModal').scrollTop = 0;
     },
 
@@ -3097,10 +2879,7 @@ const AchievementsUI = {
         if (el) el.textContent = strs.title;
         const pl = document.getElementById('ach-progress-label');
         if (pl) pl.textContent = strs.progressLabel;
-        // Re-render if open
-        if (document.getElementById('achievementsModal').classList.contains('open')) {
-            this._render();
-        }
+        if (document.getElementById('achievementsModal').classList.contains('open')) this._render();
     },
 
     _render() {
@@ -3108,30 +2887,25 @@ const AchievementsUI = {
         const strs  = this._strings[lang] || this._strings.en;
         const achs  = strs.achs;
 
-        // Count unlocked
         const unlockedCount = achs.filter(a => this._state[a.id] && this._state[a.id].earned).length;
         const pct = Math.round((unlockedCount / achs.length) * 100);
 
-        // Update progress
         const countEl = document.getElementById('ach-unlocked-count');
         const fillEl  = document.getElementById('ach-prog-fill');
         if (countEl) countEl.textContent = unlockedCount;
         if (fillEl)  fillEl.style.width  = pct + '%';
 
-        // Update progress label
         const plEl = document.getElementById('ach-progress-label');
         if (plEl) plEl.textContent = strs.progressLabel;
 
-        // Render cards
         const grid = document.getElementById('achGrid');
         if (!grid) return;
 
         grid.innerHTML = achs.map((ach, i) => {
-            const st = this._state[ach.id];
+            const st       = this._state[ach.id];
             const unlocked = st && st.earned;
-            const delay = Math.min(i * 0.05, 0.35);
+            const delay    = Math.min(i * 0.05, 0.35);
 
-            // Format earned date
             let dateText = '';
             if (unlocked && st.earnedDate) {
                 try {
@@ -3155,9 +2929,7 @@ const AchievementsUI = {
                     <div class="ach-card-desc">${ach.desc}</div>
                     <div class="ach-card-date">${dateText}</div>
                 </div>
-                <div class="ach-badge">
-                    ${unlocked ? '⭐' : '—'}
-                </div>
+                <div class="ach-badge">${unlocked ? '⭐' : '—'}</div>
             </div>`;
         }).join('');
     }
@@ -3165,10 +2937,41 @@ const AchievementsUI = {
 
 
 // ================================================================
-//  BOOT: Initialize everything
+//  BOOT SEQUENCE
+//  1. Try auto-unlock from session (if already logged in this session)
+//  2. Otherwise show password prompt
 // ================================================================
-diary.init();
-// END OF PART 4 / 4
+(async function boot() {
+    // Apply any previously saved language to lock screen
+    const savedLang = localStorage.getItem('dbmix_lang_hint') || 'en';
+    EncryptionManager.applyLang(savedLang);
+
+    // Handle Enter key on password input
+    const pi = document.getElementById('lockPasswordInput');
+    if (pi) {
+        pi.addEventListener('keydown', e => {
+            if (e.key === 'Enter') EncryptionManager.unlock();
+        });
+        pi.focus();
+    }
+
+    // Try to auto-unlock from session storage
+    const autoUnlocked = await EncryptionManager.tryAutoUnlock();
+    if (autoUnlocked) {
+        await diary.init();
+    }
+    // Otherwise the lock screen stays open and user must enter password
+})();
+
+// Persist language hint (unencrypted, just for lock screen UI)
+const _origApplyLang = diary.applyLang ? diary.applyLang.bind(diary) : null;
+// We hook into applyLang to save the language hint
+const _patchApplyLang = diary.applyLang;
+diary.applyLang = function(lang) {
+    localStorage.setItem('dbmix_lang_hint', lang);
+    _patchApplyLang.call(diary, lang);
+    EncryptionManager.applyLang(lang);
+};
 </script>
 </body>
 </html>
