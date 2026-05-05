@@ -774,8 +774,8 @@
             <!-- Quick add -->
             <div class="task-quick-add mb-4" id="taskQuickAddRow">
                 <input type="text" id="taskQuickInput" class="task-quick-input" maxlength="200">
-                <button id="taskImpToggle" class="task-imp-toggle" title="Mark as important" onclick="TaskManager.toggleNewImp()">⭐</button>
-                <button class="task-add-btn" onclick="TaskManager.quickAdd()">＋</button>
+                <button type="button" id="taskImpToggle" class="task-imp-toggle" title="Mark as important" onclick="TaskManager.toggleNewImp()">⭐</button>
+                <button type="button" class="task-add-btn" id="taskAddBtn">＋</button>
             </div>
 
             <!-- Stats bar -->
@@ -1121,25 +1121,50 @@ const EncryptionManager = {
         btn.disabled = true;
 
         try {
-            // Load or generate salt
+            // Detect if CloudStorage is available (for cross-device sync)
+            const hasCloud = !!(
+                window.Telegram && Telegram.WebApp.CloudStorage &&
+                Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+            );
+
+            const _cloudGet = key => new Promise(resolve => {
+                try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => resolve((v && v !== '') ? v : null)); }
+                catch(e) { resolve(null); }
+            });
+            const _cloudSet = (key, val) => new Promise(resolve => {
+                try { Telegram.WebApp.CloudStorage.setItem(key, val, () => resolve()); }
+                catch(e) { resolve(); }
+            });
+
+            // --- Load or generate salt ---
+            // Priority: localStorage → CloudStorage (for cross-device)
             let saltB64 = localStorage.getItem('dbmix_salt');
+            if (!saltB64 && hasCloud) saltB64 = await _cloudGet('dbmix_salt');
+
             if (!saltB64) {
-                // First time: generate salt and save it
+                // First time: generate salt, save everywhere
                 this._salt = crypto.getRandomValues(new Uint8Array(16));
                 saltB64 = this._b64encode(this._salt);
                 localStorage.setItem('dbmix_salt', saltB64);
+                if (hasCloud) await _cloudSet('dbmix_salt', saltB64);
             } else {
                 this._salt = this._b64decode(saltB64);
+                // Mirror salt to CloudStorage if missing there
+                if (hasCloud) {
+                    const cloudSalt = await _cloudGet('dbmix_salt');
+                    if (!cloudSalt) await _cloudSet('dbmix_salt', saltB64);
+                }
             }
 
             this._key = await this.deriveKey(pw, this._salt);
 
-            // Test if we can decrypt a sentinel value (to verify correct password)
-            const sentinel = localStorage.getItem('dbmix_sentinel');
+            // --- Verify password via sentinel ---
+            let sentinel = localStorage.getItem('dbmix_sentinel');
+            if (!sentinel && hasCloud) sentinel = await _cloudGet('dbmix_sentinel');
+
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
                 if (dec !== 'DAILYBOOKMIX_V5') {
-                    // Wrong password
                     this._key = null;
                     btn.textContent = 'Unlock 🔓';
                     btn.disabled = false;
@@ -1147,12 +1172,13 @@ const EncryptionManager = {
                     return;
                 }
             } else {
-                // First time: store sentinel
+                // First time: create and store sentinel everywhere
                 const enc = await this.encrypt('DAILYBOOKMIX_V5');
                 localStorage.setItem('dbmix_sentinel', enc);
+                if (hasCloud) await _cloudSet('dbmix_sentinel', enc);
             }
 
-            // Store password hash in sessionStorage for auto-unlock within session
+            // Store password in sessionStorage for auto-unlock within session
             sessionStorage.setItem('dbmix_pw', pw);
 
             // Hide lock screen, show app
@@ -1186,14 +1212,28 @@ const EncryptionManager = {
         const pw = sessionStorage.getItem('dbmix_pw');
         if (!pw) return false;
 
-        const saltB64 = localStorage.getItem('dbmix_salt');
+        // Detect CloudStorage availability
+        const hasCloud = !!(
+            window.Telegram && Telegram.WebApp.CloudStorage &&
+            Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+        );
+        const _cloudGet = key => new Promise(resolve => {
+            try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => resolve((v && v !== '') ? v : null)); }
+            catch(e) { resolve(null); }
+        });
+
+        // Load salt: localStorage first, then CloudStorage
+        let saltB64 = localStorage.getItem('dbmix_salt');
+        if (!saltB64 && hasCloud) saltB64 = await _cloudGet('dbmix_salt');
         if (!saltB64) return false;
 
         try {
             this._salt = this._b64decode(saltB64);
             this._key  = await this.deriveKey(pw, this._salt);
 
-            const sentinel = localStorage.getItem('dbmix_sentinel');
+            let sentinel = localStorage.getItem('dbmix_sentinel');
+            if (!sentinel && hasCloud) sentinel = await _cloudGet('dbmix_sentinel');
+
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
                 if (dec !== 'DAILYBOOKMIX_V5') { this._key = null; return false; }
@@ -1237,6 +1277,10 @@ const EncryptionManager = {
 // ================================================================
 //  STORAGE MANAGER — reads/writes via Telegram CloudStorage or
 //  localStorage. All values are encrypted with EncryptionManager.
+//
+//  FIX (cross-device sync): When CloudStorage is available, we
+//  write encrypted data to CloudStorage AND mirror the salt/sentinel
+//  there too, so a new device can bootstrap without localStorage.
 // ================================================================
 const StorageManager = {
     supportsCloud: false,
@@ -1250,29 +1294,48 @@ const StorageManager = {
         } catch(e) { this.supportsCloud = false; }
     },
 
-    // Save encrypted value
-    async setItem(key, value) {
-        const encrypted = await EncryptionManager.encrypt(value);
-        if (this.supportsCloud) {
-            return new Promise(resolve => {
-                Telegram.WebApp.CloudStorage.setItem(key, encrypted, () => resolve());
-            });
-        }
-        localStorage.setItem(key, encrypted);
-        return Promise.resolve();
+    // Low-level cloud get (raw, no decryption)
+    _cloudGet(key) {
+        return new Promise(resolve => {
+            try {
+                Telegram.WebApp.CloudStorage.getItem(key, (err, value) =>
+                    resolve((value !== null && value !== undefined && value !== '') ? value : null)
+                );
+            } catch(e) { resolve(null); }
+        });
     },
 
-    // Read and decrypt value
-    async getItem(key) {
-        let raw;
+    // Low-level cloud set (raw, no encryption)
+    _cloudSet(key, value) {
+        return new Promise(resolve => {
+            try {
+                Telegram.WebApp.CloudStorage.setItem(key, value, () => resolve());
+            } catch(e) { resolve(); }
+        });
+    },
+
+    // Save encrypted value — always write to localStorage as local cache,
+    // and to CloudStorage when available (for cross-device sync).
+    async setItem(key, value) {
+        const encrypted = await EncryptionManager.encrypt(value);
+        // Always save locally as a fast cache / fallback
+        try { localStorage.setItem('dbmix_' + key, encrypted); } catch(e) {}
         if (this.supportsCloud) {
-            raw = await new Promise(resolve => {
-                Telegram.WebApp.CloudStorage.getItem(key, (err, value) =>
-                    resolve(value !== null && value !== undefined ? value : null)
-                );
-            });
-        } else {
-            raw = localStorage.getItem(key) || null;
+            await this._cloudSet(key, encrypted);
+        }
+        return;
+    },
+
+    // Read and decrypt value — prefer CloudStorage (authoritative),
+    // fall back to localStorage cache.
+    async getItem(key) {
+        let raw = null;
+        if (this.supportsCloud) {
+            raw = await this._cloudGet(key);
+        }
+        // Fall back to local cache if cloud returned nothing
+        if (!raw) {
+            raw = localStorage.getItem('dbmix_' + key) || localStorage.getItem(key) || null;
         }
         if (!raw) return null;
         return await EncryptionManager.decrypt(raw);
@@ -2547,9 +2610,20 @@ const diary = {
         document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
         document.getElementById('eventForm').addEventListener('submit',  e => this.saveEvent(e));
 
-        // Task quick-add: Enter key support
+        // Task quick-add: Enter key support + iOS-safe click handler
         const qi = document.getElementById('taskQuickInput');
-        if (qi) qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
+        if (qi) {
+            qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
+            // iOS Safari: also handle 'compositionend' for IME keyboards
+            qi.addEventListener('compositionend', () => { /* allow IME to settle */ });
+        }
+        // Attach add button via JS (more reliable than inline onclick on iOS Safari)
+        const taskAddBtn = document.getElementById('taskAddBtn');
+        if (taskAddBtn) {
+            // Use both click and touchend for maximum iOS compatibility
+            taskAddBtn.addEventListener('click', e => { e.preventDefault(); TaskManager.quickAdd(); });
+            taskAddBtn.addEventListener('touchend', e => { e.preventDefault(); TaskManager.quickAdd(); }, { passive: false });
+        }
 
         document.getElementById('clearAll').addEventListener('click', async () => {
             if (!confirm(this.t('confirm-clear-all'))) return;
@@ -2745,9 +2819,11 @@ const SidebarUI = {
 
 // ================================================================
 //  ACHIEVEMENTS SYSTEM
-//  FIX: earnedDate is now saved permanently on first unlock only.
-//  _state[id].earned = true  AND  _state[id].earnedDate = 'YYYY-MM-DD'
-//  are NEVER overwritten once set.
+//  FIX: earnedDate is saved permanently on first unlock only.
+//  FIX: _loaded flag prevents recalculate() from running before
+//       the persisted state is loaded — eliminating the race that
+//       caused dates to reset and achievements to disappear.
+//  FIX: _save() now retries on failure to prevent data loss.
 // ================================================================
 const AchievementsUI = {
 
@@ -2756,63 +2832,97 @@ const AchievementsUI = {
             title: 'Achievements', progressLabel: 'Unlocked achievements',
             locked: 'Locked', earnedOn: 'Earned',
             achs: [
-                { id: 'first_note',     icon: '📝', title: 'First Note',          desc: 'Created your very first note' },
-                { id: 'notes_10',       icon: '📚', title: '10 Notes Written',     desc: 'Wrote 10 notes in total' },
-                { id: 'first_habit',    icon: '🔥', title: 'First Habit',          desc: 'Started tracking your first habit' },
-                { id: 'streak_7',       icon: '⚡', title: '7-Day Streak',         desc: 'Used the app 7 days in a row' },
-                { id: 'streak_30',      icon: '🌟', title: '30-Day Streak',        desc: 'Used the app 30 days in a row' },
-                { id: 'tasks_5_day',    icon: '✅', title: 'Power Day',            desc: 'Completed 5 tasks in a single day' },
-                { id: 'days_14',        icon: '📅', title: '14 Days Active',       desc: 'Used the planner for 14 days' },
-                { id: 'profile_custom', icon: '👤', title: 'Personalised',         desc: 'Customized your profile nickname' },
-                { id: 'tasks_50',       icon: '🎯', title: 'Task Master',          desc: 'Completed 50 tasks in total' },
-                { id: 'tasks_100',      icon: '🏆', title: 'Master Planner',       desc: 'Completed 100 tasks in total' },
+                { id: 'first_note',      icon: '📝', title: 'First Note',            desc: 'Created your very first note' },
+                { id: 'notes_10',        icon: '📚', title: '10 Notes Written',       desc: 'Wrote 10 notes in total' },
+                { id: 'first_habit',     icon: '🔥', title: 'First Habit',            desc: 'Started tracking your first habit' },
+                { id: 'streak_7',        icon: '⚡', title: '7-Day Streak',           desc: 'Used the app 7 days in a row' },
+                { id: 'streak_30',       icon: '🌟', title: '30-Day Streak',          desc: 'Used the app 30 days in a row' },
+                { id: 'tasks_5_day',     icon: '✅', title: 'Power Day',              desc: 'Completed 5 tasks in a single day' },
+                { id: 'days_14',         icon: '📅', title: '14 Days Active',         desc: 'Used the planner for 14 days' },
+                { id: 'profile_custom',  icon: '👤', title: 'Personalised',           desc: 'Customized your profile nickname' },
+                { id: 'tasks_50',        icon: '🎯', title: 'Task Master',            desc: 'Completed 50 tasks in total' },
+                { id: 'tasks_100',       icon: '🏆', title: 'Master Planner',         desc: 'Completed 100 tasks in total' },
+                { id: 'first_task',      icon: '🌱', title: 'First Step',             desc: 'Added your very first daily task' },
+                { id: 'tasks_3_streak',  icon: '🔁', title: '3-Day Task Streak',      desc: 'Completed at least one task for 3 days in a row' },
+                { id: 'tasks_all_day',   icon: '💯', title: 'Perfect Day',            desc: 'Completed all tasks in a single day (min. 3 tasks)' },
             ]
         },
         ru: {
             title: 'Достижения', progressLabel: 'Разблокировано достижений',
             locked: 'Закрыто', earnedOn: 'Получено',
             achs: [
-                { id: 'first_note',     icon: '📝', title: 'Первая запись',        desc: 'Создал свою первую заметку' },
-                { id: 'notes_10',       icon: '📚', title: '10 записей',           desc: 'Написал 10 заметок всего' },
-                { id: 'first_habit',    icon: '🔥', title: 'Первая привычка',      desc: 'Начал отслеживать первую привычку' },
-                { id: 'streak_7',       icon: '⚡', title: 'Серия 7 дней',         desc: 'Использовал приложение 7 дней подряд' },
-                { id: 'streak_30',      icon: '🌟', title: 'Серия 30 дней',        desc: 'Использовал приложение 30 дней подряд' },
-                { id: 'tasks_5_day',    icon: '✅', title: 'Ударный день',         desc: 'Выполнил 5 задач за один день' },
-                { id: 'days_14',        icon: '📅', title: '14 дней активности',   desc: 'Использовал планнер 14 дней' },
-                { id: 'profile_custom', icon: '👤', title: 'Персонализация',       desc: 'Настроил никнейм профиля' },
-                { id: 'tasks_50',       icon: '🎯', title: 'Мастер задач',         desc: 'Выполнил 50 задач всего' },
-                { id: 'tasks_100',      icon: '🏆', title: 'Мастер планирования',  desc: 'Выполнил 100 задач всего' },
+                { id: 'first_note',      icon: '📝', title: 'Первая запись',          desc: 'Создал свою первую заметку' },
+                { id: 'notes_10',        icon: '📚', title: '10 записей',             desc: 'Написал 10 заметок всего' },
+                { id: 'first_habit',     icon: '🔥', title: 'Первая привычка',        desc: 'Начал отслеживать первую привычку' },
+                { id: 'streak_7',        icon: '⚡', title: 'Серия 7 дней',           desc: 'Использовал приложение 7 дней подряд' },
+                { id: 'streak_30',       icon: '🌟', title: 'Серия 30 дней',          desc: 'Использовал приложение 30 дней подряд' },
+                { id: 'tasks_5_day',     icon: '✅', title: 'Ударный день',           desc: 'Выполнил 5 задач за один день' },
+                { id: 'days_14',         icon: '📅', title: '14 дней активности',     desc: 'Использовал планнер 14 дней' },
+                { id: 'profile_custom',  icon: '👤', title: 'Персонализация',         desc: 'Настроил никнейм профиля' },
+                { id: 'tasks_50',        icon: '🎯', title: 'Мастер задач',           desc: 'Выполнил 50 задач всего' },
+                { id: 'tasks_100',       icon: '🏆', title: 'Мастер планирования',    desc: 'Выполнил 100 задач всего' },
+                { id: 'first_task',      icon: '🌱', title: 'Первый шаг',             desc: 'Добавил свою первую ежедневную задачу' },
+                { id: 'tasks_3_streak',  icon: '🔁', title: 'Серия задач 3 дня',      desc: 'Выполнял хотя бы одну задачу 3 дня подряд' },
+                { id: 'tasks_all_day',   icon: '💯', title: 'Идеальный день',         desc: 'Выполнил все задачи за день (мин. 3 задачи)' },
             ]
         }
     },
 
-    // Persistent state map: { [achievementId]: { earned: bool, earnedDate: string } }
+    // Persistent state: { [id]: { earned: bool, earnedDate: 'YYYY-MM-DD' } }
+    // NEVER mutated until _loaded = true
     _state: {},
+    _loaded: false,   // guard: do not recalculate until state is restored from storage
 
     init() {
         StorageManager.getItem('achievements_v1').then(raw => {
             try {
-                if (raw) this._state = JSON.parse(raw);
-            } catch(e) { this._state = {}; }
+                const parsed = raw ? JSON.parse(raw) : {};
+                // Merge: preserve any already-earned entries (safety net)
+                const merged = {};
+                const allIds = [
+                    ...Object.keys(this._state),
+                    ...Object.keys(parsed)
+                ];
+                for (const id of allIds) {
+                    const existing = this._state[id];
+                    const loaded   = parsed[id];
+                    // Keep whichever source shows the achievement as earned
+                    if (loaded && loaded.earned) {
+                        merged[id] = loaded;
+                    } else if (existing && existing.earned) {
+                        merged[id] = existing;
+                    }
+                }
+                this._state = merged;
+            } catch(e) { /* keep current _state unchanged */ }
+            this._loaded = true;
             this.recalculate();
-        }).catch(() => { this.recalculate(); });
+        }).catch(() => {
+            this._loaded = true;
+            this.recalculate();
+        });
     },
 
     _save() {
-        // Persist achievements state (encrypted via StorageManager)
-        StorageManager.setItem('achievements_v1', JSON.stringify(this._state)).catch(() => {});
+        // Persist achievements state — retry once on failure to prevent data loss
+        const data = JSON.stringify(this._state);
+        StorageManager.setItem('achievements_v1', data).catch(() => {
+            setTimeout(() => StorageManager.setItem('achievements_v1', data).catch(() => {}), 1500);
+        });
     },
 
-    // FIX: unlock() ONLY sets the earnedDate on FIRST unlock — never overwrites it
+    // ONLY sets earnedDate on FIRST unlock — never overwrites it
     _unlock(id) {
-        // If already earned with a date, do NOT overwrite — this is the key fix
-        if (this._state[id] && this._state[id].earned) return false;
+        if (this._state[id] && this._state[id].earned) return false; // already earned, preserve date
         const today = diary.today ? diary.today() : new Date().toISOString().split('T')[0];
         this._state[id] = { earned: true, earnedDate: today };
         return true; // newly unlocked
     },
 
     recalculate() {
+        // Guard: never run before persisted state is loaded (prevents date resets)
+        if (!this._loaded) return;
+
         let changed = false;
 
         // 1. First note
@@ -2826,16 +2936,15 @@ const AchievementsUI = {
         // 5. 30-day streak
         if ((diary.fireStreak || 0) >= 30    && this._unlock('streak_30'))    changed = true;
 
-        // 6. 5 tasks completed in a single day (from TaskManager)
+        // 6. 5 tasks completed in a single day
         const maxInDay = Math.max(0, ...Object.values(TaskManager._data || {}).map(d =>
             (d.tasks || []).filter(t => t.completed).length
         ));
         if (maxInDay >= 5 && this._unlock('tasks_5_day')) changed = true;
 
-        // 7. 14 distinct days with habit completion
+        // 7. 14 distinct active days (habits + tasks)
         const allDays = new Set();
         (diary.habits || []).forEach(h => (h.completedDays || []).forEach(d => allDays.add(d)));
-        // Also count days where tasks were completed
         Object.keys(TaskManager._data || {}).forEach(d => {
             const day = TaskManager._data[d];
             if (day && day.tasks && day.tasks.some(t => t.completed)) allDays.add(d);
@@ -2853,10 +2962,29 @@ const AchievementsUI = {
         // 10. 100 total completed tasks
         if (totalCompleted >= 100 && this._unlock('tasks_100')) changed = true;
 
+        // ── NEW TASK ACHIEVEMENTS ──
+
+        // 11. First task ever added (any day has at least 1 task)
+        const totalTasks = Object.values(TaskManager._data || {}).reduce(
+            (s, d) => s + (d.tasks || []).length, 0
+        );
+        if (totalTasks >= 1 && this._unlock('first_task')) changed = true;
+
+        // 12. 3-day task completion streak
+        if ((TaskManager.completionStreak ? TaskManager.completionStreak() : 0) >= 3 &&
+            this._unlock('tasks_3_streak')) changed = true;
+
+        // 13. All tasks completed in a single day (at least 3 tasks)
+        const hadPerfectDay = Object.values(TaskManager._data || {}).some(d => {
+            const tasks = d.tasks || [];
+            return tasks.length >= 3 && tasks.every(t => t.completed);
+        });
+        if (hadPerfectDay && this._unlock('tasks_all_day')) changed = true;
+
         if (changed) {
             this._save();
-            // Re-render if achievements panel is open
-            if (document.getElementById('achievementsModal').classList.contains('open')) {
+            const modal = document.getElementById('achievementsModal');
+            if (modal && modal.classList.contains('open')) {
                 this._render();
             }
         }
