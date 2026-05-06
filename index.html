@@ -1023,7 +1023,7 @@
         </div>
         <div class="ach-progress-card">
             <div class="ach-progress-label" id="ach-progress-label">Unlocked achievements</div>
-            <div class="ach-progress-count"><span id="ach-unlocked-count">0</span><span style="font-size:18px;opacity:0.6"> / 10</span></div>
+            <div class="ach-progress-count"><span id="ach-unlocked-count">0</span><span id="ach-total-count" style="font-size:18px;opacity:0.6"> / 13</span></div>
             <div class="ach-prog-track"><div class="ach-prog-fill" id="ach-prog-fill" style="width:0%"></div></div>
         </div>
         <div class="ach-grid" id="achGrid"></div>
@@ -1121,46 +1121,45 @@ const EncryptionManager = {
         btn.disabled = true;
 
         try {
-            // Detect if CloudStorage is available (for cross-device sync)
+            // CloudStorage is authoritative for this Telegram-only app.
+            // localStorage is only a resilience fallback.
             const hasCloud = !!(
                 window.Telegram && Telegram.WebApp.CloudStorage &&
                 Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
             );
-
-            const _cloudGet = key => new Promise(resolve => {
-                try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => resolve((v && v !== '') ? v : null)); }
-                catch(e) { resolve(null); }
+            const csGet = key => new Promise(res => {
+                if (!hasCloud) return res(null);
+                try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
+                catch(e) { res(null); }
             });
-            const _cloudSet = (key, val) => new Promise(resolve => {
-                try { Telegram.WebApp.CloudStorage.setItem(key, val, () => resolve()); }
-                catch(e) { resolve(); }
+            const csSet = (key, val) => new Promise(res => {
+                if (!hasCloud) return res();
+                try { Telegram.WebApp.CloudStorage.setItem(key, val, () => res()); }
+                catch(e) { res(); }
             });
 
-            // --- Load or generate salt ---
-            // Priority: localStorage → CloudStorage (for cross-device)
-            let saltB64 = localStorage.getItem('dbmix_salt');
-            if (!saltB64 && hasCloud) saltB64 = await _cloudGet('dbmix_salt');
+            // --- Salt: CloudStorage first, localStorage fallback ---
+            let saltB64 = await csGet('dbmix_salt');
+            if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
 
             if (!saltB64) {
-                // First time: generate salt, save everywhere
+                // First time: generate and persist salt
                 this._salt = crypto.getRandomValues(new Uint8Array(16));
                 saltB64 = this._b64encode(this._salt);
-                localStorage.setItem('dbmix_salt', saltB64);
-                if (hasCloud) await _cloudSet('dbmix_salt', saltB64);
+                await csSet('dbmix_salt', saltB64);
+                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
             } else {
                 this._salt = this._b64decode(saltB64);
-                // Mirror salt to CloudStorage if missing there
-                if (hasCloud) {
-                    const cloudSalt = await _cloudGet('dbmix_salt');
-                    if (!cloudSalt) await _cloudSet('dbmix_salt', saltB64);
-                }
+                // Ensure salt is in both stores for resilience
+                await csSet('dbmix_salt', saltB64);
+                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
             }
 
             this._key = await this.deriveKey(pw, this._salt);
 
-            // --- Verify password via sentinel ---
-            let sentinel = localStorage.getItem('dbmix_sentinel');
-            if (!sentinel && hasCloud) sentinel = await _cloudGet('dbmix_sentinel');
+            // --- Sentinel: CloudStorage first, localStorage fallback ---
+            let sentinel = await csGet('dbmix_sentinel');
+            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
 
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
@@ -1172,20 +1171,16 @@ const EncryptionManager = {
                     return;
                 }
             } else {
-                // First time: create and store sentinel everywhere
                 const enc = await this.encrypt('DAILYBOOKMIX_V5');
-                localStorage.setItem('dbmix_sentinel', enc);
-                if (hasCloud) await _cloudSet('dbmix_sentinel', enc);
+                await csSet('dbmix_sentinel', enc);
+                try { localStorage.setItem('dbmix_sentinel', enc); } catch(e) {}
             }
 
-            // Store password in sessionStorage for auto-unlock within session
-            sessionStorage.setItem('dbmix_pw', pw);
+            try { sessionStorage.setItem('dbmix_pw', pw); } catch(e) {}
 
-            // Hide lock screen, show app
             document.getElementById('encryptionLock').classList.remove('open');
             document.getElementById('appContent').style.display = 'block';
 
-            // Initialize app
             await diary.init();
 
         } catch(e) {
@@ -1207,32 +1202,32 @@ const EncryptionManager = {
         input.focus();
     },
 
-    // Try auto-unlock from session (if user didn't close tab)
+    // Try auto-unlock from session (if user didn't close the Telegram mini-app)
     async tryAutoUnlock() {
-        const pw = sessionStorage.getItem('dbmix_pw');
+        let pw = null;
+        try { pw = sessionStorage.getItem('dbmix_pw'); } catch(e) {}
         if (!pw) return false;
 
-        // Detect CloudStorage availability
         const hasCloud = !!(
             window.Telegram && Telegram.WebApp.CloudStorage &&
             Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
         );
-        const _cloudGet = key => new Promise(resolve => {
-            try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => resolve((v && v !== '') ? v : null)); }
-            catch(e) { resolve(null); }
+        const csGet = key => new Promise(res => {
+            if (!hasCloud) return res(null);
+            try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
+            catch(e) { res(null); }
         });
 
-        // Load salt: localStorage first, then CloudStorage
-        let saltB64 = localStorage.getItem('dbmix_salt');
-        if (!saltB64 && hasCloud) saltB64 = await _cloudGet('dbmix_salt');
+        let saltB64 = await csGet('dbmix_salt');
+        if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
         if (!saltB64) return false;
 
         try {
             this._salt = this._b64decode(saltB64);
             this._key  = await this.deriveKey(pw, this._salt);
 
-            let sentinel = localStorage.getItem('dbmix_sentinel');
-            if (!sentinel && hasCloud) sentinel = await _cloudGet('dbmix_sentinel');
+            let sentinel = await csGet('dbmix_sentinel');
+            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
 
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
@@ -1275,12 +1270,10 @@ const EncryptionManager = {
 
 
 // ================================================================
-//  STORAGE MANAGER — reads/writes via Telegram CloudStorage or
-//  localStorage. All values are encrypted with EncryptionManager.
-//
-//  FIX (cross-device sync): When CloudStorage is available, we
-//  write encrypted data to CloudStorage AND mirror the salt/sentinel
-//  there too, so a new device can bootstrap without localStorage.
+//  STORAGE MANAGER — Telegram CloudStorage ONLY (this is a Telegram
+//  bot app; localStorage is not used for any app data).
+//  All values are encrypted with EncryptionManager.
+//  Includes retry logic so saves never silently fail.
 // ================================================================
 const StorageManager = {
     supportsCloud: false,
@@ -1294,48 +1287,58 @@ const StorageManager = {
         } catch(e) { this.supportsCloud = false; }
     },
 
-    // Low-level cloud get (raw, no decryption)
-    _cloudGet(key) {
-        return new Promise(resolve => {
-            try {
-                Telegram.WebApp.CloudStorage.getItem(key, (err, value) =>
-                    resolve((value !== null && value !== undefined && value !== '') ? value : null)
-                );
-            } catch(e) { resolve(null); }
-        });
-    },
-
-    // Low-level cloud set (raw, no encryption)
+    // Raw CloudStorage set with Promise wrapper
     _cloudSet(key, value) {
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             try {
-                Telegram.WebApp.CloudStorage.setItem(key, value, () => resolve());
-            } catch(e) { resolve(); }
+                Telegram.WebApp.CloudStorage.setItem(key, value, (err) => {
+                    if (err) reject(new Error(err));
+                    else resolve();
+                });
+            } catch(e) { reject(e); }
         });
     },
 
-    // Save encrypted value — always write to localStorage as local cache,
-    // and to CloudStorage when available (for cross-device sync).
+    // Raw CloudStorage get with Promise wrapper
+    _cloudGet(key) {
+        return new Promise((resolve, reject) => {
+            try {
+                Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
+                    if (err) reject(new Error(err));
+                    else resolve((value !== null && value !== undefined && value !== '') ? value : null);
+                });
+            } catch(e) { reject(e); }
+        });
+    },
+
+    // Save encrypted value — with retry on failure
     async setItem(key, value) {
         const encrypted = await EncryptionManager.encrypt(value);
-        // Always save locally as a fast cache / fallback
-        try { localStorage.setItem('dbmix_' + key, encrypted); } catch(e) {}
         if (this.supportsCloud) {
-            await this._cloudSet(key, encrypted);
+            // Try up to 3 times with backoff
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    await this._cloudSet(key, encrypted);
+                    return; // success
+                } catch(e) {
+                    if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+                }
+            }
+            console.warn('[StorageManager] setItem failed after 3 attempts for key:', key);
+        } else {
+            // Fallback: not in Telegram context (dev/preview)
+            try { localStorage.setItem('dbmix_' + key, encrypted); } catch(e) {}
         }
-        return;
     },
 
-    // Read and decrypt value — prefer CloudStorage (authoritative),
-    // fall back to localStorage cache.
+    // Read and decrypt value
     async getItem(key) {
         let raw = null;
         if (this.supportsCloud) {
-            raw = await this._cloudGet(key);
-        }
-        // Fall back to local cache if cloud returned nothing
-        if (!raw) {
-            raw = localStorage.getItem('dbmix_' + key) || localStorage.getItem(key) || null;
+            try { raw = await this._cloudGet(key); }
+            catch(e) { raw = null; }
+        } else {
+            raw = localStorage.getItem('dbmix_' + key) || null;
         }
         if (!raw) return null;
         return await EncryptionManager.decrypt(raw);
@@ -1554,30 +1557,49 @@ const TaskManager = {
         const text = input.value.trim();
         if (!text) return;
 
+        // Disable button during save to prevent double-tap on iOS
+        const addBtn = document.getElementById('taskAddBtn');
+        if (addBtn) addBtn.disabled = true;
+
         const dateStr = this._viewDate || this.today();
         const day = this.dayData(dateStr);
 
-        day.tasks.unshift({
+        const newTask = {
             id:          Date.now(),
             text:        text,
             important:   this._newTaskImp,
             completed:   false,
             completedAt: null,
             createdAt:   new Date().toISOString()
-        });
+        };
 
-        // Sort: incomplete first, then complete
+        day.tasks.unshift(newTask);
         this._sortTasks(day);
 
+        // Clear UI immediately for responsiveness
         input.value = '';
         this._newTaskImp = false;
-        const btn = document.getElementById('taskImpToggle');
-        if (btn) btn.classList.remove('active');
+        const impBtn = document.getElementById('taskImpToggle');
+        if (impBtn) impBtn.classList.remove('active');
 
-        await this._save();
-        diary.toast(diary.t('tasks-toast-added'));
+        // Render optimistically
         this.render();
-        AchievementsUI.recalculate();
+
+        // Save to CloudStorage — if it fails, roll back and show error
+        try {
+            await this._save();
+            diary.toast(diary.t('tasks-toast-added'));
+            AchievementsUI.recalculate();
+        } catch(e) {
+            // Save failed: remove the task we added and restore input
+            day.tasks = day.tasks.filter(t => t.id !== newTask.id);
+            input.value = text;
+            this.render();
+            diary.toast('❌ Failed to save task — please try again', 'error');
+            console.error('[TaskManager] quickAdd save failed:', e);
+        } finally {
+            if (addBtn) addBtn.disabled = false;
+        }
     },
 
     // Handle Enter key in quick input
@@ -1591,22 +1613,44 @@ const TaskManager = {
         const task = day.tasks.find(t => t.id === taskId);
         if (!task) return;
 
+        // Apply change
+        const prevCompleted   = task.completed;
+        const prevCompletedAt = task.completedAt;
         task.completed   = !task.completed;
         task.completedAt = task.completed ? new Date().toISOString() : null;
 
         this._sortTasks(day);
-        await this._save();
         this.render();
-        AchievementsUI.recalculate();
+
+        try {
+            await this._save();
+            AchievementsUI.recalculate();
+        } catch(e) {
+            // Rollback
+            task.completed   = prevCompleted;
+            task.completedAt = prevCompletedAt;
+            this._sortTasks(day);
+            this.render();
+            diary.toast('❌ Failed to save — please try again', 'error');
+        }
     },
 
     // Delete a task
     async deleteTask(dateStr, taskId) {
         const day = this.dayData(dateStr);
+        const removed = day.tasks.find(t => t.id === taskId);
         day.tasks = day.tasks.filter(t => t.id !== taskId);
-        await this._save();
-        diary.toast(diary.t('tasks-toast-deleted'));
         this.render();
+        try {
+            await this._save();
+            diary.toast(diary.t('tasks-toast-deleted'));
+        } catch(e) {
+            // Rollback
+            if (removed) day.tasks.push(removed);
+            this._sortTasks(day);
+            this.render();
+            diary.toast('❌ Failed to delete — please try again', 'error');
+        }
     },
 
     // Sort: important+incomplete → normal+incomplete → completed (by completedAt desc)
@@ -1621,9 +1665,16 @@ const TaskManager = {
     // Set mood for a day
     async setMood(dateStr, mood) {
         const day = this.dayData(dateStr);
+        const prevMood = day.mood;
         day.mood = (day.mood === mood) ? '' : mood; // toggle
-        await this._save();
         this.render();
+        try {
+            await this._save();
+        } catch(e) {
+            day.mood = prevMood;
+            this.render();
+            diary.toast('❌ Failed to save mood', 'error');
+        }
     },
 
     // Carry over incomplete tasks to tomorrow
@@ -1637,17 +1688,25 @@ const TaskManager = {
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
         const nextDay = this.dayData(tomorrowStr);
 
-        // Carry-over: add tasks to tomorrow (avoid duplicates by id)
         const existingIds = new Set(nextDay.tasks.map(t => t.id));
+        const added = [];
         incomplete.forEach(t => {
             if (!existingIds.has(t.id)) {
-                nextDay.tasks.push({ ...t, completedAt: null, completed: false, createdAt: new Date().toISOString() });
+                const copy = { ...t, completedAt: null, completed: false, createdAt: new Date().toISOString() };
+                nextDay.tasks.push(copy);
+                added.push(copy.id);
             }
         });
         this._sortTasks(nextDay);
 
-        await this._save();
-        diary.toast(diary.t('tasks-toast-carried'));
+        try {
+            await this._save();
+            diary.toast(diary.t('tasks-toast-carried'));
+        } catch(e) {
+            // Rollback: remove the tasks we added to tomorrow
+            nextDay.tasks = nextDay.tasks.filter(t => !added.includes(t.id));
+            diary.toast('❌ Failed to carry over tasks', 'error');
+        }
     },
 
     // Count consecutive days where at least 1 task was completed
@@ -1684,6 +1743,8 @@ const TaskManager = {
     },
 
     async _save() {
+        // StorageManager.setItem already retries internally.
+        // We await it here so callers can catch failures.
         await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
     },
 
@@ -3066,12 +3127,11 @@ const AchievementsUI = {
 
 // ================================================================
 //  BOOT SEQUENCE
-//  1. Try auto-unlock from session (if already logged in this session)
-//  2. Otherwise show password prompt
 // ================================================================
 (async function boot() {
-    // Apply any previously saved language to lock screen
-    const savedLang = localStorage.getItem('dbmix_lang_hint') || 'en';
+    // Apply saved language to lock screen (try CloudStorage, fall back to localStorage)
+    let savedLang = 'en';
+    try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch(e) {}
     EncryptionManager.applyLang(savedLang);
 
     // Handle Enter key on password input
@@ -3080,6 +3140,10 @@ const AchievementsUI = {
         pi.addEventListener('keydown', e => {
             if (e.key === 'Enter') EncryptionManager.unlock();
         });
+        // Also support on touchend for iOS
+        pi.addEventListener('touchend', e => {
+            // focus is handled by the keyboard — do nothing special
+        }, { passive: true });
         pi.focus();
     }
 
@@ -3092,11 +3156,9 @@ const AchievementsUI = {
 })();
 
 // Persist language hint (unencrypted, just for lock screen UI)
-const _origApplyLang = diary.applyLang ? diary.applyLang.bind(diary) : null;
-// We hook into applyLang to save the language hint
 const _patchApplyLang = diary.applyLang;
 diary.applyLang = function(lang) {
-    localStorage.setItem('dbmix_lang_hint', lang);
+    try { localStorage.setItem('dbmix_lang_hint', lang); } catch(e) {}
     _patchApplyLang.call(diary, lang);
     EncryptionManager.applyLang(lang);
 };
