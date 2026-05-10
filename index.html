@@ -273,6 +273,11 @@
             transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease, border-color 0.2s;
             animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
         }
+        /* Golden Frame shop item effect */
+        .golden-frame-active .record-card {
+            border-color: rgba(245,158,11,0.5) !important;
+            box-shadow: 0 0 0 1px rgba(245,158,11,0.18), 0 4px 18px rgba(180,100,0,0.12) !important;
+        }
         @keyframes cardIn {
             from { opacity:0; transform: translateY(12px) scale(0.97); }
             to   { opacity:1; transform: translateY(0) scale(1); }
@@ -615,6 +620,330 @@
         body:not(.theme-dark) .tab-btn:not(.active) { text-shadow: 0 1px 4px rgba(0,0,0,0.15); }
         body:not(.theme-dark) .record-card .font-bold { color: rgba(255,255,255,0.97) !important; }
         body:not(.theme-dark) footer { text-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+        /* ══ RUBY CURRENCY ══ */
+        /* Inline gem in header */
+        .ruby-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(0,0,0,0.28); border: 1px solid rgba(220,60,60,0.55);
+            border-radius: 999px; padding: 5px 12px 5px 7px;
+            cursor: pointer; flex-shrink: 0;
+            transition: transform 0.18s, box-shadow 0.18s;
+            box-shadow: 0 2px 12px rgba(180,0,0,0.25);
+        }
+        .ruby-badge:active { transform: scale(0.93); }
+        .ruby-gem-icon {
+            width: 22px; height: 32px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        /* ОНИКС gem — tall diamond image as closely as possible */
+        .ruby-count {
+            font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800;
+            color: #ff6060; text-shadow: 0 0 8px rgba(255,60,60,0.6);
+            letter-spacing: -0.02em; line-height: 1;
+        }
+        /* Earn animation — gem bounces + glow flash on reward */
+        @keyframes rubyEarn {
+            0%   { transform: scale(1); filter: drop-shadow(0 0 0px #ff4040); }
+            35%  { transform: scale(1.55); filter: drop-shadow(0 0 14px #ff2020); }
+            60%  { transform: scale(0.88); filter: drop-shadow(0 0 6px #ff6060); }
+            100% { transform: scale(1); filter: drop-shadow(0 0 0px #ff4040); }
+        }
+        .ruby-earn-anim { animation: rubyEarn 0.65s cubic-bezier(0.68,-0.55,0.27,1.55) both; }
+        /* Floating +1 toast */
+        @keyframes rubyFloat {
+            0%   { opacity: 1; transform: translateY(0) scale(1); }
+            80%  { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-52px) scale(0.8); }
+        }
+        .ruby-float-toast {
+            position: fixed; z-index: 999999;
+            font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 900;
+            color: #ff5050; text-shadow: 0 0 14px rgba(255,50,50,0.8), 0 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none;
+            animation: rubyFloat 1.1s ease-out both;
+        }
+
+        /* ══ DAILY CHALLENGES MODAL ══ */
+        #dailyChallengesModal {
+            display: none; position: fixed; inset: 0; z-index: 10005;
+            background: rgba(0,0,0,0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            overflow-y: auto; padding: 16px;
+        }
+        #dailyChallengesModal.open { display: block; }
+        .dc-container { max-width: 480px; margin: 0 auto; padding-bottom: 36px; }
+        .dc-header {
+            display: flex; align-items: center; gap: 12px; padding: 20px 0 16px;
+        }
+        .dc-header-title {
+            font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+            color: white; flex: 1; display: flex; align-items: center; gap: 10px;
+        }
+        .dc-close-btn {
+            width: 40px; height: 40px; border-radius: 12px;
+            background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.2);
+            color: white; font-size: 22px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: background 0.18s, transform 0.15s; flex-shrink: 0;
+        }
+        .dc-close-btn:active { transform: scale(0.92); }
+        /* Wallet card */
+        .dc-wallet {
+            background: linear-gradient(135deg, rgba(140,10,10,0.75) 0%, rgba(80,0,0,0.9) 100%);
+            border: 1px solid rgba(220,60,60,0.45);
+            border-radius: 22px; padding: 22px 24px; margin-bottom: 20px;
+            display: flex; align-items: center; gap: 18px;
+            box-shadow: 0 8px 32px rgba(180,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+        }
+        .dc-wallet-gem { width: 56px; height: 80px; flex-shrink: 0; }
+        .dc-wallet-info { flex: 1; }
+        .dc-wallet-label {
+            font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+            color: rgba(255,160,160,0.8); margin-bottom: 4px;
+        }
+        .dc-wallet-amount {
+            font-family: 'Syne', sans-serif; font-size: 38px; font-weight: 800;
+            color: #ff7070; text-shadow: 0 0 20px rgba(255,60,60,0.5); line-height: 1;
+        }
+        .dc-wallet-sub {
+            font-size: 12px; font-weight: 700; color: rgba(255,160,160,0.65); margin-top: 4px;
+        }
+        /* Reset info */
+        .dc-reset-info {
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px; padding: 12px 16px; margin-bottom: 20px;
+            font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.7);
+            display: flex; align-items: center; gap: 8px;
+        }
+        /* Section title */
+        .dc-section-title {
+            font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800;
+            color: white; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+        }
+        /* Challenge card */
+        .dc-card {
+            background: rgba(255,255,255,0.09); backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 18px;
+            padding: 16px 18px; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 14px;
+            transition: border-color 0.2s, background 0.2s;
+            animation: cardIn 0.3s cubic-bezier(0.34,1.1,0.64,1) both;
+        }
+        .dc-card.completed {
+            background: rgba(180,20,20,0.22);
+            border-color: rgba(220,60,60,0.45);
+        }
+        .dc-card-icon {
+            width: 48px; height: 48px; border-radius: 14px;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; flex-shrink: 0;
+        }
+        .dc-card.completed .dc-card-icon {
+            background: rgba(180,20,20,0.35); border-color: rgba(220,60,60,0.4);
+        }
+        .dc-card-body { flex: 1; min-width: 0; }
+        .dc-card-title {
+            font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+            color: white; margin-bottom: 3px;
+        }
+        .dc-card-desc { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.60); margin-bottom: 6px; }
+        .dc-card-prog {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .dc-prog-track {
+            flex: 1; height: 6px; background: rgba(255,255,255,0.12);
+            border-radius: 999px; overflow: hidden;
+        }
+        .dc-prog-fill {
+            height: 100%; background: linear-gradient(90deg, #cc1010, #ff5050);
+            border-radius: 999px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+        }
+        .dc-prog-label {
+            font-size: 11px; font-weight: 800; color: rgba(255,160,160,0.85);
+            white-space: nowrap;
+        }
+        .dc-reward {
+            display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(220,60,60,0.35);
+            border-radius: 10px; padding: 5px 9px;
+        }
+        .dc-reward-gem { width: 18px; height: 18px; }
+        .dc-reward-count {
+            font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 800; color: #ff6060;
+        }
+        .dc-card.completed .dc-reward {
+            background: rgba(180,20,20,0.4); border-color: rgba(255,80,80,0.5);
+        }
+        .dc-done-check {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: linear-gradient(135deg, #cc0000, #ff3030);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(200,0,0,0.5);
+        }
+
+        /* ══ DAILY TASKS (3-per-day system) ══ */
+        .dt-task-card {
+            background: rgba(255,255,255,0.09); backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(255,255,255,0.15); border-radius: 16px;
+            padding: 14px 16px; margin-bottom: 10px;
+            display: flex; align-items: flex-start; gap: 12px;
+            transition: border-color 0.2s, background 0.2s, opacity 0.25s;
+            animation: cardIn 0.3s cubic-bezier(0.34,1.1,0.64,1) both;
+        }
+        .dt-task-card.dt-done {
+            background: rgba(180,20,20,0.18);
+            border-color: rgba(220,60,60,0.4);
+            opacity: 0.85;
+        }
+        .dt-task-icon {
+            width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+            display: flex; align-items: center; justify-content: center; font-size: 20px;
+        }
+        .dt-task-card.dt-done .dt-task-icon {
+            background: rgba(180,20,20,0.3); border-color: rgba(220,60,60,0.4);
+        }
+        .dt-task-body { flex: 1; min-width: 0; }
+        .dt-task-title {
+            font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700;
+            color: white; margin-bottom: 2px;
+        }
+        .dt-task-card.dt-done .dt-task-title { text-decoration: line-through; opacity: 0.7; }
+        .dt-task-desc { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.55); margin-bottom: 6px; }
+        .dt-difficulty-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            border-radius: 8px; padding: 2px 8px;
+            font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .dt-diff-easy   { background: rgba(16,185,129,0.18); color: #34d399; }
+        .dt-diff-medium { background: rgba(245,158,11,0.18);  color: #fbbf24; }
+        .dt-diff-hard   { background: rgba(239,68,68,0.18);   color: #f87171; }
+        .dt-task-reward {
+            display: flex; align-items: center; gap: 3px; flex-shrink: 0;
+            background: rgba(0,0,0,0.28); border: 1px solid rgba(220,60,60,0.3);
+            border-radius: 9px; padding: 4px 8px; align-self: flex-start;
+        }
+        .dt-task-reward-count {
+            font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; color: #ff6060;
+        }
+        .dt-claim-btn {
+            margin-top: 8px; padding: 7px 14px; border-radius: 10px; border: none; cursor: pointer;
+            background: linear-gradient(135deg, rgba(220,50,50,0.5), rgba(150,0,0,0.6));
+            border: 1px solid rgba(220,60,60,0.5);
+            color: white; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .dt-claim-btn:active { transform: scale(0.95); }
+        .dt-claim-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .dt-next-reset {
+            font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.55);
+            text-align: center; padding: 10px 0 2px;
+        }
+
+        /* ══ SHOP MODAL ══ */
+        #shopModal {
+            display: none; position: fixed; inset: 0; z-index: 10006;
+            background: rgba(0,0,0,0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            overflow-y: auto; padding: 16px;
+        }
+        #shopModal.open { display: block; }
+        .shop-container { max-width: 480px; margin: 0 auto; padding-bottom: 40px; }
+        .shop-header {
+            display: flex; align-items: center; gap: 12px; padding: 20px 0 18px;
+        }
+        .shop-header-title {
+            font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+            color: white; flex: 1; display: flex; align-items: center; gap: 10px;
+        }
+        .shop-close-btn {
+            width: 40px; height: 40px; border-radius: 12px;
+            background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.2);
+            color: white; font-size: 22px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: background 0.18s, transform 0.15s; flex-shrink: 0;
+        }
+        .shop-close-btn:active { transform: scale(0.92); }
+        /* Wallet strip */
+        .shop-wallet-strip {
+            background: linear-gradient(135deg, rgba(140,10,10,0.7), rgba(60,0,0,0.85));
+            border: 1px solid rgba(220,60,60,0.4); border-radius: 18px;
+            padding: 14px 20px; margin-bottom: 22px;
+            display: flex; align-items: center; gap: 14px;
+        }
+        .shop-wallet-label { font-size: 12px; font-weight: 800; letter-spacing:.09em; text-transform:uppercase; color: rgba(255,160,160,0.75); }
+        .shop-wallet-amount { font-family:'Syne',sans-serif; font-size:30px; font-weight:800; color:#ff7070; line-height:1; }
+        /* Item cards */
+        .shop-item-card {
+            background: rgba(255,255,255,0.08); border: 1.5px solid rgba(255,255,255,0.14);
+            border-radius: 20px; padding: 18px 18px 16px; margin-bottom: 14px;
+            transition: border-color 0.2s, background 0.2s;
+            animation: cardIn 0.3s cubic-bezier(0.34,1.1,0.64,1) both;
+        }
+        .shop-item-card.owned {
+            background: rgba(16,185,129,0.10); border-color: rgba(52,211,153,0.35);
+        }
+        .shop-item-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 12px; }
+        .shop-item-icon {
+            width: 56px; height: 56px; border-radius: 16px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 28px;
+            border: 1.5px solid rgba(255,255,255,0.12);
+        }
+        .shop-item-meta { flex: 1; }
+        .shop-item-name {
+            font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800;
+            color: white; margin-bottom: 3px;
+        }
+        .shop-item-cat {
+            font-size: 11px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+            color: rgba(255,255,255,0.45);
+        }
+        .shop-item-desc { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.62); margin-bottom: 14px; line-height: 1.5; }
+        /* Preview strip showing the cosmetic effect */
+        .shop-preview {
+            border-radius: 12px; padding: 12px 14px; margin-bottom: 12px;
+            font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.8);
+            text-align: center;
+        }
+        .shop-item-footer { display: flex; align-items: center; gap: 10px; }
+        .shop-price-tag {
+            display: flex; align-items: center; gap: 5px;
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(220,60,60,0.35);
+            border-radius: 10px; padding: 6px 12px;
+        }
+        .shop-price-amount { font-family:'Syne',sans-serif; font-size:16px; font-weight:800; color:#ff6060; }
+        .shop-buy-btn {
+            flex: 1; padding: 11px 18px; border-radius: 12px; border: none; cursor: pointer;
+            background: linear-gradient(135deg, #cc2020, #8b0000);
+            border: 1px solid rgba(220,60,60,0.5);
+            color: white; font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 800;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .shop-buy-btn:active { transform: scale(0.96); }
+        .shop-buy-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .shop-buy-btn.owned-btn {
+            background: rgba(16,185,129,0.2); border-color: rgba(52,211,153,0.4);
+            color: #34d399; cursor: default;
+        }
+        /* Confirm purchase modal */
+        #shopConfirmModal {
+            display: none; position: fixed; inset: 0; z-index: 10010;
+            background: rgba(0,0,0,0.82); backdrop-filter: blur(14px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        #shopConfirmModal.open { display: flex; }
+        .shop-confirm-box {
+            background: var(--modal-bg); color: var(--modal-text);
+            border-radius: 26px; padding: 26px; width: 100%; max-width: 360px;
+            animation: modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        /* Owned badge on item cards */
+        .shop-owned-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(16,185,129,0.18); border: 1px solid rgba(52,211,153,0.4);
+            border-radius: 8px; padding: 4px 10px;
+            font-size: 12px; font-weight: 800; color: #34d399;
+        }
     </style>
 </head>
 <body class="font-sans">
@@ -644,6 +973,66 @@
             <div id="streakBadge" class="streak-badge flex-shrink-0">
                 <span id="fireEmoji" class="text-xl">🔥</span>
                 <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
+            </div>
+            <div class="ruby-badge flex-shrink-0" id="rubyHeaderBadge" onclick="RubyManager.openModal()">
+                <span class="ruby-gem-icon" id="rubyHeaderGem">
+                    <!-- ОНИКС gem — tall diamond, gold border, internal facets, top glint -->
+                    <svg width="22" height="32" viewBox="0 0 22 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <radialGradient id="onyx_sm_body" cx="38%" cy="28%" r="72%">
+                                <stop offset="0%"   stop-color="#ff8080"/>
+                                <stop offset="28%"  stop-color="#cc1010"/>
+                                <stop offset="65%"  stop-color="#8b0000"/>
+                                <stop offset="100%" stop-color="#3a0000"/>
+                            </radialGradient>
+                            <radialGradient id="onyx_sm_inner" cx="45%" cy="40%" r="55%">
+                                <stop offset="0%"  stop-color="#ff3030" stop-opacity="0.45"/>
+                                <stop offset="100%" stop-color="#600000" stop-opacity="0"/>
+                            </radialGradient>
+                            <linearGradient id="onyx_sm_gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%"   stop-color="#b8760a"/>
+                                <stop offset="40%"  stop-color="#f0c040"/>
+                                <stop offset="100%" stop-color="#9a5c08"/>
+                            </linearGradient>
+                            <filter id="onyx_sm_glow" x="-30%" y="-20%" width="160%" height="140%">
+                                <feGaussianBlur stdDeviation="1.5" result="b"/>
+                                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                            </filter>
+                        </defs>
+                        <!-- outer glow halo -->
+                        <ellipse cx="11" cy="16" rx="9" ry="13" fill="rgba(200,10,10,0.18)" filter="url(#onyx_sm_glow)"/>
+                        <!-- gold outer border (diamond shape) -->
+                        <polygon points="11,1 21,13 11,31 1,13"
+                                 fill="none" stroke="url(#onyx_sm_gold)" stroke-width="1.3" stroke-linejoin="round"/>
+                        <!-- main body fill -->
+                        <polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#onyx_sm_body)"/>
+                        <!-- inner light overlay -->
+                        <polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#onyx_sm_inner)"/>
+                        <!-- left upper facet -->
+                        <polygon points="11,2.5 2.5,13 11,13" fill="rgba(255,140,140,0.18)"/>
+                        <!-- right upper facet -->
+                        <polygon points="11,2.5 19.5,13 11,13" fill="rgba(255,200,200,0.28)"/>
+                        <!-- centre horizontal facet line -->
+                        <line x1="2.5" y1="13" x2="19.5" y2="13" stroke="rgba(255,180,180,0.30)" stroke-width="0.7"/>
+                        <!-- diagonal facet lines — left top to right mid -->
+                        <line x1="11" y1="2.5" x2="19.5" y2="13" stroke="rgba(255,160,160,0.22)" stroke-width="0.6"/>
+                        <line x1="11" y1="2.5" x2="2.5"  y2="13" stroke="rgba(255,160,160,0.22)" stroke-width="0.6"/>
+                        <!-- lower diagonal facets -->
+                        <line x1="2.5"  y1="13" x2="11" y2="29.5" stroke="rgba(120,0,0,0.30)" stroke-width="0.6"/>
+                        <line x1="19.5" y1="13" x2="11" y2="29.5" stroke="rgba(120,0,0,0.30)" stroke-width="0.6"/>
+                        <!-- inner diamond grid lines -->
+                        <line x1="11" y1="7"  x2="16" y2="13" stroke="rgba(255,200,200,0.20)" stroke-width="0.5"/>
+                        <line x1="11" y1="7"  x2="6"  y2="13" stroke="rgba(255,200,200,0.20)" stroke-width="0.5"/>
+                        <!-- top point sparkle (near-white, like in photo) -->
+                        <ellipse cx="11" cy="3.5" rx="1.8" ry="1.0" fill="rgba(255,255,255,0.90)" transform="rotate(0,11,3.5)"/>
+                        <circle cx="11" cy="2.2" r="0.8" fill="white" opacity="0.95"/>
+                        <!-- upper-left glint -->
+                        <ellipse cx="8"  cy="8"   rx="1.8" ry="0.9" fill="rgba(255,255,255,0.45)" transform="rotate(-35,8,8)"/>
+                        <!-- gold corner ornament hint bottom-right -->
+                        <path d="M16 20 Q19 18 18.5 22 Q16 23 15.5 21" stroke="url(#onyx_sm_gold)" stroke-width="0.9" fill="none" opacity="0.8"/>
+                    </svg>
+                </span>
+                <span class="ruby-count" id="rubyHeaderCount">0</span>
             </div>
         </div>
     </header>
@@ -1003,6 +1392,39 @@
             <div class="sidebar-item-label" id="sb-item-achievements">Achievements</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
+        <div class="sidebar-item" onclick="ShopManager.openModal()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(245,158,11,0.22),rgba(180,100,0,0.18));border:1px solid rgba(245,158,11,0.35)">🛍️</div>
+            <div class="sidebar-item-label" id="sb-item-shop">Shop</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
+        <div class="sidebar-item" onclick="SidebarUI.openDailyChallenges()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(200,20,20,0.22),rgba(120,0,0,0.18));border:1px solid rgba(200,40,40,0.35)">
+                <svg width="18" height="26" viewBox="0 0 22 32" fill="none">
+                    <defs>
+                        <radialGradient id="onyx_sb_body" cx="38%" cy="28%" r="72%">
+                            <stop offset="0%" stop-color="#ff8080"/>
+                            <stop offset="30%" stop-color="#cc1010"/>
+                            <stop offset="100%" stop-color="#3a0000"/>
+                        </radialGradient>
+                        <linearGradient id="onyx_sb_gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#b8760a"/>
+                            <stop offset="50%" stop-color="#f0c040"/>
+                            <stop offset="100%" stop-color="#9a5c08"/>
+                        </linearGradient>
+                    </defs>
+                    <polygon points="11,1 21,13 11,31 1,13" fill="none" stroke="url(#onyx_sb_gold)" stroke-width="1.3" stroke-linejoin="round"/>
+                    <polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#onyx_sb_body)"/>
+                    <polygon points="11,2.5 19.5,13 11,13" fill="rgba(255,200,200,0.25)"/>
+                    <polygon points="11,2.5 2.5,13 11,13" fill="rgba(255,140,140,0.15)"/>
+                    <line x1="2.5" y1="13" x2="19.5" y2="13" stroke="rgba(255,180,180,0.28)" stroke-width="0.7"/>
+                    <circle cx="11" cy="2.2" r="1.3" fill="rgba(255,255,255,0.92)"/>
+                    <ellipse cx="8" cy="7.5" rx="1.6" ry="0.8" fill="rgba(255,255,255,0.40)" transform="rotate(-35,8,7.5)"/>
+                    <path d="M16 20 Q19 18 18.5 22 Q16 23 15.5 21" stroke="url(#onyx_sb_gold)" stroke-width="0.9" fill="none" opacity="0.8"/>
+                </svg>
+            </div>
+            <div class="sidebar-item-label" id="sb-item-daily-challenges">Daily Challenges</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
         <div class="sidebar-item danger" onclick="SidebarUI.confirmDeleteAccount()">
@@ -1046,6 +1468,250 @@
     </div>
 </div>
 
+
+<!-- ══════════════ DAILY CHALLENGES MODAL ══════════════ -->
+<div id="dailyChallengesModal">
+    <div class="dc-container">
+        <div class="dc-header">
+            <button class="dc-close-btn" onclick="RubyManager.closeModal()">×</button>
+            <div class="dc-header-title">
+                <!-- ОНИКС — tall diamond, modal header size -->
+                <svg width="24" height="34" viewBox="0 0 22 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <radialGradient id="onyx_hdr_body" cx="38%" cy="28%" r="72%">
+                            <stop offset="0%"   stop-color="#ff8080"/>
+                            <stop offset="28%"  stop-color="#cc1010"/>
+                            <stop offset="65%"  stop-color="#8b0000"/>
+                            <stop offset="100%" stop-color="#3a0000"/>
+                        </radialGradient>
+                        <radialGradient id="onyx_hdr_inner" cx="45%" cy="40%" r="55%">
+                            <stop offset="0%"  stop-color="#ff3030" stop-opacity="0.45"/>
+                            <stop offset="100%" stop-color="#600000" stop-opacity="0"/>
+                        </radialGradient>
+                        <linearGradient id="onyx_hdr_gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%"   stop-color="#b8760a"/>
+                            <stop offset="40%"  stop-color="#f0c040"/>
+                            <stop offset="100%" stop-color="#9a5c08"/>
+                        </linearGradient>
+                        <filter id="onyx_hdr_glow" x="-30%" y="-20%" width="160%" height="140%">
+                            <feGaussianBlur stdDeviation="1.8" result="b"/>
+                            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                        </filter>
+                    </defs>
+                    <ellipse cx="11" cy="16" rx="9" ry="13" fill="rgba(200,10,10,0.20)" filter="url(#onyx_hdr_glow)"/>
+                    <polygon points="11,1 21,13 11,31 1,13" fill="none" stroke="url(#onyx_hdr_gold)" stroke-width="1.3" stroke-linejoin="round"/>
+                    <polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#onyx_hdr_body)"/>
+                    <polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#onyx_hdr_inner)"/>
+                    <polygon points="11,2.5 2.5,13 11,13" fill="rgba(255,140,140,0.18)"/>
+                    <polygon points="11,2.5 19.5,13 11,13" fill="rgba(255,200,200,0.28)"/>
+                    <line x1="2.5" y1="13" x2="19.5" y2="13" stroke="rgba(255,180,180,0.30)" stroke-width="0.7"/>
+                    <line x1="11" y1="2.5" x2="19.5" y2="13" stroke="rgba(255,160,160,0.22)" stroke-width="0.6"/>
+                    <line x1="11" y1="2.5" x2="2.5"  y2="13" stroke="rgba(255,160,160,0.22)" stroke-width="0.6"/>
+                    <line x1="2.5"  y1="13" x2="11" y2="29.5" stroke="rgba(120,0,0,0.30)" stroke-width="0.6"/>
+                    <line x1="19.5" y1="13" x2="11" y2="29.5" stroke="rgba(120,0,0,0.30)" stroke-width="0.6"/>
+                    <line x1="11" y1="7"  x2="16" y2="13" stroke="rgba(255,200,200,0.20)" stroke-width="0.5"/>
+                    <line x1="11" y1="7"  x2="6"  y2="13" stroke="rgba(255,200,200,0.20)" stroke-width="0.5"/>
+                    <ellipse cx="11" cy="3.5" rx="1.8" ry="1.0" fill="rgba(255,255,255,0.90)"/>
+                    <circle cx="11" cy="2.2" r="0.8" fill="white" opacity="0.95"/>
+                    <ellipse cx="8" cy="8" rx="1.8" ry="0.9" fill="rgba(255,255,255,0.45)" transform="rotate(-35,8,8)"/>
+                    <path d="M16 20 Q19 18 18.5 22 Q16 23 15.5 21" stroke="url(#onyx_hdr_gold)" stroke-width="0.9" fill="none" opacity="0.8"/>
+                </svg>
+                <span id="dc-modal-title">Daily Challenges</span>
+            </div>
+        </div>
+
+        <!-- Wallet -->
+        <div class="dc-wallet">
+            <div class="dc-wallet-gem">
+                <!-- Large ОНИКС gem — tall diamond, gold ornate border, internal facets, top sparkle, filigree -->
+                <svg width="56" height="80" viewBox="0 0 56 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <radialGradient id="onyx_lg_body" cx="38%" cy="26%" r="75%">
+                            <stop offset="0%"   stop-color="#ff9090"/>
+                            <stop offset="20%"  stop-color="#e02020"/>
+                            <stop offset="55%"  stop-color="#8b0000"/>
+                            <stop offset="100%" stop-color="#2a0000"/>
+                        </radialGradient>
+                        <radialGradient id="onyx_lg_inner" cx="42%" cy="38%" r="58%">
+                            <stop offset="0%"  stop-color="#ff5050" stop-opacity="0.5"/>
+                            <stop offset="60%" stop-color="#aa0000" stop-opacity="0.2"/>
+                            <stop offset="100%" stop-color="#500000" stop-opacity="0"/>
+                        </radialGradient>
+                        <!-- marbled texture overlay -->
+                        <radialGradient id="onyx_lg_marble" cx="60%" cy="55%" r="40%">
+                            <stop offset="0%"  stop-color="#cc0000" stop-opacity="0.3"/>
+                            <stop offset="100%" stop-color="#800000" stop-opacity="0"/>
+                        </radialGradient>
+                        <linearGradient id="onyx_lg_gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%"   stop-color="#a06008"/>
+                            <stop offset="35%"  stop-color="#f5c840"/>
+                            <stop offset="65%"  stop-color="#e8a820"/>
+                            <stop offset="100%" stop-color="#8a5005"/>
+                        </linearGradient>
+                        <linearGradient id="onyx_lg_gold2" x1="100%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%"   stop-color="#f5c840"/>
+                            <stop offset="100%" stop-color="#a06008"/>
+                        </linearGradient>
+                        <filter id="onyx_lg_glow" x="-25%" y="-15%" width="150%" height="130%">
+                            <feGaussianBlur stdDeviation="3.5" result="b"/>
+                            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                        </filter>
+                        <filter id="onyx_lg_softglow" x="-40%" y="-25%" width="180%" height="150%">
+                            <feGaussianBlur stdDeviation="6" result="b"/>
+                            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                        </filter>
+                    </defs>
+
+                    <!-- ambient glow behind gem -->
+                    <ellipse cx="28" cy="42" rx="22" ry="30" fill="rgba(180,0,0,0.22)" filter="url(#onyx_lg_softglow)"/>
+
+                    <!-- gold outer border — tall diamond -->
+                    <polygon points="28,3 53,33 28,77 3,33"
+                             fill="none" stroke="url(#onyx_lg_gold)" stroke-width="1.8" stroke-linejoin="round"/>
+
+                    <!-- main body -->
+                    <polygon points="28,5 51,33 28,75 5,33" fill="url(#onyx_lg_body)" filter="url(#onyx_lg_glow)"/>
+                    <!-- inner glow overlay -->
+                    <polygon points="28,5 51,33 28,75 5,33" fill="url(#onyx_lg_inner)"/>
+                    <!-- marble texture -->
+                    <polygon points="28,5 51,33 28,75 5,33" fill="url(#onyx_lg_marble)"/>
+
+                    <!-- upper-left facet (lighter) -->
+                    <polygon points="28,5 5,33 28,33" fill="rgba(255,150,150,0.18)"/>
+                    <!-- upper-right facet (brightest) -->
+                    <polygon points="28,5 51,33 28,33" fill="rgba(255,210,210,0.30)"/>
+                    <!-- lower-left facet (darker) -->
+                    <polygon points="5,33 28,33 28,75"  fill="rgba(60,0,0,0.28)"/>
+                    <!-- lower-right facet -->
+                    <polygon points="51,33 28,33 28,75" fill="rgba(90,0,0,0.20)"/>
+
+                    <!-- horizontal centre line -->
+                    <line x1="5" y1="33" x2="51" y2="33" stroke="rgba(255,190,190,0.35)" stroke-width="0.9"/>
+
+                    <!-- main facet diagonal lines — upper section -->
+                    <line x1="28" y1="5"  x2="51" y2="33" stroke="rgba(255,170,170,0.28)" stroke-width="0.8"/>
+                    <line x1="28" y1="5"  x2="5"  y2="33" stroke="rgba(255,170,170,0.28)" stroke-width="0.8"/>
+                    <!-- lower diagonal lines -->
+                    <line x1="5"  y1="33" x2="28" y2="75" stroke="rgba(100,0,0,0.35)" stroke-width="0.8"/>
+                    <line x1="51" y1="33" x2="28" y2="75" stroke="rgba(100,0,0,0.35)" stroke-width="0.8"/>
+
+                    <!-- inner upper facet lines (smaller diamond grid) -->
+                    <line x1="28" y1="14" x2="40" y2="33" stroke="rgba(255,200,200,0.22)" stroke-width="0.65"/>
+                    <line x1="28" y1="14" x2="16" y2="33" stroke="rgba(255,200,200,0.22)" stroke-width="0.65"/>
+                    <line x1="28" y1="14" x2="28" y2="33" stroke="rgba(255,200,200,0.15)" stroke-width="0.6"/>
+
+                    <!-- lower inner facets -->
+                    <line x1="16" y1="33" x2="28" y2="60" stroke="rgba(80,0,0,0.30)" stroke-width="0.6"/>
+                    <line x1="40" y1="33" x2="28" y2="60" stroke="rgba(80,0,0,0.30)" stroke-width="0.6"/>
+
+                    <!-- ── Gold ornate filigree (bottom-right, matching photo) ── -->
+                    <!-- main curl -->
+                    <path d="M38 52 C44 48, 48 53, 45 58 C42 63, 37 61, 38 56"
+                          stroke="url(#onyx_lg_gold2)" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+                    <!-- inner curl -->
+                    <path d="M40 54 C43 51, 46 54, 44 57 C42 60, 39 58, 40 55"
+                          stroke="url(#onyx_lg_gold2)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
+                    <!-- stem -->
+                    <path d="M36 50 C37 50, 38 51, 38 52" stroke="url(#onyx_lg_gold)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+                    <!-- leaf left -->
+                    <path d="M35 48 C32 46, 33 50, 36 50" stroke="url(#onyx_lg_gold)" stroke-width="1.0" fill="none" stroke-linecap="round"/>
+                    <!-- leaf right -->
+                    <path d="M44 48 C47 47, 48 51, 45 52" stroke="url(#onyx_lg_gold2)" stroke-width="1.0" fill="none" stroke-linecap="round"/>
+                    <!-- small dot ornaments -->
+                    <circle cx="43" cy="63" r="1.2" fill="url(#onyx_lg_gold2)" opacity="0.85"/>
+                    <circle cx="47" cy="55" r="0.9" fill="url(#onyx_lg_gold)" opacity="0.75"/>
+
+                    <!-- top point sparkle — bright white, like in photo -->
+                    <circle cx="28" cy="4.5" r="2.5"  fill="rgba(255,255,255,0.95)" filter="url(#onyx_lg_glow)"/>
+                    <circle cx="28" cy="4.5" r="1.2"  fill="white"/>
+                    <ellipse cx="28" cy="6"  rx="5" ry="2.2" fill="rgba(255,255,255,0.40)" transform="rotate(0,28,6)"/>
+
+                    <!-- upper-left glint -->
+                    <ellipse cx="18" cy="20" rx="5" ry="2.2" fill="rgba(255,255,255,0.42)" transform="rotate(-38,18,20)"/>
+                    <!-- secondary glint -->
+                    <ellipse cx="14" cy="28" rx="3" ry="1.2" fill="rgba(255,255,255,0.22)" transform="rotate(-30,14,28)"/>
+                </svg>
+            </div>
+            <div class="dc-wallet-info">
+                <div class="dc-wallet-label" id="dc-wallet-label">Your Onyx</div>
+                <div class="dc-wallet-amount" id="dc-wallet-amount">0</div>
+                <div class="dc-wallet-sub" id="dc-wallet-sub">Complete tasks to earn Onyx</div>
+            </div>
+        </div>
+
+        <!-- Reset info -->
+        <div class="dc-reset-info">
+            <span>🔄</span>
+            <span id="dc-reset-info">Challenges reset every day at midnight. Keep completing tasks!</span>
+        </div>
+
+        <!-- Daily tasks section (3 structured tasks) -->
+        <div class="dc-section-title">
+            <span>📋</span><span id="dc-section-challenges">Today's Tasks</span>
+        </div>
+        <div id="dcChallengesList"></div>
+        <div class="dt-next-reset" id="dc-next-reset">Resets at midnight UTC</div>
+    </div>
+</div>
+
+
+<!-- ══════════════ SHOP MODAL ══════════════ -->
+<div id="shopModal">
+    <div class="shop-container">
+        <div class="shop-header">
+            <button class="shop-close-btn" onclick="ShopManager.closeModal()">×</button>
+            <div class="shop-header-title">🛍️ <span id="shop-modal-title">Shop</span></div>
+        </div>
+
+        <!-- Wallet strip -->
+        <div class="shop-wallet-strip">
+            <!-- small onyx gem -->
+            <svg width="28" height="40" viewBox="0 0 22 32" fill="none" style="flex-shrink:0">
+                <defs>
+                    <radialGradient id="onyx_sh_body" cx="38%" cy="28%" r="72%">
+                        <stop offset="0%" stop-color="#ff8080"/><stop offset="30%" stop-color="#cc1010"/>
+                        <stop offset="100%" stop-color="#3a0000"/>
+                    </radialGradient>
+                    <linearGradient id="onyx_sh_gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#b8760a"/><stop offset="50%" stop-color="#f0c040"/>
+                        <stop offset="100%" stop-color="#9a5c08"/>
+                    </linearGradient>
+                </defs>
+                <polygon points="11,1 21,13 11,31 1,13" fill="none" stroke="url(#onyx_sh_gold)" stroke-width="1.3" stroke-linejoin="round"/>
+                <polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#onyx_sh_body)"/>
+                <polygon points="11,2.5 19.5,13 11,13" fill="rgba(255,200,200,0.25)"/>
+                <polygon points="11,2.5 2.5,13 11,13" fill="rgba(255,140,140,0.15)"/>
+                <circle cx="11" cy="2.2" r="1.2" fill="rgba(255,255,255,0.92)"/>
+            </svg>
+            <div>
+                <div class="shop-wallet-label" id="shop-wallet-label">Your Onyx</div>
+                <div class="shop-wallet-amount" id="shop-wallet-amount">0</div>
+            </div>
+        </div>
+
+        <!-- Shop item list -->
+        <div id="shopItemList"></div>
+    </div>
+</div>
+
+
+<!-- ══════════════ SHOP CONFIRM PURCHASE MODAL ══════════════ -->
+<div id="shopConfirmModal">
+    <div class="shop-confirm-box">
+        <div style="font-size:40px;text-align:center;margin-bottom:10px" id="shopConfirmIcon">🎁</div>
+        <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:6px" id="shopConfirmName"></h3>
+        <p style="font-size:13px;color:#9ca3af;text-align:center;margin-bottom:20px" id="shopConfirmDesc"></p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:22px;background:rgba(220,60,60,0.1);border:1px solid rgba(220,60,60,0.25);border-radius:12px;padding:10px">
+            <span style="font-size:14px;color:var(--modal-text)">Cost:</span>
+            <span style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#ef4444" id="shopConfirmPrice"></span>
+            <span style="font-size:14px;color:#9ca3af">Onyx</span>
+        </div>
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" onclick="ShopManager.cancelPurchase()" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" id="shopConfirmBtn" onclick="ShopManager.confirmPurchase()">Buy</button>
+        </div>
+    </div>
+</div>
 
 <script>
 // ================================================================
@@ -1590,6 +2256,8 @@ const TaskManager = {
             await this._save();
             diary.toast(diary.t('tasks-toast-added'));
             AchievementsUI.recalculate();
+            // Award rubies for daily challenges
+            await RubyManager.onTaskChange(dateStr, this._data[dateStr] || { tasks: [], mood: '' });
         } catch(e) {
             // Save failed: remove the task we added and restore input
             day.tasks = day.tasks.filter(t => t.id !== newTask.id);
@@ -1625,6 +2293,11 @@ const TaskManager = {
         try {
             await this._save();
             AchievementsUI.recalculate();
+            // Award rubies for daily challenges
+            const todayStr = this.today();
+            if (dateStr === todayStr) {
+                await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
+            }
         } catch(e) {
             // Rollback
             task.completed   = prevCompleted;
@@ -1670,6 +2343,11 @@ const TaskManager = {
         this.render();
         try {
             await this._save();
+            // Award rubies for daily challenges (mood check-in)
+            const todayStr = this.today();
+            if (dateStr === todayStr) {
+                await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
+            }
         } catch(e) {
             day.mood = prevMood;
             this.render();
@@ -1878,6 +2556,587 @@ const TaskManager = {
 
 
 // ================================================================
+//  RUBY MANAGER — Internal currency system (Onyx)
+//  New model: exactly 3 daily tasks, mixed difficulty.
+//  Each completed task awards 1 Onyx (one-time per day).
+//  Tasks rotate daily at midnight UTC using a date-seeded pool.
+//  All state persisted via StorageManager.
+// ================================================================
+const RubyManager = {
+    _total:    0,    // total Onyx ever earned
+    _progress: {},   // { 'YYYY-MM-DD': { taskId: { completed: bool } } }
+    _loaded:   false,
+
+    // ── Pool of task definitions (drawn from each day) ───────────
+    // 9 tasks = 3 "tiers" × 3 levels. Each day picks 1 easy, 1 medium, 1 hard.
+    _pool: {
+        easy: [
+            {
+                id: 'e1', icon: '📝',
+                en: { title: 'First Step',      desc: 'Add at least 1 task to your daily list' },
+                ru: { title: 'Первый шаг',      desc: 'Добавь хотя бы 1 задачу в список' },
+                check(data) { return (data.tasks || []).length >= 1; }
+            },
+            {
+                id: 'e2', icon: '😊',
+                en: { title: 'Check In',        desc: 'Set your mood of the day' },
+                ru: { title: 'Чек-ин',          desc: 'Установи настроение дня' },
+                check(data) { return !!data.mood; }
+            },
+            {
+                id: 'e3', icon: '✅',
+                en: { title: 'First Done',      desc: 'Complete at least 1 task today' },
+                ru: { title: 'Первое дело',     desc: 'Выполни хотя бы 1 задачу сегодня' },
+                check(data) { return (data.tasks || []).filter(t => t.completed).length >= 1; }
+            },
+        ],
+        medium: [
+            {
+                id: 'm1', icon: '🎯',
+                en: { title: 'On a Roll',       desc: 'Complete 3 tasks today' },
+                ru: { title: 'В ударе',         desc: 'Выполни 3 задачи сегодня' },
+                check(data) { return (data.tasks || []).filter(t => t.completed).length >= 3; }
+            },
+            {
+                id: 'm2', icon: '⭐',
+                en: { title: 'Priority Hero',   desc: 'Complete 1 important (starred) task' },
+                ru: { title: 'Герой приоритетов', desc: 'Выполни 1 важную (помеченную) задачу' },
+                check(data) { return (data.tasks || []).filter(t => t.completed && t.important).length >= 1; }
+            },
+            {
+                id: 'm3', icon: '🔄',
+                en: { title: 'Carry-Over',      desc: 'Add 2 tasks and complete at least 1' },
+                ru: { title: 'Продолжение',     desc: 'Добавь 2 задачи и выполни хотя бы 1' },
+                check(data) {
+                    const tasks = data.tasks || [];
+                    return tasks.length >= 2 && tasks.filter(t => t.completed).length >= 1;
+                }
+            },
+        ],
+        hard: [
+            {
+                id: 'h1', icon: '💯',
+                en: { title: 'Perfect Day',     desc: 'Complete ALL tasks today (min. 3)' },
+                ru: { title: 'Идеальный день',  desc: 'Выполни ВСЕ задачи сегодня (мин. 3)' },
+                check(data) {
+                    const tasks = data.tasks || [];
+                    return tasks.length >= 3 && tasks.every(t => t.completed);
+                }
+            },
+            {
+                id: 'h2', icon: '🔥',
+                en: { title: 'Productivity Surge', desc: 'Complete 5 tasks today' },
+                ru: { title: 'Взрыв продуктивности', desc: 'Выполни 5 задач сегодня' },
+                check(data) { return (data.tasks || []).filter(t => t.completed).length >= 5; }
+            },
+            {
+                id: 'h3', icon: '🏆',
+                en: { title: 'Completionist',    desc: 'Complete 3 tasks including 1 important' },
+                ru: { title: 'Перфекционист',    desc: 'Выполни 3 задачи, включая 1 важную' },
+                check(data) {
+                    const tasks = data.tasks || [];
+                    return tasks.filter(t => t.completed).length >= 3 &&
+                           tasks.filter(t => t.completed && t.important).length >= 1;
+                }
+            },
+        ],
+    },
+
+    // Pick today's 3 tasks (1 easy, 1 medium, 1 hard) based on UTC date seed
+    _todaysTasks(dateStr) {
+        // Simple deterministic index from date string
+        const seed = dateStr.replace(/-/g, '').split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+        const e = this._pool.easy  [seed % this._pool.easy.length];
+        const m = this._pool.medium[(seed + 1) % this._pool.medium.length];
+        const h = this._pool.hard  [(seed + 2) % this._pool.hard.length];
+        return [
+            { ...e, difficulty: 'easy',   reward: 1 },
+            { ...m, difficulty: 'medium', reward: 1 },
+            { ...h, difficulty: 'hard',   reward: 1 },
+        ];
+    },
+
+    // ── Init ──────────────────────────────────────────────────────
+    async init() {
+        try {
+            const raw = await StorageManager.getItem('rubies_v1');
+            if (raw) {
+                const parsed   = JSON.parse(raw);
+                this._total    = parsed.total    || 0;
+                this._progress = parsed.progress || {};
+            }
+        } catch(e) {}
+        this._loaded = true;
+        this._updateHeader();
+    },
+
+    async _save() {
+        const data = JSON.stringify({ total: this._total, progress: this._progress });
+        await StorageManager.setItem('rubies_v1', data).catch(() => {
+            setTimeout(() => StorageManager.setItem('rubies_v1', data).catch(() => {}), 1500);
+        });
+    },
+
+    // ── Called after every task change ───────────────────────────
+    async onTaskChange(todayStr, taskData) {
+        if (!this._loaded) return;
+        const dayProgress = this._progress[todayStr] || {};
+        const tasks       = this._todaysTasks(todayStr);
+        let earned  = 0;
+        let changed = false;
+
+        for (const task of tasks) {
+            const prev = dayProgress[task.id] || { completed: false };
+            if (!prev.completed && task.check(taskData)) {
+                dayProgress[task.id] = { completed: true };
+                this._total += task.reward;
+                earned += task.reward;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            this._progress[todayStr] = dayProgress;
+            await this._save();
+            this._updateHeader();
+            this._showEarnEffect(earned);
+            // Re-render modal if open
+            const modal = document.getElementById('dailyChallengesModal');
+            if (modal && modal.classList.contains('open')) this._renderChallenges(todayStr);
+        }
+    },
+
+    // ── Visual feedback ───────────────────────────────────────────
+    _updateHeader() {
+        const el = document.getElementById('rubyHeaderCount');
+        if (el) el.textContent = this._total;
+    },
+
+    _showEarnEffect(amount) {
+        const gem = document.getElementById('rubyHeaderGem');
+        if (gem) {
+            gem.classList.remove('ruby-earn-anim');
+            void gem.offsetWidth;
+            gem.classList.add('ruby-earn-anim');
+            setTimeout(() => gem.classList.remove('ruby-earn-anim'), 700);
+        }
+        const badge = document.getElementById('rubyHeaderBadge');
+        if (!badge) return;
+        const rect  = badge.getBoundingClientRect();
+        const toast = document.createElement('div');
+        toast.className   = 'ruby-float-toast';
+        toast.textContent = '+' + amount;
+        toast.style.left  = (rect.left + rect.width / 2 - 20) + 'px';
+        toast.style.top   = (rect.top - 8) + 'px';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1200);
+    },
+
+    // ── Modal ─────────────────────────────────────────────────────
+    openModal() {
+        document.getElementById('dailyChallengesModal').classList.add('open');
+        this._renderModal();
+    },
+
+    closeModal() {
+        document.getElementById('dailyChallengesModal').classList.remove('open');
+    },
+
+    _renderModal() {
+        const lang     = diary.lang || 'en';
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // Localised strings
+        const strings = {
+            en: {
+                walletLabel: 'Your Onyx',
+                walletSub:   'Complete daily tasks to earn Onyx',
+                resetInfo:   '🔄 Tasks refresh every day at midnight UTC',
+                sectionTitle:'Today\'s Daily Tasks',
+                modalTitle:  'Daily Tasks',
+                nextReset:   'Next reset: midnight UTC',
+            },
+            ru: {
+                walletLabel: 'Ваш оникс',
+                walletSub:   'Выполняй задания, чтобы зарабатывать оникс',
+                resetInfo:   '🔄 Задания обновляются каждый день в полночь UTC',
+                sectionTitle:'Ежедневные задания',
+                modalTitle:  'Ежедневные задания',
+                nextReset:   'Следующий сброс: полночь UTC',
+            }
+        };
+        const s   = strings[lang] || strings.en;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+        set('dc-modal-title',        s.modalTitle);
+        set('dc-wallet-label',       s.walletLabel);
+        set('dc-wallet-amount',      this._total);
+        set('dc-wallet-sub',         s.walletSub);
+        set('dc-reset-info',         s.resetInfo);
+        set('dc-section-challenges', s.sectionTitle);
+        set('dc-next-reset',         s.nextReset);
+
+        this._renderChallenges(todayStr);
+    },
+
+    _gemSVG(size = 18) {
+        const h = Math.round(size * 1.45);
+        return `<svg width="${size}" height="${h}" viewBox="0 0 22 32" fill="none">
+            <defs>
+                <radialGradient id="onyx_rwd_body" cx="38%" cy="28%" r="72%">
+                    <stop offset="0%" stop-color="#ff8080"/>
+                    <stop offset="30%" stop-color="#cc1010"/>
+                    <stop offset="100%" stop-color="#3a0000"/>
+                </radialGradient>
+                <linearGradient id="onyx_rwd_gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#b8760a"/>
+                    <stop offset="50%" stop-color="#f0c040"/>
+                    <stop offset="100%" stop-color="#9a5c08"/>
+                </linearGradient>
+            </defs>
+            <polygon points="11,1 21,13 11,31 1,13" fill="none" stroke="url(#onyx_rwd_gold)" stroke-width="1.2" stroke-linejoin="round"/>
+            <polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#onyx_rwd_body)"/>
+            <polygon points="11,2.5 19.5,13 11,13" fill="rgba(255,200,200,0.25)"/>
+            <polygon points="11,2.5 2.5,13 11,13" fill="rgba(255,140,140,0.15)"/>
+            <circle cx="11" cy="2.2" r="1.2" fill="rgba(255,255,255,0.92)"/>
+        </svg>`;
+    },
+
+    _renderChallenges(todayStr) {
+        const lang     = diary.lang || 'en';
+        const tasks    = this._todaysTasks(todayStr);
+        const progress = this._progress[todayStr] || {};
+        const list     = document.getElementById('dcChallengesList');
+        if (!list) return;
+
+        // Get live task data for progress checking
+        const todayTaskData = TaskManager._data[todayStr] || { tasks: [], mood: '' };
+
+        const diffLabel = {
+            en: { easy: 'Easy', medium: 'Medium', hard: 'Hard' },
+            ru: { easy: 'Лёгкое', medium: 'Среднее', hard: 'Сложное' }
+        };
+        const diffLabels = diffLabel[lang] || diffLabel.en;
+
+        list.innerHTML = tasks.map((task, i) => {
+            const done  = !!(progress[task.id] && progress[task.id].completed);
+            const lstr  = task[lang] || task.en;
+            const delay = i * 0.06;
+
+            return `<div class="dt-task-card ${done ? 'dt-done' : ''}" style="animation-delay:${delay}s">
+                <div class="dt-task-icon">${task.icon}</div>
+                <div class="dt-task-body">
+                    <div class="dt-task-title">${lstr.title}</div>
+                    <div class="dt-task-desc">${lstr.desc}</div>
+                    <span class="dt-difficulty-badge dt-diff-${task.difficulty}">${diffLabels[task.difficulty]}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+                    <div class="dt-task-reward">
+                        ${this._gemSVG(14)}
+                        <span class="dt-task-reward-count">${task.reward}</span>
+                    </div>
+                    ${done ? '<div class="dc-done-check">✓</div>' : ''}
+                </div>
+            </div>`;
+        }).join('');
+    },
+
+    // Reset all — called by delete account
+    reset() {
+        this._total    = 0;
+        this._progress = {};
+        this._updateHeader();
+    }
+};
+
+
+// ================================================================
+//  SHOP MANAGER — In-App Shop with cosmetic items
+//  Items are one-time purchases using Onyx.
+//  Inventory persists in StorageManager.
+//  3 items: one cosmetic per category (theme, banner, badge).
+// ================================================================
+const ShopManager = {
+    _owned:   [],    // array of item IDs owned by the user
+    _loaded:  false,
+    _pendingItem: null, // item pending purchase confirmation
+
+    // ── Shop item catalogue ──────────────────────────────────────
+    // Cosmetic / quality-of-life items only. No gameplay advantage.
+    _items: [
+        {
+            id: 'golden_frame',
+            icon: '🖼️',
+            iconBg: 'linear-gradient(135deg,rgba(245,158,11,0.25),rgba(180,80,0,0.3))',
+            price: 5,
+            en: {
+                name:     'Golden Frame',
+                category: 'Journal Style',
+                desc:     'Adds a shimmering gold border to all your journal notes — a touch of elegance for your daily reflections.',
+                preview:  '✨ Your notes get a warm golden glow in the entries list',
+            },
+            ru: {
+                name:     'Золотая рамка',
+                category: 'Стиль дневника',
+                desc:     'Добавляет блестящую золотую рамку ко всем записям — изысканный штрих для ежедневных мыслей.',
+                preview:  '✨ Записи получают тёплое золотое свечение в списке',
+            },
+        },
+        {
+            id: 'midnight_theme',
+            icon: '🌌',
+            iconBg: 'linear-gradient(135deg,rgba(30,0,60,0.5),rgba(80,0,120,0.4))',
+            price: 10,
+            en: {
+                name:     'Galaxy Background',
+                category: 'Theme Cosmetic',
+                desc:     'Unlocks a deep-space starfield effect as a subtle animated overlay on the dark theme — your journal, among the stars.',
+                preview:  '🌠 Subtle star particles appear in the dark theme background',
+            },
+            ru: {
+                name:     'Галактический фон',
+                category: 'Косметика темы',
+                desc:     'Открывает эффект звёздного неба в тёмной теме — ваш дневник среди звёзд.',
+                preview:  '🌠 Мерцающие звёзды появятся в тёмной теме',
+            },
+        },
+        {
+            id: 'diamond_badge',
+            icon: '💎',
+            iconBg: 'linear-gradient(135deg,rgba(56,189,248,0.25),rgba(14,165,233,0.3))',
+            price: 15,
+            en: {
+                name:     'Diamond Badge',
+                category: 'Profile Flair',
+                desc:     'A premium crystal badge displayed next to your name in the sidebar — a mark of dedication and style.',
+                preview:  '💎 A shiny badge appears next to your username in the menu',
+            },
+            ru: {
+                name:     'Бриллиантовый значок',
+                category: 'Профиль',
+                desc:     'Премиальный кристальный значок рядом с именем в боковом меню — знак преданности и стиля.',
+                preview:  '💎 Значок отображается рядом с именем в меню',
+            },
+        },
+    ],
+
+    // ── Init ──────────────────────────────────────────────────────
+    async init() {
+        try {
+            const raw = await StorageManager.getItem('shop_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                this._owned  = parsed.owned || [];
+            }
+        } catch(e) {}
+        this._loaded = true;
+        this._applyOwnedEffects();
+    },
+
+    async _save() {
+        const data = JSON.stringify({ owned: this._owned });
+        await StorageManager.setItem('shop_v1', data).catch(() => {
+            setTimeout(() => StorageManager.setItem('shop_v1', data).catch(() => {}), 1500);
+        });
+    },
+
+    isOwned(id) { return this._owned.includes(id); },
+
+    // ── Modal ─────────────────────────────────────────────────────
+    openModal() {
+        document.getElementById('shopModal').classList.add('open');
+        this._renderModal();
+    },
+
+    closeModal() {
+        document.getElementById('shopModal').classList.remove('open');
+    },
+
+    _renderModal() {
+        const lang = diary.lang || 'en';
+
+        // Strings
+        const s = {
+            en: { title: 'Shop', walletLabel: 'Your Onyx', buyBtn: 'Purchase', ownedBtn: '✓ Owned' },
+            ru: { title: 'Магазин', walletLabel: 'Ваш оникс', buyBtn: 'Купить', ownedBtn: '✓ Куплено' }
+        }[lang] || { title: 'Shop', walletLabel: 'Your Onyx', buyBtn: 'Purchase', ownedBtn: '✓ Owned' };
+
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set('shop-modal-title',   s.title);
+        set('shop-wallet-label',  s.walletLabel);
+        set('shop-wallet-amount', RubyManager._total);
+
+        const list = document.getElementById('shopItemList');
+        if (!list) return;
+
+        list.innerHTML = this._items.map((item, i) => {
+            const owned   = this.isOwned(item.id);
+            const lstr    = item[lang] || item.en;
+            const canAfford = RubyManager._total >= item.price;
+            const delay   = i * 0.07;
+
+            return `<div class="shop-item-card ${owned ? 'owned' : ''}" style="animation-delay:${delay}s">
+                <div class="shop-item-header">
+                    <div class="shop-item-icon" style="background:${item.iconBg}">${item.icon}</div>
+                    <div class="shop-item-meta">
+                        <div class="shop-item-name">${lstr.name}</div>
+                        <div class="shop-item-cat">${lstr.category}</div>
+                        ${owned ? `<span class="shop-owned-badge">✓ ${s.ownedBtn.replace('✓ ','')}</span>` : ''}
+                    </div>
+                </div>
+                <div class="shop-item-desc">${lstr.desc}</div>
+                <div class="shop-preview" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1)">${lstr.preview}</div>
+                <div class="shop-item-footer">
+                    ${!owned ? `<div class="shop-price-tag">
+                        <svg width="14" height="20" viewBox="0 0 22 32" fill="none"><defs><radialGradient id="prc_body" cx="38%" cy="28%" r="72%"><stop offset="0%" stop-color="#ff8080"/><stop offset="30%" stop-color="#cc1010"/><stop offset="100%" stop-color="#3a0000"/></radialGradient><linearGradient id="prc_gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#b8760a"/><stop offset="50%" stop-color="#f0c040"/><stop offset="100%" stop-color="#9a5c08"/></linearGradient></defs><polygon points="11,1 21,13 11,31 1,13" fill="none" stroke="url(#prc_gold)" stroke-width="1.2"/><polygon points="11,2.5 19.5,13 11,29.5 2.5,13" fill="url(#prc_body)"/></svg>
+                        <span class="shop-price-amount">${item.price}</span>
+                    </div>` : ''}
+                    <button class="shop-buy-btn ${owned ? 'owned-btn' : ''}"
+                        ${owned ? 'disabled' : (!canAfford ? 'disabled' : '')}
+                        ${!owned ? `onclick="ShopManager.promptPurchase('${item.id}')"` : ''}>
+                        ${owned ? s.ownedBtn : (!canAfford ? (lang === 'ru' ? 'Не хватает' : 'Not enough') : s.buyBtn)}
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    },
+
+    // Show confirmation dialog
+    promptPurchase(itemId) {
+        const item = this._items.find(i => i.id === itemId);
+        if (!item) return;
+        this._pendingItem = itemId;
+        const lang = diary.lang || 'en';
+        const lstr = item[lang] || item.en;
+
+        document.getElementById('shopConfirmIcon').textContent   = item.icon;
+        document.getElementById('shopConfirmName').textContent   = lstr.name;
+        document.getElementById('shopConfirmDesc').textContent   = lstr.desc;
+        document.getElementById('shopConfirmPrice').textContent  = item.price;
+        document.getElementById('shopConfirmBtn').textContent    = lang === 'ru' ? 'Купить' : 'Buy';
+        document.getElementById('shopConfirmModal').classList.add('open');
+    },
+
+    cancelPurchase() {
+        this._pendingItem = null;
+        document.getElementById('shopConfirmModal').classList.remove('open');
+    },
+
+    async confirmPurchase() {
+        const itemId = this._pendingItem;
+        if (!itemId) return;
+        const item = this._items.find(i => i.id === itemId);
+        if (!item) return;
+
+        // Check balance
+        if (RubyManager._total < item.price) {
+            diary.toast(diary.lang === 'ru' ? '❌ Недостаточно онікса' : '❌ Not enough Onyx', 'error');
+            this.cancelPurchase();
+            return;
+        }
+
+        // Deduct Onyx and record ownership
+        RubyManager._total -= item.price;
+        RubyManager._updateHeader();
+        await RubyManager._save();
+
+        this._owned.push(itemId);
+        await this._save();
+
+        // Apply cosmetic effects
+        this._applyOwnedEffects();
+
+        this.cancelPurchase();
+
+        const lang = diary.lang || 'en';
+        const lstr = item[lang] || item.en;
+        diary.toast((lang === 'ru' ? '🎁 Куплено: ' : '🎁 Purchased: ') + lstr.name);
+
+        // Re-render shop if still open
+        const shopModal = document.getElementById('shopModal');
+        if (shopModal && shopModal.classList.contains('open')) {
+            this._renderModal();
+        }
+        // Update daily challenges wallet too
+        const dcAmt = document.getElementById('dc-wallet-amount');
+        if (dcAmt) dcAmt.textContent = RubyManager._total;
+    },
+
+    // Apply any visual effects for owned items
+    _applyOwnedEffects() {
+        // Golden Frame: add class to body for CSS targeting of all note cards
+        document.body.classList.toggle('golden-frame-active', this.isOwned('golden_frame'));
+
+        // Galaxy Background: add stars overlay when dark theme is active
+        this._toggleGalaxy();
+
+        // Diamond Badge: show badge next to username in sidebar
+        this._updateDiamondBadge();
+    },
+
+    _toggleGalaxy() {
+        let canvas = document.getElementById('galaxyCanvas');
+        if (this.isOwned('midnight_theme') && document.body.classList.contains('theme-dark')) {
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.id = 'galaxyCanvas';
+                canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.35';
+                document.body.insertBefore(canvas, document.body.firstChild);
+                this._drawStars(canvas);
+            }
+        } else if (canvas) {
+            canvas.remove();
+        }
+    },
+
+    _drawStars(canvas) {
+        const resize = () => {
+            canvas.width  = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < 120; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const r = Math.random() * 1.2 + 0.3;
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255,255,255,${(Math.random() * 0.5 + 0.3).toFixed(2)})`;
+                ctx.fill();
+            }
+        };
+        resize();
+        window.addEventListener('resize', resize);
+    },
+
+    _updateDiamondBadge() {
+        // Add/remove 💎 badge next to the sidebar username
+        const el = document.getElementById('sidebarUsername');
+        if (!el) return;
+        const existing = document.getElementById('diamondBadgeEl');
+        if (this.isOwned('diamond_badge')) {
+            if (!existing) {
+                const badge  = document.createElement('span');
+                badge.id     = 'diamondBadgeEl';
+                badge.title  = 'Diamond Badge';
+                badge.style.cssText = 'font-size:16px;margin-left:6px;filter:drop-shadow(0 0 4px #38bdf8)';
+                badge.textContent   = '💎';
+                el.parentNode.insertBefore(badge, el.nextSibling);
+            }
+        } else if (existing) {
+            existing.remove();
+        }
+    },
+
+    // Reset — called by delete account
+    reset() {
+        this._owned = [];
+        this._applyOwnedEffects();
+    },
+};
+
+
+// ================================================================
 //  DIARY APP
 // ================================================================
 const diary = {
@@ -1952,6 +3211,8 @@ const diary = {
         this._updateSheetChecks();
         this._updateSettingsBar();
         this.closeSheet();
+        // Re-apply galaxy overlay based on new theme
+        if (typeof ShopManager !== 'undefined') ShopManager._toggleGalaxy();
     },
 
     applyLang(lang) {
@@ -2705,7 +3966,7 @@ const diary = {
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 this.closeModals(); this.closeSheet();
-                SidebarUI.close(); AchievementsUI.close();
+                SidebarUI.close(); AchievementsUI.close(); RubyManager.closeModal();
             }
         });
 
@@ -2716,8 +3977,10 @@ const diary = {
 
         SidebarUI.init();
         AchievementsUI.init();
+        await RubyManager.init();
+        await ShopManager.init();
 
-        console.log('%c✅ DailyBookimix v5 — loaded with E2E encryption + Daily Tasks!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v5 — loaded with E2E encryption + Daily Tasks + Rubies + Shop!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
@@ -2729,7 +3992,9 @@ const SidebarUI = {
     _strings: {
         en: {
             nickname: 'Nickname', menu: 'Menu', privacy: 'Privacy',
-            achievements: 'Achievements', deleteAccount: 'Delete account & all data',
+            achievements: 'Achievements', dailyChallenges: 'Daily Challenges',
+            shop: 'Shop',
+            deleteAccount: 'Delete account & all data',
             saveNick: 'Save nickname', nickPlaceholder: 'Set your nickname...',
             nickSaved: 'Nickname saved ✅',
             delTitle: 'Delete all data?',
@@ -2738,7 +4003,9 @@ const SidebarUI = {
         },
         ru: {
             nickname: 'Никнейм', menu: 'Меню', privacy: 'Конфиденциальность',
-            achievements: 'Достижения', deleteAccount: 'Удалить аккаунт и все данные',
+            achievements: 'Достижения', dailyChallenges: 'Ежедневные задания',
+            shop: 'Магазин',
+            deleteAccount: 'Удалить аккаунт и все данные',
             saveNick: 'Сохранить никнейм', nickPlaceholder: 'Введи никнейм...',
             nickSaved: 'Никнейм сохранён ✅',
             delTitle: 'Удалить все данные?',
@@ -2803,11 +4070,13 @@ const SidebarUI = {
         const strs = this._strings[lang] || this._strings.en;
         const set  = (id, txt) => { const el = document.getElementById(id); if(el) el.textContent = txt; };
         const setPh= (id, txt) => { const el = document.getElementById(id); if(el) el.placeholder = txt; };
-        set('sb-lbl-nickname',     strs.nickname);
-        set('sb-lbl-menu',         strs.menu);
-        set('sb-lbl-danger',       strs.privacy);
-        set('sb-item-achievements',strs.achievements);
-        set('sb-item-delete',      strs.deleteAccount);
+        set('sb-lbl-nickname',          strs.nickname);
+        set('sb-lbl-menu',              strs.menu);
+        set('sb-lbl-danger',            strs.privacy);
+        set('sb-item-achievements',     strs.achievements);
+        set('sb-item-daily-challenges', strs.dailyChallenges);
+        set('sb-item-shop',             strs.shop);
+        set('sb-item-delete',           strs.deleteAccount);
         set('sidebarSaveNickBtn',  strs.saveNick);
         set('del-modal-title',     strs.delTitle);
         set('del-modal-desc',      strs.delDesc);
@@ -2822,6 +4091,8 @@ const SidebarUI = {
         document.getElementById('sidebarBackdrop').classList.add('open');
         document.getElementById('sidebarPanel').classList.add('open');
         this._updateHeaderDisplay();
+        // Refresh diamond badge whenever sidebar opens
+        if (typeof ShopManager !== 'undefined') ShopManager._updateDiamondBadge();
     },
 
     close() {
@@ -2853,7 +4124,7 @@ const SidebarUI = {
         diary.notes = []; diary.habits = []; diary.memories = [];
         diary.fireStreak = 0; diary.lastActiveDate = '';
 
-        const keys = ['notes','habits','memories','fireStreak','lastActiveDate','userNickname','userId','tasks_v1','achievements_v1'];
+        const keys = ['notes','habits','memories','fireStreak','lastActiveDate','userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1'];
         for (const key of keys) {
             try { await StorageManager.setItem(key, ''); } catch(e) {}
         }
@@ -2866,6 +4137,8 @@ const SidebarUI = {
         TaskManager.render();
         AchievementsUI._state = {};
         AchievementsUI._save();
+        RubyManager.reset();
+        ShopManager.reset();
 
         document.getElementById('deleteAccountModal').classList.remove('open');
         diary.toast('🗑️ All data deleted');
@@ -2874,6 +4147,11 @@ const SidebarUI = {
     openAchievements() {
         this.close();
         setTimeout(() => { AchievementsUI.open(); }, 300);
+    },
+
+    openDailyChallenges() {
+        this.close();
+        setTimeout(() => { RubyManager.openModal(); }, 300);
     }
 };
 
