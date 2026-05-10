@@ -273,8 +273,37 @@
             transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease, border-color 0.2s;
             animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
         }
+        /* ── iOS interaction fixes ──────────────────────────────────────
+           touch-action:manipulation removes the 300ms tap delay.
+           -webkit-tap-highlight-color:transparent removes the grey flash.
+           These two together make taps feel instant on iPhone/iPad.
+           user-select:none prevents accidental text-selection on long-press. */
+        .task-check,
+        .task-del-btn,
+        .mood-btn,
+        .task-archive-day,
+        .carryover-btn,
+        .task-add-btn,
+        .task-imp-toggle,
+        .tab-btn,
+        .btn-primary,
+        .btn-ghost,
+        .dc-close-btn,
+        .shop-close-btn,
+        .shop-buy-btn {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* Larger invisible tap target for the checkbox without changing visuals */
+        .task-check {
+            cursor: pointer;
+            padding: 6px;
+            margin: -6px;
+        }
+
         /* Golden Frame shop item effect */
-        .golden-frame-active .record-card {
             border-color: rgba(245,158,11,0.5) !important;
             box-shadow: 0 0 0 1px rgba(245,158,11,0.18), 0 4px 18px rgba(180,100,0,0.12) !important;
         }
@@ -1977,37 +2006,49 @@ const StorageManager = {
         });
     },
 
-    // Save encrypted value — with retry on failure
+    // Save encrypted value — with retry on failure.
+    // IMPORTANT: throws after all retries are exhausted so callers can roll back.
     async setItem(key, value) {
         const encrypted = await EncryptionManager.encrypt(value);
         if (this.supportsCloud) {
-            // Try up to 3 times with backoff
+            let lastError;
             for (let attempt = 0; attempt < 3; attempt++) {
                 try {
                     await this._cloudSet(key, encrypted);
+                    // Mirror to localStorage as resilience backup
+                    try { localStorage.setItem('dbmix_' + key, encrypted); } catch(_) {}
                     return; // success
                 } catch(e) {
-                    if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+                    lastError = e;
+                    if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
                 }
             }
-            console.warn('[StorageManager] setItem failed after 3 attempts for key:', key);
+            // All retries exhausted — let the caller handle it
+            console.warn('[StorageManager] setItem failed after 3 attempts for key:', key, lastError);
+            throw lastError;
         } else {
-            // Fallback: not in Telegram context (dev/preview)
-            try { localStorage.setItem('dbmix_' + key, encrypted); } catch(e) {}
+            // Fallback: localStorage only (dev / preview outside Telegram)
+            try { localStorage.setItem('dbmix_' + key, encrypted); }
+            catch(e) { throw e; }
         }
     },
 
-    // Read and decrypt value
+    // Read and decrypt value.
+    // On CloudStorage failure, falls back to the localStorage mirror written by setItem.
     async getItem(key) {
         let raw = null;
         if (this.supportsCloud) {
-            try { raw = await this._cloudGet(key); }
-            catch(e) { raw = null; }
+            try { raw = await this._cloudGet(key); } catch(e) { raw = null; }
+            // Fall back to localStorage mirror if cloud returned nothing
+            if (!raw) {
+                try { raw = localStorage.getItem('dbmix_' + key) || null; } catch(_) {}
+            }
         } else {
-            raw = localStorage.getItem('dbmix_' + key) || null;
+            try { raw = localStorage.getItem('dbmix_' + key) || null; } catch(_) {}
         }
         if (!raw) return null;
-        return await EncryptionManager.decrypt(raw);
+        try { return await EncryptionManager.decrypt(raw); }
+        catch(e) { return null; }
     },
 
     async getItems(keys) {
@@ -2188,51 +2229,79 @@ const T = {
 //  TASK MANAGER — Daily Tasks feature
 //  Data structure per day:  { tasks: [...], mood: 'great'|'normal'|'meh'|'hard'|'' }
 //  Task object: { id, text, important, completed, completedAt, createdAt }
+//
+//  iOS FIX NOTES (v5.1):
+//  1. _saveInProgress mutex — serialises all saves; prevents concurrent
+//     CloudStorage writes racing each other on slow iOS connections.
+//  2. _toggleLock set — prevents double-fire from iOS touchend+click on
+//     checkboxes and delete buttons (both events fire on a single tap).
+//  3. _addLock flag — prevents quickAdd() double-call from touchend+click
+//     on the add button (iOS fires both events for a single tap).
+//  4. Task IDs use Date.now() + Math.random() to guarantee uniqueness even
+//     if two taps land within the same millisecond.
+//  5. StorageManager.setItem now properly throws after exhausting retries
+//     so rollback catch blocks actually execute.
+//  6. Inline onclick replaced with JS event delegation on the task list —
+//     eliminates double-event firing on iOS for task-check and delete.
+//  7. Mood buttons wired via JS delegation, not inline onclick — same fix.
+//  8. _save() serialises: if a save is in-flight, the next one queues and
+//     runs immediately after, always with the latest in-memory state.
 // ================================================================
 const TaskManager = {
-    // In-memory store: { 'YYYY-MM-DD': { tasks: [...], mood: '' } }
     _data: {},
-    _viewDate: null,       // which date we're viewing (null = today)
-    _newTaskImp: false,    // whether the "new task" flag is important
+    _viewDate:       null,
+    _newTaskImp:     false,
+
+    // ── iOS safety: mutex for saves ───────────────────────────────
+    _saveInProgress: false,
+    _savePending:    false,   // a newer save arrived while one was in flight
+
+    // ── iOS safety: debounce locks ────────────────────────────────
+    _addLock:    false,       // prevents double quickAdd from touch+click
+    _toggleLock: new Set(),   // IDs currently mid-toggle (prevents re-entry)
+    _deleteLock: new Set(),   // IDs currently mid-delete
 
     today() { return new Date().toISOString().split('T')[0]; },
 
-    // Format YYYY-MM-DD
     dateOf(daysAgo) {
         const d = new Date(); d.setDate(d.getDate() - daysAgo);
         return d.toISOString().split('T')[0];
     },
 
-    // Get or create day record
     dayData(dateStr) {
         if (!this._data[dateStr]) this._data[dateStr] = { tasks: [], mood: '' };
         return this._data[dateStr];
     },
 
-    // Toggle important flag for new task
     toggleNewImp() {
         this._newTaskImp = !this._newTaskImp;
         const btn = document.getElementById('taskImpToggle');
         if (btn) btn.classList.toggle('active', this._newTaskImp);
     },
 
-    // Quick-add a task from the input field
+    // ── Quick-add ─────────────────────────────────────────────────
     async quickAdd() {
-        const input = document.getElementById('taskQuickInput');
+        // iOS: touchend fires before click — both call quickAdd() on a single tap.
+        // _addLock prevents the second call from doing anything.
+        if (this._addLock) return;
+        this._addLock = true;
+        setTimeout(() => { this._addLock = false; }, 600);
+
+        const input  = document.getElementById('taskQuickInput');
         if (!input) return;
         const text = input.value.trim();
         if (!text) return;
 
-        // Disable button during save to prevent double-tap on iOS
         const addBtn = document.getElementById('taskAddBtn');
         if (addBtn) addBtn.disabled = true;
 
         const dateStr = this._viewDate || this.today();
-        const day = this.dayData(dateStr);
+        const day     = this.dayData(dateStr);
 
+        // Unique ID even if two taps land in same millisecond
         const newTask = {
-            id:          Date.now(),
-            text:        text,
+            id:          Date.now() + Math.floor(Math.random() * 1000),
+            text,
             important:   this._newTaskImp,
             completed:   false,
             completedAt: null,
@@ -2242,24 +2311,20 @@ const TaskManager = {
         day.tasks.unshift(newTask);
         this._sortTasks(day);
 
-        // Clear UI immediately for responsiveness
-        input.value = '';
+        // Optimistic UI update
+        input.value  = '';
         this._newTaskImp = false;
         const impBtn = document.getElementById('taskImpToggle');
         if (impBtn) impBtn.classList.remove('active');
-
-        // Render optimistically
         this.render();
 
-        // Save to CloudStorage — if it fails, roll back and show error
         try {
             await this._save();
             diary.toast(diary.t('tasks-toast-added'));
             AchievementsUI.recalculate();
-            // Award rubies for daily challenges
             await RubyManager.onTaskChange(dateStr, this._data[dateStr] || { tasks: [], mood: '' });
         } catch(e) {
-            // Save failed: remove the task we added and restore input
+            // Rollback
             day.tasks = day.tasks.filter(t => t.id !== newTask.id);
             input.value = text;
             this.render();
@@ -2270,18 +2335,21 @@ const TaskManager = {
         }
     },
 
-    // Handle Enter key in quick input
     onInputKeydown(e) {
         if (e.key === 'Enter') { e.preventDefault(); this.quickAdd(); }
     },
 
-    // Toggle task completion
+    // ── Toggle completion ─────────────────────────────────────────
     async toggleTask(dateStr, taskId) {
-        const day = this.dayData(dateStr);
-        const task = day.tasks.find(t => t.id === taskId);
-        if (!task) return;
+        // Prevent re-entrant toggle for the same task (iOS double-event)
+        const lockKey = dateStr + ':' + taskId;
+        if (this._toggleLock.has(lockKey)) return;
+        this._toggleLock.add(lockKey);
 
-        // Apply change
+        const day  = this.dayData(dateStr);
+        const task = day.tasks.find(t => t.id === taskId);
+        if (!task) { this._toggleLock.delete(lockKey); return; }
+
         const prevCompleted   = task.completed;
         const prevCompletedAt = task.completedAt;
         task.completed   = !task.completed;
@@ -2293,40 +2361,51 @@ const TaskManager = {
         try {
             await this._save();
             AchievementsUI.recalculate();
-            // Award rubies for daily challenges
             const todayStr = this.today();
             if (dateStr === todayStr) {
                 await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
             }
         } catch(e) {
-            // Rollback
             task.completed   = prevCompleted;
             task.completedAt = prevCompletedAt;
             this._sortTasks(day);
             this.render();
             diary.toast('❌ Failed to save — please try again', 'error');
+        } finally {
+            // Release lock after a short delay — enough to absorb the
+            // paired click that iOS fires after touchend
+            setTimeout(() => this._toggleLock.delete(lockKey), 500);
         }
     },
 
-    // Delete a task
+    // ── Delete ────────────────────────────────────────────────────
     async deleteTask(dateStr, taskId) {
-        const day = this.dayData(dateStr);
+        const lockKey = 'del:' + dateStr + ':' + taskId;
+        if (this._deleteLock.has(lockKey)) return;
+        this._deleteLock.add(lockKey);
+
+        const day     = this.dayData(dateStr);
         const removed = day.tasks.find(t => t.id === taskId);
-        day.tasks = day.tasks.filter(t => t.id !== taskId);
+        day.tasks     = day.tasks.filter(t => t.id !== taskId);
         this.render();
+
         try {
             await this._save();
             diary.toast(diary.t('tasks-toast-deleted'));
+            AchievementsUI.recalculate();
+            const todayStr = this.today();
+            if (dateStr === todayStr) {
+                await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
+            }
         } catch(e) {
-            // Rollback
-            if (removed) day.tasks.push(removed);
-            this._sortTasks(day);
+            if (removed) { day.tasks.push(removed); this._sortTasks(day); }
             this.render();
             diary.toast('❌ Failed to delete — please try again', 'error');
+        } finally {
+            setTimeout(() => this._deleteLock.delete(lockKey), 500);
         }
     },
 
-    // Sort: important+incomplete → normal+incomplete → completed (by completedAt desc)
     _sortTasks(day) {
         day.tasks.sort((a, b) => {
             if (a.completed !== b.completed) return a.completed ? 1 : -1;
@@ -2335,15 +2414,21 @@ const TaskManager = {
         });
     },
 
-    // Set mood for a day
+    // ── Mood ──────────────────────────────────────────────────────
+    // _moodLock prevents the iOS touchend+click double-fire on mood buttons
+    _moodLock: false,
     async setMood(dateStr, mood) {
-        const day = this.dayData(dateStr);
+        if (this._moodLock) return;
+        this._moodLock = true;
+        setTimeout(() => { this._moodLock = false; }, 500);
+
+        const day      = this.dayData(dateStr);
         const prevMood = day.mood;
-        day.mood = (day.mood === mood) ? '' : mood; // toggle
+        day.mood = (day.mood === mood) ? '' : mood;
         this.render();
+
         try {
             await this._save();
-            // Award rubies for daily challenges (mood check-in)
             const todayStr = this.today();
             if (dateStr === todayStr) {
                 await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
@@ -2355,19 +2440,19 @@ const TaskManager = {
         }
     },
 
-    // Carry over incomplete tasks to tomorrow
+    // ── Carry-over ────────────────────────────────────────────────
     async carryOver() {
-        const todayStr = this.today();
-        const day = this.dayData(todayStr);
-        const incomplete = day.tasks.filter(t => !t.completed);
+        const todayStr    = this.today();
+        const day         = this.dayData(todayStr);
+        const incomplete  = day.tasks.filter(t => !t.completed);
         if (!incomplete.length) return;
 
-        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrow    = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
-        const nextDay = this.dayData(tomorrowStr);
+        const nextDay     = this.dayData(tomorrowStr);
 
         const existingIds = new Set(nextDay.tasks.map(t => t.id));
-        const added = [];
+        const added       = [];
         incomplete.forEach(t => {
             if (!existingIds.has(t.id)) {
                 const copy = { ...t, completedAt: null, completed: false, createdAt: new Date().toISOString() };
@@ -2381,20 +2466,19 @@ const TaskManager = {
             await this._save();
             diary.toast(diary.t('tasks-toast-carried'));
         } catch(e) {
-            // Rollback: remove the tasks we added to tomorrow
             nextDay.tasks = nextDay.tasks.filter(t => !added.includes(t.id));
             diary.toast('❌ Failed to carry over tasks', 'error');
         }
     },
 
-    // Count consecutive days where at least 1 task was completed
+    // ── Stats helpers ─────────────────────────────────────────────
     completionStreak() {
         let streak = 0;
         const today = this.today();
         for (let i = 0; ; i++) {
-            const d = new Date(); d.setDate(d.getDate() - i);
+            const d  = new Date(); d.setDate(d.getDate() - i);
             const ds = d.toISOString().split('T')[0];
-            if (ds > today) continue; // skip future
+            if (ds > today) continue;
             const day = this._data[ds];
             if (!day || !day.tasks.some(t => t.completed)) break;
             streak++;
@@ -2402,48 +2486,80 @@ const TaskManager = {
         return streak;
     },
 
-    // Count total completed tasks across all days
     totalCompleted() {
         return Object.values(this._data).reduce(
             (s, d) => s + (d.tasks || []).filter(t => t.completed).length, 0
         );
     },
 
-    // Count today's completed tasks
     todayCompleted() {
         const day = this._data[this.today()];
         return day ? day.tasks.filter(t => t.completed).length : 0;
     },
 
-    // Total tasks count (for footer)
     totalTasks() {
         return Object.values(this._data).reduce((s, d) => s + (d.tasks || []).length, 0);
     },
 
+    // ── Serialised save ───────────────────────────────────────────
+    // If a save is already in-flight, we mark _savePending and return the
+    // same promise so callers still await correctly. The in-flight save will
+    // do one more pass with the latest state before resolving.
+    _savePromise: null,
     async _save() {
-        // StorageManager.setItem already retries internally.
-        // We await it here so callers can catch failures.
-        await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
+        if (this._saveInProgress) {
+            // Signal that a fresher save is needed after the current one
+            this._savePending = true;
+            // Return the existing promise so the caller still awaits
+            return this._savePromise;
+        }
+
+        this._saveInProgress = true;
+        this._savePending    = false;
+
+        this._savePromise = (async () => {
+            try {
+                await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
+                // If another save was requested while we were writing, do it now
+                if (this._savePending) {
+                    this._savePending = false;
+                    await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
+                }
+            } finally {
+                this._saveInProgress = false;
+                this._savePromise    = null;
+            }
+        })();
+
+        return this._savePromise;
     },
 
+    // ── Load ──────────────────────────────────────────────────────
     async load() {
-        const raw = await StorageManager.getItem('tasks_v1');
-        try { this._data = raw ? JSON.parse(raw) : {}; }
-        catch(e) { this._data = {}; }
+        try {
+            const raw = await StorageManager.getItem('tasks_v1');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                // Only overwrite if we actually got data — prevents wiping
+                // memory on a transient CloudStorage read failure
+                if (parsed && typeof parsed === 'object') this._data = parsed;
+            }
+        } catch(e) {
+            console.warn('[TaskManager] load failed, keeping existing data:', e);
+        }
     },
 
-    // Render the entire tasks section
+    // ── Render ────────────────────────────────────────────────────
     render() {
         const lang    = diary.lang || 'en';
         const dateStr = this._viewDate || this.today();
         const today   = this.today();
         const isToday = (dateStr === today);
 
-        // Placeholder update
         const inp = document.getElementById('taskQuickInput');
         if (inp) inp.placeholder = diary.t('tasks-quick-ph');
 
-        // --- Archive day selector (last 30 days) ---
+        // Archive day selector
         const archiveScroll = document.getElementById('taskArchiveScroll');
         if (archiveScroll) {
             let html = '';
@@ -2454,33 +2570,37 @@ const TaskManager = {
                 const cnt = day ? day.tasks.filter(t => t.completed).length : 0;
                 const tot = day ? day.tasks.length : 0;
                 let label;
-                if (i === 0) label = diary.t('tasks-today');
+                if (i === 0)      label = diary.t('tasks-today');
                 else if (i === 1) label = diary.t('tasks-yesterday');
-                else {
-                    label = d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
-                }
+                else              label = d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
                 const active = (ds === dateStr) ? 'active' : '';
                 const badge  = tot > 0 ? `<br><span style="font-size:10px;opacity:0.75">${cnt}/${tot}</span>` : '';
-                html += `<div class="task-archive-day ${active}" onclick="TaskManager.viewDate('${ds}')">${label}${badge}</div>`;
+                html += `<div class="task-archive-day ${active}" data-date="${ds}">${label}${badge}</div>`;
             }
             archiveScroll.innerHTML = html;
+
+            // Wire archive day clicks via delegation (avoids iOS inline-onclick quirks)
+            archiveScroll.onclick = (e) => {
+                const chip = e.target.closest('.task-archive-day');
+                if (chip) TaskManager.viewDate(chip.dataset.date);
+            };
         }
 
-        // --- Stats bar ---
+        // Stats bar
         const statsBar = document.getElementById('taskStatsBar');
         if (statsBar) {
             const dayData = this._data[dateStr];
-            const done  = dayData ? dayData.tasks.filter(t => t.completed).length : 0;
-            const total = dayData ? dayData.tasks.length : 0;
-            const streak = this.completionStreak();
+            const done    = dayData ? dayData.tasks.filter(t => t.completed).length : 0;
+            const total   = dayData ? dayData.tasks.length : 0;
+            const streak  = this.completionStreak();
             statsBar.innerHTML = `
                 <div class="task-stat-chip">✅ <b>${done}</b> ${diary.t('tasks-stat-done')}</div>
                 <div class="task-stat-chip">📋 <b>${total}</b> ${diary.t('tasks-stat-total')}</div>
-                <div class="task-stat-chip">🔥 <b>${streak}</b> ${diary.t('tasks-stat-streak-days')} ${diary.t('tasks-stat-streak')}</div>
-            `;
+                <div class="task-stat-chip">🔥 <b>${streak}</b> ${diary.t('tasks-stat-streak-days')} ${diary.t('tasks-stat-streak')}</div>`;
         }
 
-        // --- Task list ---
+        // Task list — wired via JS delegation, NOT inline onclick
+        // This eliminates the iOS double-event-fire from inline handlers
         const list    = document.getElementById('tasksList');
         const dayData = this.dayData(dateStr);
         const tasks   = dayData.tasks;
@@ -2493,43 +2613,61 @@ const TaskManager = {
                     const delay = Math.min(i * 0.03, 0.2);
                     return `
                     <div class="task-item ${task.important ? 'important' : ''} ${task.completed ? 'completed' : ''}"
-                         style="animation-delay:${delay}s">
-                        <div class="task-check" onclick="TaskManager.toggleTask('${dateStr}',${task.id})">
+                         style="animation-delay:${delay}s"
+                         data-id="${task.id}" data-date="${dateStr}">
+                        <div class="task-check" data-action="toggle">
                             <span class="task-check-inner">✓</span>
                         </div>
                         <span class="task-text">${this._escHtml(task.text)}</span>
                         ${task.important ? '<span class="task-star">⭐</span>' : ''}
-                        <button class="task-del-btn" onclick="TaskManager.deleteTask('${dateStr}',${task.id})">✕</button>
+                        <button class="task-del-btn" data-action="delete">✕</button>
                     </div>`;
                 }).join('');
             }
+
+            // Single delegated listener — replaces all inline onclick handlers.
+            // Using 'click' only (not touchend), so iOS fires it exactly once.
+            list.onclick = (e) => {
+                const item   = e.target.closest('[data-id]');
+                if (!item) return;
+                const taskId  = Number(item.dataset.id);
+                const dStr    = item.dataset.date;
+                const action  = e.target.closest('[data-action]');
+                if (!action) return;
+                if (action.dataset.action === 'toggle') TaskManager.toggleTask(dStr, taskId);
+                if (action.dataset.action === 'delete') TaskManager.deleteTask(dStr, taskId);
+            };
         }
 
-        // --- Mood section ---
+        // Mood section (today only)
         const moodSection = document.getElementById('taskMoodSection');
-        if (moodSection) {
-            moodSection.style.display = isToday ? '' : 'none';
-        }
+        if (moodSection) moodSection.style.display = isToday ? '' : 'none';
+
         const moodLabel = document.getElementById('tasks-mood-label');
         if (moodLabel) moodLabel.textContent = diary.t('tasks-mood-label');
 
         const moodRow = document.getElementById('moodRow');
         if (moodRow && isToday) {
             const moods = [
-                { key: 'great', icon: '😄', label: diary.t('tasks-mood-great') },
+                { key: 'great',  icon: '😄', label: diary.t('tasks-mood-great')  },
                 { key: 'normal', icon: '🙂', label: diary.t('tasks-mood-normal') },
-                { key: 'meh', icon: '😐', label: diary.t('tasks-mood-meh') },
-                { key: 'hard', icon: '😞', label: diary.t('tasks-mood-hard') },
+                { key: 'meh',    icon: '😐', label: diary.t('tasks-mood-meh')    },
+                { key: 'hard',   icon: '😞', label: diary.t('tasks-mood-hard')   },
             ];
             const curMood = dayData.mood || '';
             moodRow.innerHTML = moods.map(m => `
-                <button class="mood-btn ${curMood === m.key ? 'selected' : ''}"
-                        onclick="TaskManager.setMood('${dateStr}','${m.key}')">
+                <button class="mood-btn ${curMood === m.key ? 'selected' : ''}" data-mood="${m.key}">
                     ${m.icon}<span class="mood-label">${m.label}</span>
                 </button>`).join('');
+
+            // Delegated click — single event, no inline onclick, no double-fire on iOS
+            moodRow.onclick = (e) => {
+                const btn = e.target.closest('[data-mood]');
+                if (btn) TaskManager.setMood(dateStr, btn.dataset.mood);
+            };
         }
 
-        // --- Quick-add & carry-over (today only) ---
+        // Quick-add & carry-over (today only)
         const qaRow = document.getElementById('taskQuickAddRow');
         if (qaRow) qaRow.style.display = isToday ? '' : 'none';
 
@@ -2672,9 +2810,17 @@ const RubyManager = {
 
     async _save() {
         const data = JSON.stringify({ total: this._total, progress: this._progress });
-        await StorageManager.setItem('rubies_v1', data).catch(() => {
-            setTimeout(() => StorageManager.setItem('rubies_v1', data).catch(() => {}), 1500);
-        });
+        // StorageManager.setItem now throws after retries; we catch here to
+        // avoid crashing the Onyx award flow — a missed Onyx save is
+        // non-critical (unlike task data) since the award will retry on
+        // the next task interaction. We still log for diagnostics.
+        try {
+            await StorageManager.setItem('rubies_v1', data);
+        } catch(e) {
+            console.warn('[RubyManager] _save failed, will retry on next change:', e);
+            // Schedule one background retry so Onyx is not lost
+            setTimeout(() => StorageManager.setItem('rubies_v1', data).catch(() => {}), 2000);
+        }
     },
 
     // ── Called after every task change ───────────────────────────
@@ -2935,9 +3081,12 @@ const ShopManager = {
 
     async _save() {
         const data = JSON.stringify({ owned: this._owned });
-        await StorageManager.setItem('shop_v1', data).catch(() => {
-            setTimeout(() => StorageManager.setItem('shop_v1', data).catch(() => {}), 1500);
-        });
+        try {
+            await StorageManager.setItem('shop_v1', data);
+        } catch(e) {
+            console.warn('[ShopManager] _save failed, scheduling retry:', e);
+            setTimeout(() => StorageManager.setItem('shop_v1', data).catch(() => {}), 2000);
+        }
     },
 
     isOwned(id) { return this._owned.includes(id); },
@@ -3932,19 +4081,18 @@ const diary = {
         document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
         document.getElementById('eventForm').addEventListener('submit',  e => this.saveEvent(e));
 
-        // Task quick-add: Enter key support + iOS-safe click handler
+        // Task quick-add: Enter key + iOS-safe click handler.
+        // We use 'click' only (NOT touchend). On iOS, a single tap fires
+        // touchstart → touchend → click in order. Attaching BOTH touchend
+        // and click caused quickAdd() to run twice. TaskManager._addLock
+        // provides an additional guard in case any other path fires twice.
         const qi = document.getElementById('taskQuickInput');
         if (qi) {
             qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
-            // iOS Safari: also handle 'compositionend' for IME keyboards
-            qi.addEventListener('compositionend', () => { /* allow IME to settle */ });
         }
-        // Attach add button via JS (more reliable than inline onclick on iOS Safari)
         const taskAddBtn = document.getElementById('taskAddBtn');
         if (taskAddBtn) {
-            // Use both click and touchend for maximum iOS compatibility
             taskAddBtn.addEventListener('click', e => { e.preventDefault(); TaskManager.quickAdd(); });
-            taskAddBtn.addEventListener('touchend', e => { e.preventDefault(); TaskManager.quickAdd(); }, { passive: false });
         }
 
         document.getElementById('clearAll').addEventListener('click', async () => {
