@@ -1,16 +1,34 @@
 <!DOCTYPE html>
 <!-- ============================================================
-     DailyBookimix v5 — ENHANCED EDITION
-     Changes from v4:
-       1. FIX: Achievements earned date persists permanently (never resets)
-       2. NEW: Full Daily Tasks system (replaces simple Tasks category)
-          - Quick add, Important/Normal, strikethrough on complete
-          - Archive (last 30 days), Carry-over, Mood of day
-          - Daily streak + completion stats
-       3. NEW: AES-256-GCM end-to-end encryption via Web Crypto API
-          - All data encrypted before saving to localStorage/CloudStorage
-          - Password prompt on first launch, stored in sessionStorage only
-          - Telegram (including CloudStorage) cannot read plaintext data
+     DailyBookimix v5.1 — STABILITY PATCH
+     Changes from v5:
+       1. FIX: Broken CSS selector for .golden-frame-active .record-card —
+          the opening brace was missing, causing the rule to be ignored and
+          also corrupting the @keyframes cardIn that followed it.
+       2. FIX: CloudStorage callbacks wrapped with a 8-second timeout so
+          they never hang forever on slow iOS/Android Telegram connections.
+          Previously a stalled callback would cause every await to freeze.
+       3. FIX: StorageManager.getItems() now serialises reads one-by-one
+          instead of using Promise.all(); concurrent CloudStorage.getItem()
+          calls on mobile Telegram can race and return empty values.
+       4. FIX: _b64encode() — replaced spread-into-String.fromCharCode()
+          with chunked loop; the spread triggers "Maximum call stack exceeded"
+          on iOS Safari for buffers > ~32 KB (large diary entries).
+       5. FIX: AchievementsUI._save() now awaits StorageManager and retries
+          with exponential back-off (500 ms, then 2 s) instead of a flat
+          1.5 s retry, giving CloudStorage more recovery time on iOS.
+       6. FIX: Lock screen password placeholder now translated immediately
+          in the applyLang() call during boot, matching the rest of the UI.
+       7. FIX: diary.applyLang() patch now also updates the lock-screen
+          password placeholder when the user switches language inside the app.
+       8. FIX: StorageManager.setItem() — empty-string writes (used by
+          executeDeleteAccount) now bypass encryption so they don't produce
+          a garbled ciphertext that reads back as non-null on reload.
+       9. FIX: TaskManager._save() pending-save loop — after the in-flight
+          save completes, a pending save now re-runs in a fresh try/finally
+          block so its failure is caught and _saveInProgress is always reset.
+      10. CLEANUP: Removed orphaned touchend handler on lockPasswordInput
+          (it did nothing and could confuse future readers).
      All original functionality 100% preserved.
 ============================================================ -->
 <html lang="ru" class="h-full">
@@ -303,7 +321,9 @@
             margin: -6px;
         }
 
-        /* Golden Frame shop item effect */
+        /* Golden Frame shop item effect — FIX: selector was missing, breaking this rule
+           AND corrupting the @keyframes cardIn block that followed it. */
+        body.golden-frame-active .record-card {
             border-color: rgba(245,158,11,0.5) !important;
             box-shadow: 0 0 0 1px rgba(245,158,11,0.18), 0 4px 18px rgba(180,100,0,0.12) !important;
         }
@@ -1767,8 +1787,17 @@ const EncryptionManager = {
     },
 
     // Encode Uint8Array → Base64 string
+    // FIX: The spread-into-String.fromCharCode() pattern throws
+    //      "Maximum call stack exceeded" on iOS Safari for buffers > ~32 KB
+    //      (e.g. a long diary entry). Use a chunked loop instead.
     _b64encode(buf) {
-        return btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        const chunk = 8192;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
     },
     // Decode Base64 string → Uint8Array
     _b64decode(str) {
@@ -1939,27 +1968,33 @@ const EncryptionManager = {
     },
 
     // Apply translations to the lock screen
+    // FIX: Also translates the password input placeholder so it matches the UI language
+    //      immediately on boot (before the user enters any password).
     applyLang(lang) {
         const t = {
             en: {
-                title:   'DailyBookimix',
-                desc:    'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
-                hint:    'First time? Choose any password — it will be used to encrypt all your data.',
-                btn:     'Unlock 🔓',
+                title:       'DailyBookimix',
+                desc:        'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
+                hint:        'First time? Choose any password — it will be used to encrypt all your data.',
+                btn:         'Unlock 🔓',
+                placeholder: 'Enter password...',
             },
             ru: {
-                title:   'DailyBookimix',
-                desc:    'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
-                hint:    'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
-                btn:     'Разблокировать 🔓',
+                title:       'DailyBookimix',
+                desc:        'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
+                hint:        'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
+                btn:         'Разблокировать 🔓',
+                placeholder: 'Введи пароль...',
             }
         };
         const s = t[lang] || t.en;
-        const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
-        set('lock-title', s.title);
-        set('lock-desc',  s.desc);
-        set('lock-hint',  s.hint);
-        set('lockUnlockBtn', s.btn);
+        const set  = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        const setPh= (id, v) => { const el = document.getElementById(id); if (el) el.placeholder  = v; };
+        set('lock-title',       s.title);
+        set('lock-desc',        s.desc);
+        set('lock-hint',        s.hint);
+        set('lockUnlockBtn',    s.btn);
+        setPh('lockPasswordInput', s.placeholder);
     }
 };
 
@@ -1982,41 +2017,70 @@ const StorageManager = {
         } catch(e) { this.supportsCloud = false; }
     },
 
-    // Raw CloudStorage set with Promise wrapper
+    // Raw CloudStorage set with Promise wrapper + timeout guard.
+    // FIX: Without a timeout, a stalled Telegram callback would freeze every
+    //      await indefinitely on iOS when the app is backgrounded mid-write.
     _cloudSet(key, value) {
         return new Promise((resolve, reject) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+                if (!settled) { settled = true; reject(new Error('CloudStorage.setItem timeout')); }
+            }, 8000);
             try {
                 Telegram.WebApp.CloudStorage.setItem(key, value, (err) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
                     if (err) reject(new Error(err));
                     else resolve();
                 });
-            } catch(e) { reject(e); }
+            } catch(e) {
+                if (!settled) { settled = true; clearTimeout(timer); reject(e); }
+            }
         });
     },
 
-    // Raw CloudStorage get with Promise wrapper
+    // Raw CloudStorage get with Promise wrapper + timeout guard.
     _cloudGet(key) {
         return new Promise((resolve, reject) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+                if (!settled) { settled = true; reject(new Error('CloudStorage.getItem timeout')); }
+            }, 8000);
             try {
                 Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
                     if (err) reject(new Error(err));
                     else resolve((value !== null && value !== undefined && value !== '') ? value : null);
                 });
-            } catch(e) { reject(e); }
+            } catch(e) {
+                if (!settled) { settled = true; clearTimeout(timer); reject(e); }
+            }
         });
     },
 
     // Save encrypted value — with retry on failure.
+    // FIX: Empty-string writes (used by executeDeleteAccount to clear a key)
+    //      now skip encryption and write a literal empty string so that
+    //      getItem() correctly returns null when the key is "deleted", instead
+    //      of reading back a garbled ciphertext and treating the slot as occupied.
     // IMPORTANT: throws after all retries are exhausted so callers can roll back.
     async setItem(key, value) {
-        const encrypted = await EncryptionManager.encrypt(value);
+        // Treat empty-string as a sentinel "delete this key" — store raw so
+        // getItem's null-check works correctly.
+        const toStore = (value === '' || value === null || value === undefined)
+            ? ''
+            : await EncryptionManager.encrypt(value);
+
         if (this.supportsCloud) {
             let lastError;
             for (let attempt = 0; attempt < 3; attempt++) {
                 try {
-                    await this._cloudSet(key, encrypted);
+                    await this._cloudSet(key, toStore);
                     // Mirror to localStorage as resilience backup
-                    try { localStorage.setItem('dbmix_' + key, encrypted); } catch(_) {}
+                    try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
                     return; // success
                 } catch(e) {
                     lastError = e;
@@ -2028,7 +2092,7 @@ const StorageManager = {
             throw lastError;
         } else {
             // Fallback: localStorage only (dev / preview outside Telegram)
-            try { localStorage.setItem('dbmix_' + key, encrypted); }
+            try { localStorage.setItem('dbmix_' + key, toStore); }
             catch(e) { throw e; }
         }
     },
@@ -2051,12 +2115,18 @@ const StorageManager = {
         catch(e) { return null; }
     },
 
+    // FIX: Serialise reads one-by-one instead of Promise.all().
+    // Concurrent CloudStorage.getItem() calls on iOS/Android Telegram can
+    // race each other and return empty values for some keys, causing data
+    // to appear wiped until the next session.
     async getItems(keys) {
         const result = {};
-        await Promise.all(keys.map(async k => {
-            const v = await this.getItem(k);
-            if (v !== null) result[k] = v;
-        }));
+        for (const k of keys) {
+            try {
+                const v = await this.getItem(k);
+                if (v !== null) result[k] = v;
+            } catch(_) {}
+        }
         return result;
     }
 };
@@ -2505,6 +2575,8 @@ const TaskManager = {
     // If a save is already in-flight, we mark _savePending and return the
     // same promise so callers still await correctly. The in-flight save will
     // do one more pass with the latest state before resolving.
+    // FIX: The pending re-run now has its own try/finally so _saveInProgress
+    //      is always cleared even when the retry also throws.
     _savePromise: null,
     async _save() {
         if (this._saveInProgress) {
@@ -2520,14 +2592,20 @@ const TaskManager = {
         this._savePromise = (async () => {
             try {
                 await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
+            } finally {
                 // If another save was requested while we were writing, do it now
                 if (this._savePending) {
                     this._savePending = false;
-                    await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
+                    try {
+                        await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
+                    } finally {
+                        this._saveInProgress = false;
+                        this._savePromise    = null;
+                    }
+                } else {
+                    this._saveInProgress = false;
+                    this._savePromise    = null;
                 }
-            } finally {
-                this._saveInProgress = false;
-                this._savePromise    = null;
             }
         })();
 
@@ -4390,12 +4468,30 @@ const AchievementsUI = {
         });
     },
 
-    _save() {
-        // Persist achievements state — retry once on failure to prevent data loss
+    // FIX: _save() now properly awaits StorageManager and uses exponential
+    //      back-off (500 ms, then 2 000 ms) instead of a flat 1.5 s retry,
+    //      giving CloudStorage more time to recover on slow iOS connections.
+    //      Two retries are kept because a single retry is sometimes not enough
+    //      when Telegram is re-establishing the CloudStorage session.
+    async _save() {
         const data = JSON.stringify(this._state);
-        StorageManager.setItem('achievements_v1', data).catch(() => {
-            setTimeout(() => StorageManager.setItem('achievements_v1', data).catch(() => {}), 1500);
-        });
+        try {
+            await StorageManager.setItem('achievements_v1', data);
+        } catch(e) {
+            console.warn('[AchievementsUI] _save attempt 1 failed, retrying in 500 ms:', e);
+            setTimeout(async () => {
+                try {
+                    await StorageManager.setItem('achievements_v1', data);
+                } catch(e2) {
+                    console.warn('[AchievementsUI] _save attempt 2 failed, retrying in 2 s:', e2);
+                    setTimeout(() => {
+                        StorageManager.setItem('achievements_v1', data).catch(e3 => {
+                            console.error('[AchievementsUI] _save attempt 3 failed — achievement state may be lost:', e3);
+                        });
+                    }, 2000);
+                }
+            }, 500);
+        }
     },
 
     // ONLY sets earnedDate on FIRST unlock — never overwrites it
@@ -4555,21 +4651,21 @@ const AchievementsUI = {
 //  BOOT SEQUENCE
 // ================================================================
 (async function boot() {
-    // Apply saved language to lock screen (try CloudStorage, fall back to localStorage)
+    // Apply saved language to lock screen BEFORE focusing the input so the
+    // placeholder and all labels are already in the right language.
+    // FIX: placeholder translation is now included in applyLang() (see EncryptionManager).
     let savedLang = 'en';
     try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch(e) {}
     EncryptionManager.applyLang(savedLang);
 
-    // Handle Enter key on password input
+    // Handle Enter key on password input.
+    // FIX: Removed the dead touchend listener that was here before — it did
+    //      nothing (no action inside) and added noise to iOS event handling.
     const pi = document.getElementById('lockPasswordInput');
     if (pi) {
         pi.addEventListener('keydown', e => {
             if (e.key === 'Enter') EncryptionManager.unlock();
         });
-        // Also support on touchend for iOS
-        pi.addEventListener('touchend', e => {
-            // focus is handled by the keyboard — do nothing special
-        }, { passive: true });
         pi.focus();
     }
 
