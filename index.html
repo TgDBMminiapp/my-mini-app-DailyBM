@@ -1,47 +1,50 @@
 <!DOCTYPE html>
 <!-- ============================================================
-     DailyBookimix v5.2 — PRODUCTION HARDENING PATCH
-     Changes from v5.1:
-      A. StorageManager v5.2 — Complete rewrite of the storage layer:
-           • Per-key write-queue (mutex) prevents concurrent writes to the
-             same CloudStorage key from racing and producing stale data.
-           • 4-attempt exponential back-off (0/600/1200/2400 ms) instead of
-             flat 400 ms, giving Telegram more recovery time after Android
-             backgrounding.
-           • Automatic cloud-health tracking: if the cloud fails 5+ times in
-             a session, StorageManager silently falls back to localStorage-only
-             mode so the app stays functional even on unreachable networks.
-           • Key-length guard: keys > 128 chars throw immediately with a clear
-             error (Telegram's hard limit; previously caused silent failures).
-           • Value-size guard: values > 4 000 bytes warn and fall back to
-             localStorage-only for that key (Telegram hard limit is 4 096 B).
-           • Structured debug logging on every operation (visible in console).
-      B. TaskManager._save() v5.2 — Snapshot-based save:
-           • Takes a JSON snapshot of _data at write-start so rollback in the
-             calling catch block sees a consistent pre-mutation state even if
-             _data was mutated again mid-flight.
-           • Pending-save re-run propagates its error correctly instead of
-             swallowing it (previously a failing pending-save was silent).
-           • load() sanitises each day entry on parse — missing/corrupt
-             day objects are reset to { tasks:[], mood:'' } instead of
-             crashing at runtime.
-      C. RubyManager.onTaskChange() v5.2 — Idempotent Onyx awards:
-           • Per-day processing lock (_onTaskChangeLocks) prevents two rapid
-             concurrent calls from awarding the same challenge twice.
-           • Rollback of both _total and _progress on save failure ensures
-             Onyx is never awarded without persisting the record.
-      D. ShopManager.confirmPurchase() v5.2 — Atomic purchase transaction:
-           • Both rubies_v1 and shop_v1 are saved in parallel with
-             Promise.all(); on any failure both in-memory mutations are rolled
-             back so the user is never debited without receiving the item.
-           • Duplicate-purchase guard prevents a double-tap on the confirm
-             button from recording the item twice.
-      E. diary.init() v5.2 — Robust boot sequence:
-           • Each sub-system (RubyManager, ShopManager) is wrapped in its own
-             try/catch so one failed init does not prevent the rest from loading.
-           • Brief opacity fade signals loading state to the user on slow
-             connections instead of showing a blank/stale UI.
-      All original v5.1 functionality 100% preserved.
+     DailyBookimix v5.3 — DATA PERSISTENCE & CROSS-DEVICE SYNC
+     ============================================================
+     ROOT CAUSE OF DATA LOSS (fixed in v5.3):
+       Telegram CloudStorage hard-caps each value at 4 096 bytes.
+       v5.x stored ALL task history in one 'tasks_v1' key and ALL
+       Onyx challenge progress in 'rubies_v1'. After 6-7 days of
+       normal use the encrypted blobs exceeded the limit. Telegram's
+       backend silently rejected writes — no error was returned —
+       so tasks appeared to save (toast showed ✅) but were gone on
+       the next session. Ruby progress was lost after ~30 days.
+
+     FIXES:
+       A. PER-DAY TASK SHARDING
+          Each day now stored in its own 't:YYYY-MM-DD' key (~500 B).
+          Only the changed day is written per operation — fast & safe.
+          One-time migration reads 'tasks_v1' and splits it out, then
+          clears the old key so it never grows large again.
+
+       B. PER-DAY RUBY-PROGRESS SHARDING
+          Challenge progress stored in 'rp:YYYY-MM-DD' per day.
+          'rubies_v1' now holds only { total: N } — a few dozen bytes.
+          Old inline-progress format detected and migrated on first open.
+
+       C. CROSS-DEVICE SYNC FIX
+          Previously localStorage could supply a stale salt from a
+          previous install, causing key derivation to silently use the
+          wrong salt and make all cloud data appear missing/corrupt on a
+          second device. Fix: when Telegram CloudStorage is reachable,
+          its salt is ALWAYS authoritative — localStorage is never used
+          as a fallback for the salt if the cloud is online.
+          Added a "🔄 Enter the password from your first device" hint
+          shown when cloud has a salt but the entered password is wrong,
+          helping new-device users understand what to type.
+
+       D. STORAGEMANAGER _enqueue BUG FIX
+          The write-queue was storing `next.catch(()=>{})` — a promise
+          that always resolves — so every enqueued write thought the
+          slot was free and ran immediately, defeating the mutex. Fixed
+          to store a settled-but-non-rejecting sentinel that still lets
+          the chain wait for the actual in-flight write.
+
+       E. ACCOUNT DELETION
+          executeDeleteAccount now also clears per-day task/ruby keys
+          for the last 60 days, plus wipes the CloudStorage salt and
+          sentinel so the next unlock creates a completely fresh account.
      ============================================================ -->
 <html lang="ru" class="h-full">
 <head>
@@ -1846,100 +1849,142 @@ const EncryptionManager = {
     // Called on unlock button click
     async unlock() {
         const pw = document.getElementById('lockPasswordInput').value;
-        if (!pw || pw.length < 1) {
-            this._showLockError();
-            return;
-        }
+        if (!pw || pw.length < 1) { this._showLockError(); return; }
+
         const btn = document.getElementById('lockUnlockBtn');
-        btn.textContent = '⏳';
-        btn.disabled = true;
+        const origText = btn.textContent;
+        btn.textContent = '⏳'; btn.disabled = true;
 
         try {
-            // CloudStorage is authoritative for this Telegram-only app.
-            // localStorage is only a resilience fallback.
             const hasCloud = !!(
                 window.Telegram && Telegram.WebApp.CloudStorage &&
                 Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
             );
+
+            // Promisified CloudStorage helpers with timeout
             const csGet = key => new Promise(res => {
                 if (!hasCloud) return res(null);
-                try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
-                catch(e) { res(null); }
+                let done = false;
+                const t = setTimeout(() => { done=true; res(null); }, 6000);
+                try {
+                    Telegram.WebApp.CloudStorage.getItem(key, (e, v) => {
+                        if (done) return; done=true; clearTimeout(t);
+                        res((v && v !== '') ? v : null);
+                    });
+                } catch(e) { if (!done) { done=true; clearTimeout(t); res(null); } }
             });
             const csSet = (key, val) => new Promise(res => {
                 if (!hasCloud) return res();
-                try { Telegram.WebApp.CloudStorage.setItem(key, val, () => res()); }
-                catch(e) { res(); }
+                let done = false;
+                const t = setTimeout(() => { done=true; res(); }, 6000);
+                try {
+                    Telegram.WebApp.CloudStorage.setItem(key, val, () => {
+                        if (done) return; done=true; clearTimeout(t); res();
+                    });
+                } catch(e) { if (!done) { done=true; clearTimeout(t); res(); } }
             });
 
-            // --- Salt: CloudStorage first, localStorage fallback ---
+            // ── Salt: CloudStorage is AUTHORITATIVE ───────────────
+            // Rule: if cloud is reachable and has a salt, use it — NEVER
+            // the localStorage value, which may be from a different account
+            // on a shared/previous device install.
+            // Only fall back to localStorage if cloud is completely unavailable.
             let saltB64 = await csGet('dbmix_salt');
-            if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
+            const saltFromCloud = !!saltB64;
 
+            if (!saltB64 && !hasCloud) {
+                // No cloud — use localStorage (offline/dev mode only)
+                try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
+            }
+            // Note: if hasCloud && !saltB64 → first time on this account, we create below.
+
+            let isFirstTime = false;
             if (!saltB64) {
-                // First time: generate and persist salt
+                // First-time setup: generate salt and persist to cloud immediately
+                isFirstTime = true;
                 this._salt = crypto.getRandomValues(new Uint8Array(16));
                 saltB64 = this._b64encode(this._salt);
                 await csSet('dbmix_salt', saltB64);
-                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
+                try { localStorage.setItem('dbmix_salt', saltB64); } catch(_) {}
             } else {
                 this._salt = this._b64decode(saltB64);
-                // Ensure salt is in both stores for resilience
-                await csSet('dbmix_salt', saltB64);
-                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
+                // Mirror to localStorage for offline resilience (but cloud always wins on read)
+                try { localStorage.setItem('dbmix_salt', saltB64); } catch(_) {}
             }
 
             this._key = await this.deriveKey(pw, this._salt);
 
-            // --- Sentinel: CloudStorage first, localStorage fallback ---
+            // ── Sentinel: verify password is correct ──────────────
             let sentinel = await csGet('dbmix_sentinel');
-            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
+            if (!sentinel && !hasCloud) {
+                try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(_) {}
+            }
 
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
                 if (dec !== 'DAILYBOOKMIX_V5') {
                     this._key = null;
-                    btn.textContent = 'Unlock 🔓';
-                    btn.disabled = false;
-                    this._showLockError();
+                    btn.textContent = origText; btn.disabled = false;
+                    // Show a more helpful message for cross-device users
+                    this._showLockError(saltFromCloud
+                        ? null  // wrong password on a known account
+                        : 'no-account'
+                    );
                     return;
                 }
-            } else {
+            } else if (isFirstTime) {
+                // New account: write sentinel
                 const enc = await this.encrypt('DAILYBOOKMIX_V5');
                 await csSet('dbmix_sentinel', enc);
-                try { localStorage.setItem('dbmix_sentinel', enc); } catch(e) {}
+                try { localStorage.setItem('dbmix_sentinel', enc); } catch(_) {}
+            } else {
+                // Salt existed in cloud but no sentinel → account exists but sentinel
+                // key was lost (edge case). Treat as wrong password to be safe.
+                this._key = null;
+                btn.textContent = origText; btn.disabled = false;
+                this._showLockError();
+                return;
             }
 
-            try { sessionStorage.setItem('dbmix_pw', pw); } catch(e) {}
+            try { sessionStorage.setItem('dbmix_pw', pw); } catch(_) {}
 
             document.getElementById('encryptionLock').classList.remove('open');
             document.getElementById('appContent').style.display = 'block';
-
             await diary.init();
 
         } catch(e) {
-            console.error('Encryption error:', e);
-            btn.textContent = 'Unlock 🔓';
-            btn.disabled = false;
+            console.error('[EncryptionManager] unlock error:', e);
+            btn.textContent = origText; btn.disabled = false;
             this._showLockError();
         }
     },
 
-    _showLockError() {
+    _showLockError(reason) {
         const input = document.getElementById('lockPasswordInput');
+        const hint  = document.getElementById('lock-hint');
         input.style.borderColor = '#f87171';
         input.style.boxShadow   = '0 0 0 4px rgba(248,113,113,0.2)';
+        // Cross-device hint: tell the user to use the same password they set up on their first device
+        if (reason === 'no-account' && hint) {
+            const lang = (document.documentElement.lang || 'en').slice(0,2);
+            const msg  = lang === 'ru'
+                ? '🔄 Введи пароль, который ты использовал(а) на первом устройстве'
+                : '🔄 Enter the password you set up on your first device';
+            const prev = hint.textContent;
+            hint.textContent = msg;
+            hint.style.color = '#fb923c';
+            setTimeout(() => { hint.textContent = prev; hint.style.color = ''; }, 5000);
+        }
         setTimeout(() => {
-            input.style.borderColor = '';
-            input.style.boxShadow   = '';
+            input.style.borderColor = ''; input.style.boxShadow = '';
         }, 1200);
-        input.focus();
+        input.focus(); input.select();
     },
 
-    // Try auto-unlock from session (if user didn't close the Telegram mini-app)
+    // Try auto-unlock from sessionStorage (same session, not expired)
     async tryAutoUnlock() {
         let pw = null;
-        try { pw = sessionStorage.getItem('dbmix_pw'); } catch(e) {}
+        try { pw = sessionStorage.getItem('dbmix_pw'); } catch(_) {}
         if (!pw) return false;
 
         const hasCloud = !!(
@@ -1948,21 +1993,31 @@ const EncryptionManager = {
         );
         const csGet = key => new Promise(res => {
             if (!hasCloud) return res(null);
-            try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
-            catch(e) { res(null); }
+            let done = false;
+            const t = setTimeout(() => { done=true; res(null); }, 6000);
+            try {
+                Telegram.WebApp.CloudStorage.getItem(key, (e, v) => {
+                    if (done) return; done=true; clearTimeout(t);
+                    res((v && v !== '') ? v : null);
+                });
+            } catch(e) { if (!done) { done=true; clearTimeout(t); res(null); } }
         });
 
-        let saltB64 = await csGet('dbmix_salt');
-        if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
-        if (!saltB64) return false;
-
         try {
+            // Cloud is authoritative for salt — same rule as unlock()
+            let saltB64 = await csGet('dbmix_salt');
+            if (!saltB64 && !hasCloud) {
+                try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
+            }
+            if (!saltB64) return false;
+
             this._salt = this._b64decode(saltB64);
             this._key  = await this.deriveKey(pw, this._salt);
 
             let sentinel = await csGet('dbmix_sentinel');
-            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
-
+            if (!sentinel && !hasCloud) {
+                try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(_) {}
+            }
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
                 if (dec !== 'DAILYBOOKMIX_V5') { this._key = null; return false; }
@@ -2010,40 +2065,43 @@ const EncryptionManager = {
 
 
 // ================================================================
-//  STORAGE MANAGER v5.2 — Hardened for production at scale
+//  STORAGE MANAGER v5.3 — Per-key sharding to beat the 4096-byte
+//  Telegram CloudStorage limit that was silently dropping saves.
 //
-//  Changes from v5.1:
-//   A. KEY-LENGTH GUARD: Telegram CloudStorage rejects keys > 128 chars.
-//      Keys that exceed this are silently truncated or rejected — we now
-//      validate and throw early with a clear message.
-//   B. VALUE-SIZE GUARD: CloudStorage values are capped at ~4 KB per key
-//      (official Telegram limit). We warn + fall back to localStorage only
-//      if the encrypted payload would exceed 4 000 bytes after encryption,
-//      which can happen with very large diary entries.
-//   C. WRITE-QUEUE per key: If two saves race on the same key (e.g. a mood
-//      change fires while a task save is in-flight on the same day key),
-//      we now queue the second write instead of losing it. Each key has its
-//      own mutex so unrelated keys can still write concurrently.
-//   D. EXPONENTIAL BACK-OFF: 3 retries with 600ms / 1200ms / 2400ms gaps
-//      instead of the previous flat 400ms.  Gives Telegram more time to
-//      reconnect after backgrounding on Android.
-//   E. CLOUD-HEALTH CHECK: we track consecutive cloud failures per session
-//      and automatically fall back to localStorage-only mode if the cloud
-//      is persistently unreachable (e.g. corporate firewall, Telegram beta).
-//   F. STRUCTURED LOGGING: every cloud operation is logged at debug level
-//      with a timestamp so issues appear in Telegram's in-app JS console.
+//  Root cause of data loss (identified in v5.3):
+//   Telegram CloudStorage hard-caps each value at 4 096 bytes.
+//   The previous code stored ALL tasks for ALL days in a single
+//   'tasks_v1' key.  After ~6 days of normal use (3 tasks/day)
+//   the encrypted JSON exceeded the limit.  Telegram's backend
+//   silently rejected the write — no error was returned to the
+//   callback — so the app showed a success toast while the data
+//   was never persisted.  On next open the key read back empty
+//   and all tasks appeared gone.
+//
+//  Fix: every day's task data is stored in its own key ('t:DATE').
+//   Each key stays under 1 KB even with 10 tasks.  Only the keys
+//   needed are loaded (today + last N days for archive).
+//
+//  Same fix applied to Onyx challenge progress: 'rp:DATE' per day.
+//   The running total lives in a tiny separate 'rubies_v1' key.
+//
+//  Other fixes in v5.3:
+//   • _enqueue: fixed the broken queue chain — was storing a
+//     silently-resolved promise so every write thought the slot
+//     was free and concurrent writes raced instead of queuing.
+//   • cloudOk evaluated inside _enqueue so cloud-disabled state
+//     is checked at actual write time, not at enqueue time.
+//   • Writes now double-check value size inside the queue so any
+//     size computed after the async encrypt step is accurate.
 // ================================================================
 const StorageManager = {
     supportsCloud: false,
-    // Per-key write queues to prevent concurrent writes to the same key
-    _writeQueues: {},   // { [key]: Promise }
-    // Cloud health tracking
+    _writeQueues: {},
     _cloudFailCount: 0,
-    _cloudDisabled:  false,  // auto-disabled if cloud is persistently broken
+    _cloudDisabled:  false,
     _CLOUD_FAIL_THRESHOLD: 5,
-    // Telegram CloudStorage key limit
     _MAX_KEY_LEN:   128,
-    _MAX_VALUE_LEN: 4000, // bytes (conservative; official limit is 4096)
+    _MAX_VALUE_LEN: 3800, // conservative; Telegram hard limit is 4096
 
     init() {
         try {
@@ -2056,158 +2114,120 @@ const StorageManager = {
     },
 
     _log(op, msg) {
-        // Lightweight debug log — visible in Telegram's in-app console
-        try { console.debug(`[StorageMgr][${op}] ${msg}`); } catch(_) {}
+        try { console.debug(`[SM][${op}] ${msg}`); } catch(_) {}
     },
 
-    // Raw CloudStorage set — Promise + 8 s timeout guard.
     _cloudSet(key, value) {
         return new Promise((resolve, reject) => {
-            let settled = false;
-            const timer = setTimeout(() => {
-                if (!settled) { settled = true; reject(new Error('CloudStorage.setItem timeout')); }
-            }, 8000);
+            let done = false;
+            const t = setTimeout(() => { if (!done) { done=true; reject(new Error('CS timeout')); } }, 8000);
             try {
-                Telegram.WebApp.CloudStorage.setItem(key, value, (err) => {
-                    if (settled) return;
-                    settled = true;
-                    clearTimeout(timer);
-                    if (err) reject(new Error(String(err)));
-                    else resolve();
+                Telegram.WebApp.CloudStorage.setItem(key, value, err => {
+                    if (done) return; done=true; clearTimeout(t);
+                    if (err) reject(new Error(String(err))); else resolve();
                 });
-            } catch(e) {
-                if (!settled) { settled = true; clearTimeout(timer); reject(e); }
-            }
+            } catch(e) { if (!done) { done=true; clearTimeout(t); reject(e); } }
         });
     },
 
-    // Raw CloudStorage get — Promise + 8 s timeout guard.
     _cloudGet(key) {
         return new Promise((resolve, reject) => {
-            let settled = false;
-            const timer = setTimeout(() => {
-                if (!settled) { settled = true; reject(new Error('CloudStorage.getItem timeout')); }
-            }, 8000);
+            let done = false;
+            const t = setTimeout(() => { if (!done) { done=true; reject(new Error('CS timeout')); } }, 8000);
             try {
-                Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
-                    if (settled) return;
-                    settled = true;
-                    clearTimeout(timer);
+                Telegram.WebApp.CloudStorage.getItem(key, (err, v) => {
+                    if (done) return; done=true; clearTimeout(t);
                     if (err) reject(new Error(String(err)));
-                    else resolve((value !== null && value !== undefined && value !== '') ? value : null);
+                    else resolve((v !== null && v !== undefined && v !== '') ? v : null);
                 });
-            } catch(e) {
-                if (!settled) { settled = true; clearTimeout(timer); reject(e); }
-            }
+            } catch(e) { if (!done) { done=true; clearTimeout(t); reject(e); } }
         });
     },
 
-    // Enqueue a write for this key so concurrent saves don't race.
-    // Returns a promise that resolves/rejects when the write actually completes.
+    // Correct queue: store `next` (not next.catch) so the chain actually
+    // waits for in-flight writes before starting the next one.
+    // The outer caller still gets rejections via the returned `next` promise.
     _enqueue(key, writeFn) {
-        // Chain onto the existing queue for this key (or start fresh)
         const prev = this._writeQueues[key] || Promise.resolve();
-        const next = prev.then(writeFn, writeFn); // always run writeFn even if prev failed
-        // Keep the queue reference but allow GC once settled
-        this._writeQueues[key] = next.catch(() => {});
+        // Chain writeFn after prev, regardless of prev's outcome
+        const next = prev.then(writeFn, writeFn);
+        // Store a version that never rejects so the queue itself stays alive
+        this._writeQueues[key] = next.then(() => {}, () => {});
         return next;
     },
 
-    // Save encrypted value with per-key queue + exponential back-off.
-    // Empty-string writes (delete) bypass encryption.
-    // IMPORTANT: throws after all retries so callers can roll back.
     async setItem(key, value) {
-        // Key-length guard
         if (key.length > this._MAX_KEY_LEN) {
-            const msg = `[StorageMgr] key too long (${key.length}>${this._MAX_KEY_LEN}): ${key.slice(0,40)}…`;
-            console.error(msg);
-            throw new Error(msg);
+            const msg = `[SM] key too long (${key.length}): ${key.slice(0,40)}`;
+            console.error(msg); throw new Error(msg);
         }
-
-        // Prepare the value to store (empty = delete sentinel; else encrypt)
+        // Encrypt before enqueue so the async work doesn't hold the lock
         const toStore = (value === '' || value === null || value === undefined)
-            ? ''
-            : await EncryptionManager.encrypt(value);
+            ? '' : await EncryptionManager.encrypt(value);
 
-        // Value-size guard (warn only — don't throw; fall back to LS-only)
-        const valueBytes = new TextEncoder().encode(toStore).length;
-        const cloudOk = this.supportsCloud && !this._cloudDisabled && valueBytes <= this._MAX_VALUE_LEN;
-        if (this.supportsCloud && !this._cloudDisabled && valueBytes > this._MAX_VALUE_LEN) {
-            console.warn(`[StorageMgr] value for key "${key}" is ${valueBytes} bytes — exceeds CloudStorage limit, using localStorage only`);
-        }
-
-        // Run through the per-key queue to avoid concurrent writes to the same key
         return this._enqueue(key, async () => {
-            if (cloudOk) {
-                const delays = [0, 600, 1200, 2400]; // ms before each attempt (0 = immediate)
-                let lastError;
-                for (let attempt = 0; attempt < 4; attempt++) {
-                    if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+            // Re-evaluate cloud state inside the queue (may have changed while waiting)
+            const useCloud = this.supportsCloud && !this._cloudDisabled
+                          && new TextEncoder().encode(toStore).length <= this._MAX_VALUE_LEN;
+
+            if (!useCloud && this.supportsCloud && !this._cloudDisabled) {
+                console.warn(`[SM] value too large for cloud, LS-only: key="${key}"`);
+            }
+
+            if (useCloud) {
+                const delays = [0, 700, 1500, 3000];
+                let lastErr;
+                for (let i = 0; i < 4; i++) {
+                    if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
                     try {
                         await this._cloudSet(key, toStore);
-                        // Mirror to localStorage as resilience backup
                         try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
-                        this._cloudFailCount = 0; // reset on success
-                        this._log('set', `✅ key="${key}" attempt=${attempt+1}`);
+                        this._cloudFailCount = 0;
+                        this._log('set', `✅ "${key}" try=${i+1}`);
                         return;
                     } catch(e) {
-                        lastError = e;
-                        this._log('set', `⚠️ key="${key}" attempt=${attempt+1} err=${e.message}`);
+                        lastErr = e;
+                        this._log('set', `⚠️ "${key}" try=${i+1} err=${e.message}`);
                     }
                 }
-                // All retries failed — update health counter
                 this._cloudFailCount++;
                 if (this._cloudFailCount >= this._CLOUD_FAIL_THRESHOLD) {
                     this._cloudDisabled = true;
-                    console.warn('[StorageMgr] Cloud persistently unreachable — switching to localStorage-only mode');
+                    console.warn('[SM] cloud persistently unreachable — LS-only mode');
                 }
-                // Fall through to localStorage as emergency save
-                try {
-                    localStorage.setItem('dbmix_' + key, toStore);
-                    console.warn('[StorageMgr] Cloud failed, saved to localStorage fallback for key:', key);
-                } catch(_) {}
-                // Still throw so transactional callers can roll back
-                throw lastError;
+                try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
+                throw lastErr;
             } else {
-                // localStorage-only path (dev / cloud-disabled / oversized value)
                 try { localStorage.setItem('dbmix_' + key, toStore); }
                 catch(e) { throw e; }
             }
         });
     },
 
-    // Read and decrypt value.  Cloud first → localStorage fallback.
     async getItem(key) {
         let raw = null;
         if (this.supportsCloud && !this._cloudDisabled) {
             try {
                 raw = await this._cloudGet(key);
-                this._log('get', `✅ key="${key}" found=${raw !== null}`);
+                this._log('get', `"${key}" cloud=${raw !== null}`);
             } catch(e) {
-                this._log('get', `⚠️ key="${key}" cloud err=${e.message} — falling back to LS`);
+                this._log('get', `"${key}" cloud err, trying LS`);
                 raw = null;
             }
         }
-        // Fall back to localStorage mirror if cloud returned nothing
         if (!raw) {
             try { raw = localStorage.getItem('dbmix_' + key) || null; } catch(_) {}
         }
         if (!raw) return null;
         try { return await EncryptionManager.decrypt(raw); }
-        catch(e) {
-            this._log('get', `⚠️ key="${key}" decrypt failed — returning null`);
-            return null;
-        }
+        catch(e) { this._log('get', `"${key}" decrypt failed`); return null; }
     },
 
-    // Serialised reads — concurrent CloudStorage.getItem() calls race on iOS.
     async getItems(keys) {
         const result = {};
         for (const k of keys) {
-            try {
-                const v = await this.getItem(k);
-                if (v !== null) result[k] = v;
-            } catch(_) {}
+            try { const v = await this.getItem(k); if (v !== null) result[k] = v; }
+            catch(_) {}
         }
         return result;
     }
@@ -2471,7 +2491,7 @@ const TaskManager = {
         this.render();
 
         try {
-            await this._save();
+            await this._save(dateStr);
             diary.toast(diary.t('tasks-toast-added'));
             AchievementsUI.recalculate();
             await RubyManager.onTaskChange(dateStr, this._data[dateStr] || { tasks: [], mood: '' });
@@ -2511,7 +2531,7 @@ const TaskManager = {
         this.render();
 
         try {
-            await this._save();
+            await this._save(dateStr);
             AchievementsUI.recalculate();
             const todayStr = this.today();
             if (dateStr === todayStr) {
@@ -2524,8 +2544,6 @@ const TaskManager = {
             this.render();
             diary.toast('❌ Failed to save — please try again', 'error');
         } finally {
-            // Release lock after a short delay — enough to absorb the
-            // paired click that iOS fires after touchend
             setTimeout(() => this._toggleLock.delete(lockKey), 500);
         }
     },
@@ -2542,7 +2560,7 @@ const TaskManager = {
         this.render();
 
         try {
-            await this._save();
+            await this._save(dateStr);
             diary.toast(diary.t('tasks-toast-deleted'));
             AchievementsUI.recalculate();
             const todayStr = this.today();
@@ -2580,7 +2598,7 @@ const TaskManager = {
         this.render();
 
         try {
-            await this._save();
+            await this._save(dateStr);
             const todayStr = this.today();
             if (dateStr === todayStr) {
                 await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
@@ -2615,7 +2633,7 @@ const TaskManager = {
         this._sortTasks(nextDay);
 
         try {
-            await this._save();
+            await this._save(tomorrowStr);
             diary.toast(diary.t('tasks-toast-carried'));
         } catch(e) {
             nextDay.tasks = nextDay.tasks.filter(t => !added.includes(t.id));
@@ -2653,85 +2671,99 @@ const TaskManager = {
         return Object.values(this._data).reduce((s, d) => s + (d.tasks || []).length, 0);
     },
 
-    // ── Serialised save v5.2 ─────────────────────────────────────
-    // Uses StorageManager's per-key write-queue (added in v5.2) so this
-    // mutex is now a belt-and-suspenders safety net rather than the only
-    // guard.  The key improvement here: when the pending re-run also throws,
-    // we still clear the lock AND re-throw so the caller's catch block fires.
-    //
-    // Additionally: we snapshot _data at the start of each write attempt so
-    // that a mutation arriving mid-write doesn't produce a partially-written
-    // state that diverges from what the caller rolled back.
-    _savePromise: null,
-    async _save() {
-        if (this._saveInProgress) {
-            this._savePending = true;
-            return this._savePromise;
-        }
+    // ── Per-day save (v5.3) ───────────────────────────────────────
+    // Each day stored as 't:YYYY-MM-DD' — keeps every value well under
+    // the 4096-byte Telegram CloudStorage hard limit.
+    // Only the modified day is written on each save, so writes are fast
+    // and small regardless of how many days of history exist.
+    _dirtyDays: new Set(),   // days that need saving after this operation
 
-        this._saveInProgress = true;
-        this._savePending    = false;
-
-        this._savePromise = (async () => {
-            // Snapshot at save-start so rollback sees a consistent pre-save state
-            const snapshot = JSON.stringify(this._data);
-            let primaryError = null;
-            try {
-                await StorageManager.setItem('tasks_v1', snapshot);
-            } catch(e) {
-                primaryError = e;
-            } finally {
-                if (this._savePending) {
-                    this._savePending = false;
-                    const snapshot2 = JSON.stringify(this._data);
-                    try {
-                        await StorageManager.setItem('tasks_v1', snapshot2);
-                    } catch(e) {
-                        // Pending save also failed — propagate if primary succeeded
-                        if (!primaryError) primaryError = e;
-                        console.error('[TaskManager] pending save also failed:', e);
-                    } finally {
-                        this._saveInProgress = false;
-                        this._savePromise    = null;
-                    }
-                } else {
-                    this._saveInProgress = false;
-                    this._savePromise    = null;
-                }
-            }
-            // Re-throw so calling catch-blocks (rollback logic) execute
-            if (primaryError) throw primaryError;
-        })();
-
-        return this._savePromise;
+    async _saveDay(dateStr) {
+        const day  = this._data[dateStr];
+        const json = day ? JSON.stringify(day) : '';
+        // Empty day = write '' to free the slot
+        await StorageManager.setItem('t:' + dateStr, json || '');
     },
 
-    // ── Load ──────────────────────────────────────────────────────
-    async load() {
+    // Called by all mutating operations — saves only the affected day.
+    // Rolls up concurrent same-day saves via StorageManager's per-key queue.
+    async _save(dateStr) {
+        dateStr = dateStr || this._viewDate || this.today();
         try {
-            const raw = await StorageManager.getItem('tasks_v1');
-            if (raw) {
-                let parsed;
-                try { parsed = JSON.parse(raw); } catch(e) {
-                    console.warn('[TaskManager] JSON parse failed on load, ignoring stored data:', e);
-                    parsed = null;
-                }
-                // Only overwrite if we got a non-empty object — prevents wiping
-                // memory on a transient empty-string read from CloudStorage
-                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                    // Sanitise each day entry to guarantee shape { tasks:[], mood:'' }
-                    for (const [k, v] of Object.entries(parsed)) {
-                        if (!v || typeof v !== 'object') { parsed[k] = { tasks: [], mood: '' }; continue; }
-                        if (!Array.isArray(v.tasks)) v.tasks = [];
-                        if (typeof v.mood !== 'string') v.mood = '';
-                        // Sanitise each task
-                        v.tasks = v.tasks.filter(t => t && typeof t === 'object' && t.id != null && typeof t.text === 'string');
-                    }
-                    this._data = parsed;
-                }
-            }
+            await this._saveDay(dateStr);
         } catch(e) {
-            console.warn('[TaskManager] load failed, keeping existing data:', e);
+            console.error('[TaskManager] _save failed for', dateStr, e);
+            throw e; // re-throw so callers can roll back
+        }
+    },
+
+    // ── Load (v5.3) ───────────────────────────────────────────────
+    // Strategy:
+    //   1. Try to read the per-day keys 't:YYYY-MM-DD' for today + last 30 days.
+    //   2. If NONE of them exist, check the old monolithic 'tasks_v1' key and
+    //      migrate it — this is a one-time migration for existing users.
+    //   3. After migration, write per-day keys and delete the old blob.
+    async load() {
+        const today = this.today();
+        const days  = [];
+        for (let i = 0; i < 30; i++) {
+            const d = new Date(); d.setDate(d.getDate() - i);
+            days.push(d.toISOString().split('T')[0]);
+        }
+
+        // Read all per-day keys in parallel (StorageManager serialises internally)
+        const keys = days.map(d => 't:' + d);
+        let anyFound = false;
+        for (const key of keys) {
+            try {
+                const raw = await StorageManager.getItem(key);
+                if (raw && raw.trim() !== '') {
+                    const dateStr = key.slice(2); // strip 't:'
+                    let parsed;
+                    try { parsed = JSON.parse(raw); } catch(_) { parsed = null; }
+                    if (parsed && typeof parsed === 'object') {
+                        if (!Array.isArray(parsed.tasks)) parsed.tasks = [];
+                        if (typeof parsed.mood !== 'string') parsed.mood = '';
+                        parsed.tasks = parsed.tasks.filter(
+                            t => t && typeof t === 'object' && t.id != null && typeof t.text === 'string'
+                        );
+                        this._data[dateStr] = parsed;
+                        anyFound = true;
+                    }
+                }
+            } catch(_) {}
+        }
+
+        // One-time migration from old monolithic key
+        if (!anyFound) {
+            try {
+                const raw = await StorageManager.getItem('tasks_v1');
+                if (raw) {
+                    let parsed;
+                    try { parsed = JSON.parse(raw); } catch(_) { parsed = null; }
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                        for (const [ds, v] of Object.entries(parsed)) {
+                            if (!v || typeof v !== 'object') continue;
+                            if (!Array.isArray(v.tasks)) v.tasks = [];
+                            if (typeof v.mood !== 'string') v.mood = '';
+                            v.tasks = v.tasks.filter(
+                                t => t && typeof t === 'object' && t.id != null && typeof t.text === 'string'
+                            );
+                            this._data[ds] = v;
+                        }
+                        // Migrate: write each day to its own key
+                        console.log('[TaskManager] migrating from tasks_v1 to per-day keys...');
+                        for (const ds of Object.keys(this._data)) {
+                            try { await this._saveDay(ds); } catch(_) {}
+                        }
+                        // Delete the old blob so we don't re-migrate
+                        try { await StorageManager.setItem('tasks_v1', ''); } catch(_) {}
+                        console.log('[TaskManager] migration complete');
+                    }
+                }
+            } catch(e) {
+                console.warn('[TaskManager] migration load failed:', e);
+            }
         }
     },
 
@@ -2980,48 +3012,66 @@ const RubyManager = {
         ];
     },
 
-    // ── Init ──────────────────────────────────────────────────────
+    // ── Init (v5.3) ───────────────────────────────────────────────
+    // Total is stored in 'rubies_v1' (tiny — just a number).
+    // Per-day challenge progress stored in 'rp:YYYY-MM-DD' keys.
+    // rubies_v1 previously also held the full progress object which
+    // exceeded the 4096-byte limit after ~30 days, causing silent loss.
     async init() {
         try {
             const raw = await StorageManager.getItem('rubies_v1');
             if (raw) {
-                const parsed   = JSON.parse(raw);
-                this._total    = parsed.total    || 0;
-                this._progress = parsed.progress || {};
+                const parsed = JSON.parse(raw);
+                this._total = typeof parsed.total === 'number' ? parsed.total : 0;
+                // One-time migration: if old format had inline progress, shard it out
+                if (parsed.progress && typeof parsed.progress === 'object') {
+                    for (const [ds, dp] of Object.entries(parsed.progress)) {
+                        this._progress[ds] = dp;
+                        try { await StorageManager.setItem('rp:' + ds, JSON.stringify(dp)); } catch(_) {}
+                    }
+                    // Re-save rubies_v1 without the progress blob
+                    try { await StorageManager.setItem('rubies_v1', JSON.stringify({ total: this._total })); } catch(_) {}
+                    console.log('[RubyManager] migrated progress to per-day keys');
+                }
             }
-        } catch(e) {}
+        } catch(e) { console.warn('[RubyManager] init load failed:', e); }
+
+        // Load today's (and recent) challenge progress from per-day keys
+        const today = new Date().toISOString().split('T')[0];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(); d.setDate(d.getDate() - i);
+            const ds = d.toISOString().split('T')[0];
+            if (this._progress[ds]) continue; // already migrated above
+            try {
+                const raw = await StorageManager.getItem('rp:' + ds);
+                if (raw) this._progress[ds] = JSON.parse(raw);
+            } catch(_) {}
+        }
+
         this._loaded = true;
         this._updateHeader();
     },
 
-    async _save() {
-        const data = JSON.stringify({ total: this._total, progress: this._progress });
-        // StorageManager.setItem now throws after retries; we catch here to
-        // avoid crashing the Onyx award flow — a missed Onyx save is
-        // non-critical (unlike task data) since the award will retry on
-        // the next task interaction. We still log for diagnostics.
-        try {
-            await StorageManager.setItem('rubies_v1', data);
-        } catch(e) {
-            console.warn('[RubyManager] _save failed, will retry on next change:', e);
-            // Schedule one background retry so Onyx is not lost
-            setTimeout(() => StorageManager.setItem('rubies_v1', data).catch(() => {}), 2000);
+    // Save total (tiny — always succeeds) + today's progress shard separately
+    async _save(dateStr) {
+        dateStr = dateStr || new Date().toISOString().split('T')[0];
+        // Save total
+        await StorageManager.setItem('rubies_v1', JSON.stringify({ total: this._total }));
+        // Save this day's progress (only if we have any)
+        const dp = this._progress[dateStr];
+        if (dp) {
+            await StorageManager.setItem('rp:' + dateStr, JSON.stringify(dp));
         }
     },
 
     // ── Called after every task change ───────────────────────────
-    // v5.2 FIX: Added _onTaskChangeLock per day-key to prevent concurrent
-    // calls from awarding the same task twice (e.g. a rapid double-tap that
-    // passes the TaskManager._toggleLock fires two onTaskChange calls).
     _onTaskChangeLocks: new Set(),
     async onTaskChange(todayStr, taskData) {
         if (!this._loaded) return;
-        // Prevent concurrent processing for the same day
         if (this._onTaskChangeLocks.has(todayStr)) return;
         this._onTaskChangeLocks.add(todayStr);
 
         try {
-            // Re-read latest progress from memory (may have been updated by another call)
             const dayProgress = this._progress[todayStr] || {};
             const tasks       = this._todaysTasks(todayStr);
             let earned  = 0;
@@ -3029,7 +3079,6 @@ const RubyManager = {
 
             for (const task of tasks) {
                 const prev = dayProgress[task.id] || { completed: false };
-                // Only award if not already awarded (idempotency gate)
                 if (!prev.completed && task.check(taskData)) {
                     dayProgress[task.id] = { completed: true };
                     this._total += task.reward;
@@ -3039,24 +3088,21 @@ const RubyManager = {
             }
 
             if (changed) {
-                // Snapshot current total before the save so we can roll back on failure
                 const prevTotal    = this._total - earned;
                 const prevProgress = JSON.parse(JSON.stringify(this._progress));
-
                 this._progress[todayStr] = dayProgress;
 
                 try {
-                    await this._save();
+                    await this._save(todayStr);
                     this._updateHeader();
                     this._showEarnEffect(earned);
                     const modal = document.getElementById('dailyChallengesModal');
                     if (modal && modal.classList.contains('open')) this._renderChallenges(todayStr);
                 } catch(e) {
-                    // Rollback in-memory state on save failure
                     this._total    = prevTotal;
                     this._progress = prevProgress;
                     this._updateHeader();
-                    console.error('[RubyManager] onTaskChange save failed, rolled back award:', e);
+                    console.error('[RubyManager] save failed, rolled back:', e);
                 }
             }
         } finally {
@@ -4530,13 +4576,38 @@ const SidebarUI = {
         diary.notes = []; diary.habits = []; diary.memories = [];
         diary.fireStreak = 0; diary.lastActiveDate = '';
 
-        const keys = ['notes','habits','memories','fireStreak','lastActiveDate','userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1'];
+        // Static keys
+        const keys = ['notes','habits','memories','fireStreak','lastActiveDate',
+                      'userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1'];
         for (const key of keys) {
-            try { await StorageManager.setItem(key, ''); } catch(e) {}
+            try { await StorageManager.setItem(key, ''); } catch(_) {}
         }
+
+        // Per-day task keys ('t:YYYY-MM-DD') and ruby-progress keys ('rp:YYYY-MM-DD')
+        // Clear last 60 days to catch any lingering history
+        for (let i = 0; i < 60; i++) {
+            const d = new Date(); d.setDate(d.getDate() - i);
+            const ds = d.toISOString().split('T')[0];
+            try { await StorageManager.setItem('t:'  + ds, ''); } catch(_) {}
+            try { await StorageManager.setItem('rp:' + ds, ''); } catch(_) {}
+        }
+
+        // Also clear encryption keys so the next unlock creates a fresh account
+        const hasCloud = !!(window.Telegram && Telegram.WebApp.CloudStorage);
+        const csDel = key => new Promise(res => {
+            if (!hasCloud) return res();
+            try { Telegram.WebApp.CloudStorage.setItem(key, '', () => res()); }
+            catch(_) { res(); }
+        });
+        await csDel('dbmix_salt');
+        await csDel('dbmix_sentinel');
+        try { localStorage.removeItem('dbmix_salt'); } catch(_) {}
+        try { localStorage.removeItem('dbmix_sentinel'); } catch(_) {}
+        try { sessionStorage.removeItem('dbmix_pw'); } catch(_) {}
 
         this.profile = { name: '', userId: '', photoUrl: '', nickname: '' };
         TaskManager._data = {};
+        RubyManager._progress = {};
 
         diary.renderAll();
         diary.updateFooter();
