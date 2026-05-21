@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-     DailyBookimix v5.3 — DATA PERSISTENCE & CROSS-DEVICE SYNC
+     DailyBookimix v5.4 — PASSWORD FIX, CROSS-DEVICE SYNC & ACCOUNT RESET
      ============================================================
      ROOT CAUSE OF DATA LOSS (fixed in v5.3):
        Telegram CloudStorage hard-caps each value at 4 096 bytes.
@@ -41,10 +41,47 @@
           to store a settled-but-non-rejecting sentinel that still lets
           the chain wait for the actual in-flight write.
 
-       E. ACCOUNT DELETION
-          executeDeleteAccount now also clears per-day task/ruby keys
-          for the last 60 days, plus wipes the CloudStorage salt and
-          sentinel so the next unlock creates a completely fresh account.
+       E. ACCOUNT DELETION (updated in v5.4)
+          executeDeleteAccount now uses EncryptionManager._csDel() for
+          salt/sentinel wipe, clears 90 days of shards (up from 60),
+          shows a loading state on the confirm button, and reloads the
+          page after deletion so the lock screen comes up clean.
+
+       F. NEW IN v5.4 — PASSWORD / ENCRYPTION RELIABILITY
+          • Salt retrieval retries up to 3× with exponential back-off
+            (0 → 500 → 1500 → 4000 ms) to survive transient cloud
+            failures on first open from a new device.
+          • Live loading indicator on lock screen shows step-by-step
+            progress ("Loading key…", "Verifying password…") so users
+            know the app is working.
+          • Precise, language-aware error messages replace the single
+            generic "wrong password" hint.
+          • Re-entrancy guard prevents double-tap race conditions.
+          • Sentinel-recovery: if salt exists but sentinel is missing
+            (interrupted first-setup) the app rewrites the sentinel
+            instead of permanently locking the user out.
+
+       G. NEW IN v5.4 — "FORGOT PASSWORD? RESET ACCOUNT" BUTTON
+          Prominently displayed on the lock screen. Triggers a modal
+          that explains the consequence (total data wipe), then calls
+          EncryptionManager.executeReset() which:
+            1. Clears dbmix_salt + dbmix_sentinel from CloudStorage.
+            2. Clears all 90-day task/ruby shards + static keys.
+            3. Calls localStorage.clear() + sessionStorage.clear().
+            4. Reloads the page so the user can set a new password.
+          Crucially, this works BEFORE any unlock attempt, so users
+          who forgot their password on every device can still recover.
+
+       H. NEW IN v5.4 — FORCE SYNC BUTTON IN SIDEBAR
+          "Force Sync from Cloud" sidebar item re-enables CloudStorage
+          (resetting _cloudDisabled) and triggers diary.load() to pull
+          the latest data from Telegram servers. Useful after a
+          network interruption or when switching devices.
+
+       I. NEW IN v5.4 — STORAGE SELF-HEALING
+          StorageManager auto-re-enables cloud writes after 60 s when
+          it was disabled due to repeated failures, so the app
+          self-heals after a temporary network outage.
      ============================================================ -->
 <html lang="ru" class="h-full">
 <head>
@@ -567,6 +604,18 @@
         }
         .lock-btn:active { transform: scale(0.97); opacity: 0.9; }
         .lock-hint { font-size: 12px; opacity: 0.65; text-align: center; margin-top: 10px; }
+        /* Loading pulse animation for unlock indicator */
+        @keyframes lockPulse {
+            0%, 100% { opacity: 0.7; }
+            50%       { opacity: 1;   }
+        }
+        #lockLoadingIndicator {
+            display: none; align-items: center; justify-content: center;
+            animation: lockPulse 1.3s ease-in-out infinite;
+            font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.9);
+            text-align: center; min-height: 24px;
+        }
+        #lockStatusArea { min-height: 36px; display: flex; align-items: center; justify-content: center; margin: 4px 0; }
 
         /* ── DAILY TASKS SECTION ── */
         /* Task quick-add row */
@@ -1016,10 +1065,62 @@
 <div id="encryptionLock" class="open">
     <div class="lock-box">
         <div class="lock-icon">🔐</div>
+        <div class="lock-title" id="lock-title"></div>
         <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.</div>
-        <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64">
+        <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64"
+               onkeydown="if(event.key==='Enter'){EncryptionManager.unlock();}">
+        <!-- Status area: shows loading states and error hints -->
+        <div id="lockStatusArea" style="min-height:36px;display:flex;align-items:center;justify-content:center;margin:4px 0">
+            <div id="lockLoadingIndicator" style="display:none;color:rgba(255,255,255,0.85);font-size:13px;font-weight:700;text-align:center;letter-spacing:0.03em">
+                <span id="lockLoadingText">⏳ Checking cloud…</span>
+            </div>
+            <div class="lock-hint" id="lock-hint" style="margin-top:0">First time? Choose any password — it will be used to encrypt all your data.</div>
+        </div>
         <button class="lock-btn" id="lockUnlockBtn" onclick="EncryptionManager.unlock()">Unlock 🔓</button>
-        <div class="lock-hint" id="lock-hint">First time? Choose any password — it will be used to encrypt all your data.</div>
+        <!-- Forgot password / Reset account — always visible on lock screen -->
+        <button id="lockResetBtn" onclick="EncryptionManager.promptReset()"
+                style="margin-top:14px;width:100%;padding:13px;background:rgba(239,68,68,0.18);
+                       color:#fca5a5;border:1.5px solid rgba(239,68,68,0.35);border-radius:14px;
+                       font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;cursor:pointer;
+                       transition:background 0.2s,transform 0.15s;letter-spacing:0.01em"
+                onmouseenter="this.style.background='rgba(239,68,68,0.28)'"
+                onmouseleave="this.style.background='rgba(239,68,68,0.18)'"
+                onmousedown="this.style.transform='scale(0.97)'"
+                onmouseup="this.style.transform=''">
+            🗑️ <span id="lockResetBtnTxt">Forgot password? Reset account</span>
+        </button>
+    </div>
+</div>
+
+<!-- ══════════════ RESET ACCOUNT CONFIRM MODAL (shown from lock screen) ══════════════ -->
+<div id="lockResetModal" style="display:none;position:fixed;inset:0;z-index:20000;
+     background:rgba(0,0,0,0.75);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+     align-items:center;justify-content:center;padding:24px">
+    <div style="background:#1c1c2e;color:#eaeaf5;border-radius:26px;padding:28px;
+                width:100%;max-width:380px;box-shadow:0 24px 60px rgba(0,0,0,0.5);
+                animation:modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both">
+        <div style="font-size:40px;text-align:center;margin-bottom:10px">⚠️</div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;
+                   color:#eaeaf5;text-align:center;margin-bottom:10px" id="lockResetTitle">Reset Account?</h2>
+        <p style="font-size:13px;color:#9ca3af;text-align:center;line-height:1.6;margin-bottom:22px" id="lockResetDesc">
+            This will permanently erase <strong style="color:#f87171">all your encrypted data</strong>
+            — notes, habits, tasks, memories — and remove the encryption salt.<br><br>
+            <strong style="color:#fbbf24">This cannot be undone.</strong> Use only if you have forgotten your password.
+        </p>
+        <div style="display:flex;gap:12px">
+            <button onclick="EncryptionManager.cancelReset()"
+                    style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#eaeaf5;
+                           border:1px solid rgba(255,255,255,0.15);border-radius:14px;
+                           font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;
+                           transition:background 0.2s" id="lockResetCancel">Cancel</button>
+            <button onclick="EncryptionManager.executeReset()"
+                    style="flex:1;padding:14px;background:rgba(239,68,68,0.25);color:#f87171;
+                           border:1px solid rgba(239,68,68,0.45);border-radius:14px;
+                           font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;
+                           transition:background 0.2s" id="lockResetConfirm"
+                    onmouseenter="this.style.background='rgba(239,68,68,0.4)'"
+                    onmouseleave="this.style.background='rgba(239,68,68,0.25)'">🗑️ Delete all data</button>
+        </div>
     </div>
 </div>
 
@@ -1487,6 +1588,11 @@
             <div class="sidebar-item-label" id="sb-item-daily-challenges">Daily Challenges</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
+        <div class="sidebar-item" onclick="SidebarUI.forceSync()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.2),rgba(37,99,235,0.15));border:1px solid rgba(59,130,246,0.3)">🔄</div>
+            <div class="sidebar-item-label" id="sb-item-force-sync">Force Sync from Cloud</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
         <div class="sidebar-item danger" onclick="SidebarUI.confirmDeleteAccount()">
@@ -1777,15 +1883,112 @@
 
 <script>
 // ================================================================
-//  ENCRYPTION MANAGER — AES-256-GCM via Web Crypto API
-//  All data is encrypted before saving. The password is stored
-//  only in sessionStorage (cleared on browser close).
+//  ENCRYPTION MANAGER v5.4 — AES-256-GCM via Web Crypto API
+//
+//  Key improvements over v5.3:
+//   • Salt retrieval retried up to 3× with exponential back-off
+//     (500 ms → 1500 ms → 4000 ms) to survive transient cloud
+//     failures on first open from a new device.
+//   • Live loading indicator so users see progress, not a frozen UI.
+//   • Precise error messages: "wrong password", "connection error",
+//     "enter a password" — each shown in the correct language.
+//   • "Forgot password? Reset account" button on lock screen always
+//     visible — executes a full wipe even before first unlock.
+//   • Re-entrancy guard: double-tapping Unlock is a no-op.
+//   • Sentinel-recovery: if salt exists but sentinel is missing
+//     (interrupted first-setup), the sentinel is rewritten rather
+//     than locking the user out permanently.
+//   • Coloured debug logs ([EM][SALT], [EM][KEY], [EM][CLOUD]…)
+//     for easy console diagnosis.
 // ================================================================
 const EncryptionManager = {
-    _key: null,      // CryptoKey object (in-memory only)
-    _salt: null,     // Uint8Array for PBKDF2
+    _key:  null,       // CryptoKey (in-memory only)
+    _salt: null,       // Uint8Array for PBKDF2
+    _unlocking: false, // re-entrancy guard
 
-    // Derive AES-256-GCM key from a password + salt using PBKDF2
+    // ── Debug logger with colour-coded console output ────────────
+    _dbg(step, msg, data) {
+        const styles = {
+            SALT: 'color:#f59e0b;font-weight:700', KEY:   'color:#34d399;font-weight:700',
+            CLOUD:'color:#60a5fa;font-weight:700', ERROR: 'color:#f87171;font-weight:700',
+            OK:   'color:#a3e635;font-weight:700', RESET: 'color:#fb923c;font-weight:700',
+        };
+        const s = styles[step] || 'color:#c4b5fd;font-weight:700';
+        data !== undefined
+            ? console.debug(`%c[EM][${step}] ${msg}`, s, data)
+            : console.debug(`%c[EM][${step}] ${msg}`, s);
+    },
+
+    // ── Loading indicator on lock screen ─────────────────────────
+    _setLoading(show, text) {
+        const ind  = document.getElementById('lockLoadingIndicator');
+        const hint = document.getElementById('lock-hint');
+        const txt  = document.getElementById('lockLoadingText');
+        if (!ind) return;
+        if (show) {
+            ind.style.display = 'flex';
+            if (hint) hint.style.display = 'none';
+            if (txt && text) txt.textContent = text;
+        } else {
+            ind.style.display = 'none';
+            if (hint) hint.style.display = '';
+        }
+    },
+
+    // ── CloudStorage get with retry + exponential back-off ───────
+    // Resolves with value string or null — NEVER rejects.
+    async _csGetWithRetry(key, maxTries) {
+        const hasCloud = !!(
+            window.Telegram && Telegram.WebApp.CloudStorage &&
+            Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+        );
+        if (!hasCloud) return null;
+        const delays = [0, 500, 1500, 4000];
+        for (let i = 0; i < Math.min(maxTries, delays.length); i++) {
+            if (delays[i]) {
+                this._dbg('CLOUD', `retry ${i}/${maxTries-1} for "${key}", wait ${delays[i]}ms`);
+                await new Promise(r => setTimeout(r, delays[i]));
+            }
+            const val = await new Promise(res => {
+                let done = false;
+                const t = setTimeout(() => { if (!done) { done=true; res(null); } }, 7000);
+                try {
+                    Telegram.WebApp.CloudStorage.getItem(key, (err, v) => {
+                        if (done) return; done=true; clearTimeout(t);
+                        res((v && v !== '') ? v : null);
+                    });
+                } catch(e) { if (!done) { done=true; clearTimeout(t); res(null); } }
+            });
+            if (val !== null) {
+                this._dbg('CLOUD', `"${key}" found on try ${i+1}`);
+                return val;
+            }
+        }
+        this._dbg('CLOUD', `"${key}" not found after ${maxTries} tries`);
+        return null;
+    },
+
+    // ── CloudStorage set (single attempt, resolve-only) ──────────
+    async _csSet(key, val) {
+        const hasCloud = !!(
+            window.Telegram && Telegram.WebApp.CloudStorage &&
+            Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+        );
+        if (!hasCloud) return;
+        await new Promise(res => {
+            let done = false;
+            const t = setTimeout(() => { done=true; res(); }, 8000);
+            try {
+                Telegram.WebApp.CloudStorage.setItem(key, val, () => {
+                    if (done) return; done=true; clearTimeout(t); res();
+                });
+            } catch(e) { if (!done) { done=true; clearTimeout(t); res(); } }
+        });
+    },
+
+    async _csDel(key) { await this._csSet(key, ''); },
+
+    // ── Key derivation ────────────────────────────────────────────
     async deriveKey(password, salt) {
         const enc = new TextEncoder();
         const keyMaterial = await crypto.subtle.importKey(
@@ -1799,309 +2002,368 @@ const EncryptionManager = {
         );
     },
 
-    // Encode Uint8Array → Base64 string
-    // FIX: The spread-into-String.fromCharCode() pattern throws
-    //      "Maximum call stack exceeded" on iOS Safari for buffers > ~32 KB
-    //      (e.g. a long diary entry). Use a chunked loop instead.
+    // Encode Uint8Array → Base64 (chunked to avoid iOS stack overflow on large buffers)
     _b64encode(buf) {
         const bytes = new Uint8Array(buf);
         let binary = '';
         const chunk = 8192;
-        for (let i = 0; i < bytes.length; i += chunk) {
+        for (let i = 0; i < bytes.length; i += chunk)
             binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-        }
         return btoa(binary);
     },
-    // Decode Base64 string → Uint8Array
     _b64decode(str) {
         return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)));
     },
 
-    // Encrypt a plaintext string → Base64-encoded "iv:ciphertext"
+    // ── AES-GCM encrypt / decrypt ─────────────────────────────────
     async encrypt(plaintext) {
-        if (!this._key) return plaintext; // fallback (should not happen)
+        if (!this._key) return plaintext;
         const iv = crypto.getRandomValues(new Uint8Array(12));
-        const enc = new TextEncoder();
         const cipher = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv },
-            this._key,
-            enc.encode(plaintext)
+            { name: 'AES-GCM', iv }, this._key,
+            new TextEncoder().encode(plaintext)
         );
-        // Format: base64(iv) + ':' + base64(ciphertext)
         return this._b64encode(iv) + ':' + this._b64encode(cipher);
     },
 
-    // Decrypt a "iv:ciphertext" string → plaintext
     async decrypt(ciphertext) {
         if (!this._key) return ciphertext;
         try {
             const parts = ciphertext.split(':');
-            if (parts.length < 2) return ciphertext; // not encrypted
-            const iv     = this._b64decode(parts[0]);
-            const data   = this._b64decode(parts.slice(1).join(':'));
-            const plain  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this._key, data);
+            if (parts.length < 2) return ciphertext;
+            const iv    = this._b64decode(parts[0]);
+            const data  = this._b64decode(parts.slice(1).join(':'));
+            const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this._key, data);
             return new TextDecoder().decode(plain);
-        } catch (e) {
-            return ciphertext; // decryption failed — return as-is (migration safety)
-        }
+        } catch(e) { return ciphertext; } // migration safety
     },
 
-    // Called on unlock button click
+    // ── Main unlock flow ──────────────────────────────────────────
     async unlock() {
-        const pw = document.getElementById('lockPasswordInput').value;
-        if (!pw || pw.length < 1) { this._showLockError(); return; }
+        if (this._unlocking) return;   // prevent double-tap race
+        const pw = (document.getElementById('lockPasswordInput').value || '').trim();
+        if (!pw) { this._showLockError('empty'); return; }
 
-        const btn = document.getElementById('lockUnlockBtn');
+        this._unlocking = true;
+        const btn      = document.getElementById('lockUnlockBtn');
         const origText = btn.textContent;
-        btn.textContent = '⏳'; btn.disabled = true;
+        btn.disabled   = true;
+        btn.textContent = '⏳';
+
+        const lang = (document.documentElement.lang || 'en').slice(0, 2);
+        const isRu = lang === 'ru';
 
         try {
             const hasCloud = !!(
                 window.Telegram && Telegram.WebApp.CloudStorage &&
                 Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
             );
+            this._dbg('CLOUD', `hasCloud=${hasCloud}`);
 
-            // Promisified CloudStorage helpers with timeout
-            const csGet = key => new Promise(res => {
-                if (!hasCloud) return res(null);
-                let done = false;
-                const t = setTimeout(() => { done=true; res(null); }, 6000);
-                try {
-                    Telegram.WebApp.CloudStorage.getItem(key, (e, v) => {
-                        if (done) return; done=true; clearTimeout(t);
-                        res((v && v !== '') ? v : null);
-                    });
-                } catch(e) { if (!done) { done=true; clearTimeout(t); res(null); } }
-            });
-            const csSet = (key, val) => new Promise(res => {
-                if (!hasCloud) return res();
-                let done = false;
-                const t = setTimeout(() => { done=true; res(); }, 6000);
-                try {
-                    Telegram.WebApp.CloudStorage.setItem(key, val, () => {
-                        if (done) return; done=true; clearTimeout(t); res();
-                    });
-                } catch(e) { if (!done) { done=true; clearTimeout(t); res(); } }
-            });
+            // ── Step 1: Salt — CloudStorage is ALWAYS authoritative ──
+            // Retry up to 3× with back-off to survive transient network
+            // blips on first open from a new device.
+            this._setLoading(true, isRu ? '⏳ Загружаем ключ шифрования…' : '⏳ Loading encryption key…');
+            let saltB64 = null;
 
-            // ── Salt: CloudStorage is AUTHORITATIVE ───────────────
-            // Rule: if cloud is reachable and has a salt, use it — NEVER
-            // the localStorage value, which may be from a different account
-            // on a shared/previous device install.
-            // Only fall back to localStorage if cloud is completely unavailable.
-            let saltB64 = await csGet('dbmix_salt');
+            if (hasCloud) {
+                saltB64 = await this._csGetWithRetry('dbmix_salt', 3);
+                this._dbg('SALT', `cloud salt=${saltB64 ? 'FOUND' : 'MISSING'}`);
+            }
             const saltFromCloud = !!saltB64;
 
+            // Only use localStorage when cloud is completely unavailable (dev / offline mode)
             if (!saltB64 && !hasCloud) {
-                // No cloud — use localStorage (offline/dev mode only)
                 try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
+                this._dbg('SALT', `LS fallback=${saltB64 ? 'FOUND' : 'MISSING'}`);
             }
-            // Note: if hasCloud && !saltB64 → first time on this account, we create below.
 
             let isFirstTime = false;
             if (!saltB64) {
-                // First-time setup: generate salt and persist to cloud immediately
+                // Brand-new account: generate salt and write it to cloud immediately
                 isFirstTime = true;
                 this._salt = crypto.getRandomValues(new Uint8Array(16));
-                saltB64 = this._b64encode(this._salt);
-                await csSet('dbmix_salt', saltB64);
+                saltB64    = this._b64encode(this._salt);
+                this._dbg('SALT', 'Generated new salt');
+                this._setLoading(true, isRu ? '⏳ Создаём аккаунт…' : '⏳ Creating account…');
+                await this._csSet('dbmix_salt', saltB64);
                 try { localStorage.setItem('dbmix_salt', saltB64); } catch(_) {}
             } else {
                 this._salt = this._b64decode(saltB64);
-                // Mirror to localStorage for offline resilience (but cloud always wins on read)
+                // Mirror to LS for offline resilience; cloud always wins on next read
                 try { localStorage.setItem('dbmix_salt', saltB64); } catch(_) {}
             }
 
+            // ── Step 2: Derive key ────────────────────────────────
+            this._setLoading(true, isRu ? '⏳ Проверяем пароль…' : '⏳ Verifying password…');
+            this._dbg('KEY', 'PBKDF2 key derivation starting (200k iterations)…');
             this._key = await this.deriveKey(pw, this._salt);
+            this._dbg('KEY', 'Key derived ✅');
 
-            // ── Sentinel: verify password is correct ──────────────
-            let sentinel = await csGet('dbmix_sentinel');
+            // ── Step 3: Verify sentinel ───────────────────────────
+            let sentinel = null;
+            if (hasCloud) sentinel = await this._csGetWithRetry('dbmix_sentinel', 2);
             if (!sentinel && !hasCloud) {
                 try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(_) {}
             }
+            this._dbg('SALT', `sentinel=${sentinel ? 'FOUND' : 'MISSING'}`);
 
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
+                this._dbg('KEY', `sentinel decrypted="${dec}"`);
                 if (dec !== 'DAILYBOOKMIX_V5') {
+                    // Wrong password — the sentinel decoded to garbage
                     this._key = null;
                     btn.textContent = origText; btn.disabled = false;
-                    // Show a more helpful message for cross-device users
-                    this._showLockError(saltFromCloud
-                        ? null  // wrong password on a known account
-                        : 'no-account'
-                    );
+                    this._setLoading(false);
+                    this._unlocking = false;
+                    this._dbg('ERROR', 'Wrong password — sentinel mismatch');
+                    this._showLockError('wrong-password');
                     return;
                 }
+                // ✅ Password correct
             } else if (isFirstTime) {
-                // New account: write sentinel
+                // New account: write sentinel for the first time
+                this._setLoading(true, isRu ? '⏳ Сохраняем ключ…' : '⏳ Saving key…');
                 const enc = await this.encrypt('DAILYBOOKMIX_V5');
-                await csSet('dbmix_sentinel', enc);
+                await this._csSet('dbmix_sentinel', enc);
                 try { localStorage.setItem('dbmix_sentinel', enc); } catch(_) {}
+                this._dbg('OK', 'Sentinel written for new account ✅');
             } else {
-                // Salt existed in cloud but no sentinel → account exists but sentinel
-                // key was lost (edge case). Treat as wrong password to be safe.
-                this._key = null;
-                btn.textContent = origText; btn.disabled = false;
-                this._showLockError();
-                return;
+                // Salt exists but sentinel is missing — probably the first-setup
+                // was interrupted mid-write.  Recover by rewriting the sentinel
+                // instead of permanently locking the user out.
+                this._dbg('ERROR', 'Salt found but sentinel missing — attempting recovery');
+                try {
+                    const enc = await this.encrypt('DAILYBOOKMIX_V5');
+                    await this._csSet('dbmix_sentinel', enc);
+                    try { localStorage.setItem('dbmix_sentinel', enc); } catch(_) {}
+                    this._dbg('OK', 'Sentinel recovered ✅');
+                } catch(e) {
+                    // Recovery write failed — proceed optimistically; worst case data
+                    // won't decrypt but the user isn't permanently locked out.
+                    this._dbg('ERROR', 'Sentinel recovery write failed', e.message);
+                }
             }
 
+            // ── Step 4: Open app ──────────────────────────────────
             try { sessionStorage.setItem('dbmix_pw', pw); } catch(_) {}
-
+            this._setLoading(false);
+            this._unlocking = false;
             document.getElementById('encryptionLock').classList.remove('open');
             document.getElementById('appContent').style.display = 'block';
+            this._dbg('OK', 'App unlocked ✅ — loading diary…');
             await diary.init();
 
         } catch(e) {
             console.error('[EncryptionManager] unlock error:', e);
+            this._dbg('ERROR', 'unlock() threw', e.message);
+            this._key = null;
             btn.textContent = origText; btn.disabled = false;
-            this._showLockError();
+            this._setLoading(false);
+            this._unlocking = false;
+            this._showLockError('error');
         }
     },
 
+    // ── Error feedback on lock screen ────────────────────────────
     _showLockError(reason) {
         const input = document.getElementById('lockPasswordInput');
         const hint  = document.getElementById('lock-hint');
+        const isRu  = (document.documentElement.lang || 'en').startsWith('ru');
+
+        // Red border flash
         input.style.borderColor = '#f87171';
         input.style.boxShadow   = '0 0 0 4px rgba(248,113,113,0.2)';
-        // Cross-device hint: tell the user to use the same password they set up on their first device
-        if (reason === 'no-account' && hint) {
-            const lang = (document.documentElement.lang || 'en').slice(0,2);
-            const msg  = lang === 'ru'
-                ? '🔄 Введи пароль, который ты использовал(а) на первом устройстве'
-                : '🔄 Enter the password you set up on your first device';
-            const prev = hint.textContent;
-            hint.textContent = msg;
-            hint.style.color = '#fb923c';
-            setTimeout(() => { hint.textContent = prev; hint.style.color = ''; }, 5000);
-        }
-        setTimeout(() => {
-            input.style.borderColor = ''; input.style.boxShadow = '';
-        }, 1200);
+        setTimeout(() => { input.style.borderColor = ''; input.style.boxShadow = ''; }, 1400);
         input.focus(); input.select();
+
+        // Contextual hint
+        if (hint) {
+            const msgs = {
+                'wrong-password': isRu
+                    ? '🔄 Неверный пароль. Используй пароль с первого устройства.'
+                    : '🔄 Wrong password. Use the password from your first device.',
+                'error': isRu
+                    ? '⚠️ Ошибка соединения — проверь интернет и попробуй снова.'
+                    : '⚠️ Connection error. Check your internet and try again.',
+                'empty': isRu ? '⚠️ Введи пароль' : '⚠️ Please enter a password',
+            };
+            const msg = msgs[reason];
+            if (msg) {
+                const prev = hint.textContent, prevColor = hint.style.color;
+                hint.textContent = msg;
+                hint.style.color = reason === 'error' ? '#fb923c' : '#f87171';
+                hint.style.display = '';
+                setTimeout(() => { hint.textContent = prev; hint.style.color = prevColor; }, 5000);
+            }
+        }
     },
 
-    // Try auto-unlock from sessionStorage (same session, not expired)
+    // ── Auto-unlock from sessionStorage (same browser session) ───
     async tryAutoUnlock() {
         let pw = null;
         try { pw = sessionStorage.getItem('dbmix_pw'); } catch(_) {}
         if (!pw) return false;
+        this._dbg('OK', 'tryAutoUnlock: session token found');
 
         const hasCloud = !!(
             window.Telegram && Telegram.WebApp.CloudStorage &&
             Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
         );
-        const csGet = key => new Promise(res => {
-            if (!hasCloud) return res(null);
-            let done = false;
-            const t = setTimeout(() => { done=true; res(null); }, 6000);
-            try {
-                Telegram.WebApp.CloudStorage.getItem(key, (e, v) => {
-                    if (done) return; done=true; clearTimeout(t);
-                    res((v && v !== '') ? v : null);
-                });
-            } catch(e) { if (!done) { done=true; clearTimeout(t); res(null); } }
-        });
-
         try {
-            // Cloud is authoritative for salt — same rule as unlock()
-            let saltB64 = await csGet('dbmix_salt');
+            let saltB64 = null;
+            if (hasCloud) saltB64 = await this._csGetWithRetry('dbmix_salt', 2);
             if (!saltB64 && !hasCloud) {
                 try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
             }
-            if (!saltB64) return false;
+            if (!saltB64) { this._dbg('ERROR', 'tryAutoUnlock: no salt'); return false; }
 
             this._salt = this._b64decode(saltB64);
             this._key  = await this.deriveKey(pw, this._salt);
 
-            let sentinel = await csGet('dbmix_sentinel');
+            let sentinel = null;
+            if (hasCloud) sentinel = await this._csGetWithRetry('dbmix_sentinel', 2);
             if (!sentinel && !hasCloud) {
                 try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(_) {}
             }
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
-                if (dec !== 'DAILYBOOKMIX_V5') { this._key = null; return false; }
+                if (dec !== 'DAILYBOOKMIX_V5') {
+                    this._dbg('ERROR', 'tryAutoUnlock: sentinel mismatch');
+                    this._key = null; return false;
+                }
             }
-
             document.getElementById('encryptionLock').classList.remove('open');
             document.getElementById('appContent').style.display = 'block';
+            this._dbg('OK', 'tryAutoUnlock success ✅');
             return true;
         } catch(e) {
-            this._key = null;
-            return false;
+            this._dbg('ERROR', 'tryAutoUnlock threw', e.message);
+            this._key = null; return false;
         }
     },
 
-    // Apply translations to the lock screen
-    // FIX: Also translates the password input placeholder so it matches the UI language
-    //      immediately on boot (before the user enters any password).
+    // ── "Forgot password" / Reset account flow ────────────────────
+    promptReset() {
+        const m = document.getElementById('lockResetModal');
+        if (m) m.style.display = 'flex';
+    },
+
+    cancelReset() {
+        const m = document.getElementById('lockResetModal');
+        if (m) m.style.display = 'none';
+    },
+
+    async executeReset() {
+        this._dbg('RESET', 'User confirmed full account reset');
+        const btn  = document.getElementById('lockResetConfirm');
+        const isRu = (document.documentElement.lang || 'en').startsWith('ru');
+        if (btn) { btn.textContent = isRu ? '⏳ Удаляем…' : '⏳ Deleting…'; btn.disabled = true; }
+
+        try {
+            // 1. Wipe encryption keys from cloud
+            await this._csDel('dbmix_salt');
+            await this._csDel('dbmix_sentinel');
+
+            // 2. Wipe all data keys (static + last 90 days of per-day shards)
+            const staticKeys = ['notes','habits','memories','fireStreak','lastActiveDate',
+                                'userNickname','userId','tasks_v1','achievements_v1',
+                                'rubies_v1','shop_v1'];
+            for (const k of staticKeys) {
+                try { await this._csDel(k); } catch(_) {}
+            }
+            for (let i = 0; i < 90; i++) {
+                const d = new Date(); d.setDate(d.getDate() - i);
+                const ds = d.toISOString().split('T')[0];
+                try { await this._csDel('t:'  + ds); } catch(_) {}
+                try { await this._csDel('rp:' + ds); } catch(_) {}
+            }
+
+            // 3. Wipe local storage entirely
+            try { localStorage.clear();   } catch(_) {}
+            try { sessionStorage.clear(); } catch(_) {}
+
+            this._key = null; this._salt = null;
+            this._dbg('RESET', 'Reset complete — reloading app');
+
+            const m = document.getElementById('lockResetModal');
+            if (m) m.style.display = 'none';
+            setTimeout(() => window.location.reload(), 500);
+
+        } catch(e) {
+            this._dbg('ERROR', 'executeReset threw', e.message);
+            if (btn) {
+                btn.textContent = isRu ? '🗑️ Удалить всё' : '🗑️ Delete all data';
+                btn.disabled = false;
+            }
+        }
+    },
+
+    // ── Lock-screen translations ──────────────────────────────────
     applyLang(lang) {
         const t = {
             en: {
-                title:       '',
-                desc:        'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
-                hint:        'First time? Choose any password — it will be used to encrypt all your data.',
-                btn:         'Unlock 🔓',
-                placeholder: 'Enter password...',
+                title: '', placeholder: 'Enter password...',
+                desc:  'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
+                hint:  'First time? Choose any password — it will be used to encrypt all your data.',
+                btn:   'Unlock 🔓',
+                resetBtn: 'Forgot password? Reset account',
+                resetTitle: 'Reset Account?',
+                resetDesc: 'This will permanently erase <strong style="color:#f87171">all your encrypted data</strong> — notes, habits, tasks, memories — and remove the encryption key.<br><br><strong style="color:#fbbf24">This cannot be undone.</strong> Use only if you have forgotten your password.',
+                resetCancel: 'Cancel', resetConfirm: '🗑️ Delete all data',
             },
             ru: {
-                title:       '',
-                desc:        'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
-                hint:        'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
-                btn:         'Разблокировать 🔓',
-                placeholder: 'Введи пароль...',
+                title: '', placeholder: 'Введи пароль...',
+                desc:  'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
+                hint:  'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
+                btn:   'Разблокировать 🔓',
+                resetBtn: 'Забыл пароль? Сбросить аккаунт',
+                resetTitle: 'Сбросить аккаунт?',
+                resetDesc: 'Это <strong style="color:#f87171">безвозвратно удалит все данные</strong> — заметки, привычки, задачи, воспоминания — и сбросит ключ шифрования.<br><br><strong style="color:#fbbf24">Отменить нельзя.</strong> Используй только если забыл пароль.',
+                resetCancel: 'Отмена', resetConfirm: '🗑️ Удалить всё',
             }
         };
         const s = t[lang] || t.en;
-        const set  = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-        const setPh= (id, v) => { const el = document.getElementById(id); if (el) el.placeholder  = v; };
+        const set  = (id, v, html) => { const el = document.getElementById(id); if (el) { if (html) el.innerHTML = v; else el.textContent = v; } };
+        const setPh= (id, v)       => { const el = document.getElementById(id); if (el) el.placeholder = v; };
         set('lock-title',       s.title);
         set('lock-desc',        s.desc);
         set('lock-hint',        s.hint);
         set('lockUnlockBtn',    s.btn);
+        set('lockResetBtnTxt',  s.resetBtn);
+        set('lockResetTitle',   s.resetTitle);
+        set('lockResetDesc',    s.resetDesc, true);
+        set('lockResetCancel',  s.resetCancel);
+        set('lockResetConfirm', s.resetConfirm);
         setPh('lockPasswordInput', s.placeholder);
     }
 };
 
 
 // ================================================================
-//  STORAGE MANAGER v5.3 — Per-key sharding to beat the 4096-byte
-//  Telegram CloudStorage limit that was silently dropping saves.
+//  STORAGE MANAGER v5.4 — Per-key sharding + robust cloud sync
 //
-//  Root cause of data loss (identified in v5.3):
-//   Telegram CloudStorage hard-caps each value at 4 096 bytes.
-//   The previous code stored ALL tasks for ALL days in a single
-//   'tasks_v1' key.  After ~6 days of normal use (3 tasks/day)
-//   the encrypted JSON exceeded the limit.  Telegram's backend
-//   silently rejected the write — no error was returned to the
-//   callback — so the app showed a success toast while the data
-//   was never persisted.  On next open the key read back empty
-//   and all tasks appeared gone.
-//
-//  Fix: every day's task data is stored in its own key ('t:DATE').
-//   Each key stays under 1 KB even with 10 tasks.  Only the keys
-//   needed are loaded (today + last N days for archive).
-//
-//  Same fix applied to Onyx challenge progress: 'rp:DATE' per day.
-//   The running total lives in a tiny separate 'rubies_v1' key.
-//
-//  Other fixes in v5.3:
-//   • _enqueue: fixed the broken queue chain — was storing a
-//     silently-resolved promise so every write thought the slot
-//     was free and concurrent writes raced instead of queuing.
-//   • cloudOk evaluated inside _enqueue so cloud-disabled state
-//     is checked at actual write time, not at enqueue time.
-//   • Writes now double-check value size inside the queue so any
-//     size computed after the async encrypt step is accurate.
+//  Improvements over v5.3:
+//   • _cloudGet now retries once on failure (transient Telegram
+//     backend blips cause reads to fail intermittently on mobile).
+//   • setItem write retry delays reduced to [0, 400, 1200, 2500]
+//     for snappier perceived performance.
+//   • forceSync() public method re-enables cloud after a temporary
+//     outage and is exposed in the sidebar as "Force Sync".
+//   • _cloudDisabled resets automatically after 60 s of success
+//     so the app self-heals after a network interruption.
+//   • Verbose logging uses consistent [SM] prefix + emoji so it's
+//     easy to grep in the Telegram debug console.
 // ================================================================
 const StorageManager = {
-    supportsCloud: false,
-    _writeQueues: {},
+    supportsCloud:  false,
+    _writeQueues:   {},
     _cloudFailCount: 0,
     _cloudDisabled:  false,
     _CLOUD_FAIL_THRESHOLD: 5,
-    _MAX_KEY_LEN:   128,
-    _MAX_VALUE_LEN: 3800, // conservative; Telegram hard limit is 4096
+    _MAX_KEY_LEN:    128,
+    _MAX_VALUE_LEN:  3800, // conservative; Telegram hard cap is 4096
 
     init() {
         try {
@@ -2117,6 +2379,7 @@ const StorageManager = {
         try { console.debug(`[SM][${op}] ${msg}`); } catch(_) {}
     },
 
+    // ── Cloud primitives ─────────────────────────────────────────
     _cloudSet(key, value) {
         return new Promise((resolve, reject) => {
             let done = false;
@@ -2130,8 +2393,10 @@ const StorageManager = {
         });
     },
 
-    _cloudGet(key) {
-        return new Promise((resolve, reject) => {
+    // _cloudGet retries once on failure — transient backend errors
+    // are common on mobile Telegram clients (slow DNS, TLS reuse etc.)
+    async _cloudGet(key) {
+        const _get = () => new Promise((resolve, reject) => {
             let done = false;
             const t = setTimeout(() => { if (!done) { done=true; reject(new Error('CS timeout')); } }, 8000);
             try {
@@ -2142,20 +2407,27 @@ const StorageManager = {
                 });
             } catch(e) { if (!done) { done=true; clearTimeout(t); reject(e); } }
         });
+        try {
+            return await _get();
+        } catch(e) {
+            this._log('get', `⚠️ "${key}" first attempt failed (${e.message}), retrying…`);
+            await new Promise(r => setTimeout(r, 600));
+            return await _get(); // may throw — caller handles
+        }
     },
 
-    // Correct queue: store `next` (not next.catch) so the chain actually
-    // waits for in-flight writes before starting the next one.
-    // The outer caller still gets rejections via the returned `next` promise.
+    // ── Write queue ───────────────────────────────────────────────
+    // Stores `next` (not next.catch) so the chain actually waits for
+    // in-flight writes. The stored sentinel never rejects so the queue
+    // itself stays alive even when individual writes fail.
     _enqueue(key, writeFn) {
         const prev = this._writeQueues[key] || Promise.resolve();
-        // Chain writeFn after prev, regardless of prev's outcome
         const next = prev.then(writeFn, writeFn);
-        // Store a version that never rejects so the queue itself stays alive
         this._writeQueues[key] = next.then(() => {}, () => {});
         return next;
     },
 
+    // ── setItem ───────────────────────────────────────────────────
     async setItem(key, value) {
         if (key.length > this._MAX_KEY_LEN) {
             const msg = `[SM] key too long (${key.length}): ${key.slice(0,40)}`;
@@ -2166,18 +2438,17 @@ const StorageManager = {
             ? '' : await EncryptionManager.encrypt(value);
 
         return this._enqueue(key, async () => {
-            // Re-evaluate cloud state inside the queue (may have changed while waiting)
+            // Re-check cloud state inside the queue (may have changed while waiting)
             const useCloud = this.supportsCloud && !this._cloudDisabled
                           && new TextEncoder().encode(toStore).length <= this._MAX_VALUE_LEN;
 
-            if (!useCloud && this.supportsCloud && !this._cloudDisabled) {
+            if (!useCloud && this.supportsCloud && !this._cloudDisabled)
                 console.warn(`[SM] value too large for cloud, LS-only: key="${key}"`);
-            }
 
             if (useCloud) {
-                const delays = [0, 700, 1500, 3000];
+                const delays = [0, 400, 1200, 2500];
                 let lastErr;
-                for (let i = 0; i < 4; i++) {
+                for (let i = 0; i < delays.length; i++) {
                     if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
                     try {
                         await this._cloudSet(key, toStore);
@@ -2193,7 +2464,13 @@ const StorageManager = {
                 this._cloudFailCount++;
                 if (this._cloudFailCount >= this._CLOUD_FAIL_THRESHOLD) {
                     this._cloudDisabled = true;
-                    console.warn('[SM] cloud persistently unreachable — LS-only mode');
+                    console.warn('[SM] cloud persistently unreachable — switching to LS-only mode');
+                    // Auto-recover after 60 s so the app self-heals when network returns
+                    setTimeout(() => {
+                        this._cloudDisabled = false;
+                        this._cloudFailCount = 0;
+                        this._log('init', '🔄 cloud re-enabled after 60s back-off');
+                    }, 60000);
                 }
                 try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
                 throw lastErr;
@@ -2204,6 +2481,7 @@ const StorageManager = {
         });
     },
 
+    // ── getItem ───────────────────────────────────────────────────
     async getItem(key) {
         let raw = null;
         if (this.supportsCloud && !this._cloudDisabled) {
@@ -2211,7 +2489,7 @@ const StorageManager = {
                 raw = await this._cloudGet(key);
                 this._log('get', `"${key}" cloud=${raw !== null}`);
             } catch(e) {
-                this._log('get', `"${key}" cloud err, trying LS`);
+                this._log('get', `"${key}" cloud err (${e.message}), falling back to LS`);
                 raw = null;
             }
         }
@@ -2230,6 +2508,21 @@ const StorageManager = {
             catch(_) {}
         }
         return result;
+    },
+
+    // ── Force Sync: re-enable cloud and re-read diary data ────────
+    // Called from the sidebar "Force Sync" button.
+    async forceSync() {
+        this._cloudDisabled  = false;
+        this._cloudFailCount = 0;
+        this._log('init', '🔄 forceSync() — cloud re-enabled, reloading data…');
+        try {
+            await diary.load();
+            diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизировано' : 'Synced from cloud'));
+        } catch(e) {
+            console.error('[SM] forceSync failed', e);
+            diary.toast('⚠️ Sync failed', 'error');
+        }
     }
 };
 
@@ -4447,6 +4740,7 @@ const SidebarUI = {
             achievements: 'Achievements', dailyChallenges: 'Daily Challenges',
             shop: 'Shop',
             deleteAccount: 'Delete account & all data',
+            forceSync: 'Force Sync from Cloud',
             saveNick: 'Save nickname', nickPlaceholder: 'Set your nickname...',
             nickSaved: 'Nickname saved ✅',
             delTitle: 'Delete all data?',
@@ -4458,6 +4752,7 @@ const SidebarUI = {
             achievements: 'Достижения', dailyChallenges: 'Ежедневные задания',
             shop: 'Магазин',
             deleteAccount: 'Удалить аккаунт и все данные',
+            forceSync: 'Принудительная синхронизация',
             saveNick: 'Сохранить никнейм', nickPlaceholder: 'Введи никнейм...',
             nickSaved: 'Никнейм сохранён ✅',
             delTitle: 'Удалить все данные?',
@@ -4529,6 +4824,7 @@ const SidebarUI = {
         set('sb-item-daily-challenges', strs.dailyChallenges);
         set('sb-item-shop',             strs.shop);
         set('sb-item-delete',           strs.deleteAccount);
+        set('sb-item-force-sync',       strs.forceSync || 'Force Sync from Cloud');
         set('sidebarSaveNickBtn',  strs.saveNick);
         set('del-modal-title',     strs.delTitle);
         set('del-modal-desc',      strs.delDesc);
@@ -4573,52 +4869,60 @@ const SidebarUI = {
     },
 
     async executeDeleteAccount() {
-        diary.notes = []; diary.habits = []; diary.memories = [];
-        diary.fireStreak = 0; diary.lastActiveDate = '';
-
-        // Static keys
-        const keys = ['notes','habits','memories','fireStreak','lastActiveDate',
-                      'userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1'];
-        for (const key of keys) {
-            try { await StorageManager.setItem(key, ''); } catch(_) {}
+        // Show loading state on the confirm button
+        const confirmBtn = document.getElementById('del-confirm-btn');
+        if (confirmBtn) {
+            const isRu = (diary.lang === 'ru');
+            confirmBtn.textContent = isRu ? '⏳ Удаляем…' : '⏳ Deleting…';
+            confirmBtn.disabled = true;
         }
 
-        // Per-day task keys ('t:YYYY-MM-DD') and ruby-progress keys ('rp:YYYY-MM-DD')
-        // Clear last 60 days to catch any lingering history
-        for (let i = 0; i < 60; i++) {
-            const d = new Date(); d.setDate(d.getDate() - i);
-            const ds = d.toISOString().split('T')[0];
-            try { await StorageManager.setItem('t:'  + ds, ''); } catch(_) {}
-            try { await StorageManager.setItem('rp:' + ds, ''); } catch(_) {}
+        try {
+            // 1. Clear encryption salt + sentinel via EncryptionManager helper
+            await EncryptionManager._csDel('dbmix_salt');
+            await EncryptionManager._csDel('dbmix_sentinel');
+
+            // 2. Clear static data keys through StorageManager (so they go to cloud too)
+            const keys = ['notes','habits','memories','fireStreak','lastActiveDate',
+                          'userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1'];
+            for (const key of keys) {
+                try { await StorageManager.setItem(key, ''); } catch(_) {}
+            }
+
+            // 3. Per-day task + ruby-progress shards — last 90 days
+            for (let i = 0; i < 90; i++) {
+                const d = new Date(); d.setDate(d.getDate() - i);
+                const ds = d.toISOString().split('T')[0];
+                try { await StorageManager.setItem('t:'  + ds, ''); } catch(_) {}
+                try { await StorageManager.setItem('rp:' + ds, ''); } catch(_) {}
+            }
+
+            // 4. Wipe all local storage
+            try { localStorage.clear();   } catch(_) {}
+            try { sessionStorage.clear(); } catch(_) {}
+
+            document.getElementById('deleteAccountModal').classList.remove('open');
+
+            // Reload the app so the lock screen comes up clean with a fresh state
+            diary.toast('🗑️ ' + (diary.lang === 'ru' ? 'Все данные удалены' : 'All data deleted'));
+            setTimeout(() => window.location.reload(), 700);
+
+        } catch(e) {
+            console.error('[SidebarUI] executeDeleteAccount error:', e);
+            if (confirmBtn) {
+                confirmBtn.textContent = diary.t ? diary.t('del-confirm-btn') : 'Delete everything';
+                confirmBtn.disabled = false;
+            }
+            diary.toast('⚠️ ' + (diary.lang === 'ru' ? 'Ошибка при удалении' : 'Delete failed'), 'error');
         }
+    },
 
-        // Also clear encryption keys so the next unlock creates a fresh account
-        const hasCloud = !!(window.Telegram && Telegram.WebApp.CloudStorage);
-        const csDel = key => new Promise(res => {
-            if (!hasCloud) return res();
-            try { Telegram.WebApp.CloudStorage.setItem(key, '', () => res()); }
-            catch(_) { res(); }
-        });
-        await csDel('dbmix_salt');
-        await csDel('dbmix_sentinel');
-        try { localStorage.removeItem('dbmix_salt'); } catch(_) {}
-        try { localStorage.removeItem('dbmix_sentinel'); } catch(_) {}
-        try { sessionStorage.removeItem('dbmix_pw'); } catch(_) {}
-
-        this.profile = { name: '', userId: '', photoUrl: '', nickname: '' };
-        TaskManager._data = {};
-        RubyManager._progress = {};
-
-        diary.renderAll();
-        diary.updateFooter();
-        TaskManager.render();
-        AchievementsUI._state = {};
-        AchievementsUI._save();
-        RubyManager.reset();
-        ShopManager.reset();
-
-        document.getElementById('deleteAccountModal').classList.remove('open');
-        diary.toast('🗑️ All data deleted');
+    forceSync() {
+        this.close();
+        setTimeout(async () => {
+            diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизация…' : 'Syncing…'));
+            await StorageManager.forceSync();
+        }, 320);
     },
 
     openAchievements() {
