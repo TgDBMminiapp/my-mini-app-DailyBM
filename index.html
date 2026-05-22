@@ -158,6 +158,15 @@
             transition: background 0.5s cubic-bezier(0.4,0,0.2,1), color 0.3s ease;
             min-height: 100vh;
             -webkit-font-smoothing: antialiased;
+            /* Prevent white flash on initial paint before theme class is set */
+            background-color: #ff4500;
+        }
+        body.theme-dark { background-color: #0d1117; }
+
+        /* appContent: invisible until diary.init() paints it; prevents
+           a flash of raw (unstyled / unloaded) content on slow devices */
+        #appContent {
+            transition: opacity 0.35s ease;
         }
 
         .glass {
@@ -2150,10 +2159,23 @@ const EncryptionManager = {
             try { sessionStorage.setItem('dbmix_pw', pw); } catch(_) {}
             this._setLoading(false);
             this._unlocking = false;
-            document.getElementById('encryptionLock').classList.remove('open');
-            document.getElementById('appContent').style.display = 'block';
+
+            // Reveal the app shell BEFORE diary.init() so the gradient
+            // background is painted before any async data loads begin.
+            // diary.init() manages its own opacity shimmer internally.
+            const lockEl = document.getElementById('encryptionLock');
+            const appEl  = document.getElementById('appContent');
+            if (lockEl) lockEl.classList.remove('open');
+            if (appEl)  { appEl.style.display = 'block'; }
+
             this._dbg('OK', 'App unlocked ✅ — loading diary…');
-            await diary.init();
+            try {
+                await diary.init();
+            } catch(e) {
+                console.error('[EncryptionManager] diary.init() threw after unlock:', e);
+                // Ensure app is visible even if init partially failed
+                if (appEl) { appEl.style.opacity = '1'; appEl.style.pointerEvents = ''; }
+            }
 
         } catch(e) {
             console.error('[EncryptionManager] unlock error:', e);
@@ -2201,11 +2223,17 @@ const EncryptionManager = {
     },
 
     // ── Auto-unlock from sessionStorage (same browser session) ───
+    // Shows a loading state on the lock screen while cloud reads are in
+    // progress so the user sees "checking…" rather than a frozen lock screen.
     async tryAutoUnlock() {
         let pw = null;
         try { pw = sessionStorage.getItem('dbmix_pw'); } catch(_) {}
         if (!pw) return false;
         this._dbg('OK', 'tryAutoUnlock: session token found');
+
+        // Show a subtle loading state on the lock screen so the user knows
+        // something is happening (don't focus the input — auto-unlock is silent)
+        this._setLoading(true, '⏳ Resuming session…');
 
         const hasCloud = !!(
             window.Telegram && Telegram.WebApp.CloudStorage &&
@@ -2217,7 +2245,11 @@ const EncryptionManager = {
             if (!saltB64 && !hasCloud) {
                 try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
             }
-            if (!saltB64) { this._dbg('ERROR', 'tryAutoUnlock: no salt'); return false; }
+            if (!saltB64) {
+                this._dbg('ERROR', 'tryAutoUnlock: no salt found');
+                this._setLoading(false);
+                return false;
+            }
 
             this._salt = this._b64decode(saltB64);
             this._key  = await this.deriveKey(pw, this._salt);
@@ -2230,17 +2262,28 @@ const EncryptionManager = {
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
                 if (dec !== 'DAILYBOOKMIX_V5') {
-                    this._dbg('ERROR', 'tryAutoUnlock: sentinel mismatch');
-                    this._key = null; return false;
+                    this._dbg('ERROR', 'tryAutoUnlock: sentinel mismatch — clearing stale session');
+                    this._key = null;
+                    try { sessionStorage.removeItem('dbmix_pw'); } catch(_) {}
+                    this._setLoading(false);
+                    return false;
                 }
             }
-            document.getElementById('encryptionLock').classList.remove('open');
-            document.getElementById('appContent').style.display = 'block';
+
+            // ✅ Session is valid — reveal the app
+            this._setLoading(false);
+            const lockEl = document.getElementById('encryptionLock');
+            const appEl  = document.getElementById('appContent');
+            if (lockEl) lockEl.classList.remove('open');
+            if (appEl)  appEl.style.display = 'block';
+
             this._dbg('OK', 'tryAutoUnlock success ✅');
             return true;
         } catch(e) {
             this._dbg('ERROR', 'tryAutoUnlock threw', e.message);
-            this._key = null; return false;
+            this._key = null;
+            this._setLoading(false);
+            return false;
         }
     },
 
@@ -2497,8 +2540,19 @@ const StorageManager = {
             try { raw = localStorage.getItem('dbmix_' + key) || null; } catch(_) {}
         }
         if (!raw) return null;
-        try { return await EncryptionManager.decrypt(raw); }
-        catch(e) { this._log('get', `"${key}" decrypt failed`); return null; }
+
+        // Decrypt the value.  If decryption produces a string that looks
+        // identical to the raw ciphertext (i.e. the key is not set or the
+        // value was stored unencrypted by an older version), check whether
+        // the result is still valid for the caller — callers use _safeParse
+        // so corrupt/legacy values will just fall back to the empty default.
+        try {
+            const decrypted = await EncryptionManager.decrypt(raw);
+            return decrypted;
+        } catch(e) {
+            this._log('get', `"${key}" decrypt threw — returning null`);
+            return null;
+        }
     },
 
     async getItems(keys) {
@@ -2513,10 +2567,16 @@ const StorageManager = {
     // ── Force Sync: re-enable cloud and re-read diary data ────────
     // Called from the sidebar "Force Sync" button.
     async forceSync() {
+        if (!EncryptionManager._key) {
+            console.warn('[SM] forceSync called before unlock — ignoring');
+            return;
+        }
         this._cloudDisabled  = false;
         this._cloudFailCount = 0;
         this._log('init', '🔄 forceSync() — cloud re-enabled, reloading data…');
         try {
+            // Reset task view to today so re-load shows fresh data
+            TaskManager._viewDate = null;
             await diary.load();
             diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизировано' : 'Synced from cloud'));
         } catch(e) {
@@ -2972,6 +3032,13 @@ const TaskManager = {
     _dirtyDays: new Set(),   // days that need saving after this operation
 
     async _saveDay(dateStr) {
+        // Guard: do not attempt write if the encryption key is not ready.
+        // This prevents corrupted/garbage writes when save is somehow called
+        // before unlock completes (shouldn't happen, but defensive is good).
+        if (!EncryptionManager._key) {
+            console.error('[TaskManager] _saveDay called before encryption key ready — aborting write for', dateStr);
+            throw new Error('Encryption key not ready');
+        }
         const day  = this._data[dateStr];
         const json = day ? JSON.stringify(day) : '';
         // Empty day = write '' to free the slot
@@ -2990,50 +3057,67 @@ const TaskManager = {
         }
     },
 
-    // ── Load (v5.3) ───────────────────────────────────────────────
+    // ── Load (v5.4) ───────────────────────────────────────────────
     // Strategy:
-    //   1. Try to read the per-day keys 't:YYYY-MM-DD' for today + last 30 days.
-    //   2. If NONE of them exist, check the old monolithic 'tasks_v1' key and
-    //      migrate it — this is a one-time migration for existing users.
-    //   3. After migration, write per-day keys and delete the old blob.
+    //   1. Build the list of per-day keys for today + last 30 days.
+    //   2. Fetch all of them in one batched getItems() call instead of
+    //      30 sequential awaits — reduces load time dramatically on mobile.
+    //   3. If NONE of them exist, attempt one-time migration from the old
+    //      monolithic 'tasks_v1' key (legacy users only).
+    //   4. Reset _viewDate to today so a re-load always shows today's tasks.
     async load() {
-        const today = this.today();
-        const days  = [];
+        // Always snap to today when (re-)loading so stale dates don't persist
+        this._viewDate = null;
+
+        const days = [];
         for (let i = 0; i < 30; i++) {
             const d = new Date(); d.setDate(d.getDate() - i);
             days.push(d.toISOString().split('T')[0]);
         }
 
-        // Read all per-day keys in parallel (StorageManager serialises internally)
-        const keys = days.map(d => 't:' + d);
-        let anyFound = false;
-        for (const key of keys) {
-            try {
-                const raw = await StorageManager.getItem(key);
-                if (raw && raw.trim() !== '') {
-                    const dateStr = key.slice(2); // strip 't:'
-                    let parsed;
-                    try { parsed = JSON.parse(raw); } catch(_) { parsed = null; }
-                    if (parsed && typeof parsed === 'object') {
-                        if (!Array.isArray(parsed.tasks)) parsed.tasks = [];
-                        if (typeof parsed.mood !== 'string') parsed.mood = '';
-                        parsed.tasks = parsed.tasks.filter(
-                            t => t && typeof t === 'object' && t.id != null && typeof t.text === 'string'
-                        );
-                        this._data[dateStr] = parsed;
-                        anyFound = true;
-                    }
-                }
-            } catch(_) {}
+        // Batch fetch all per-day keys in one call
+        const keys    = days.map(d => 't:' + d);
+        let anyFound  = false;
+
+        let batchData = {};
+        try {
+            batchData = await StorageManager.getItems(keys);
+        } catch(e) {
+            console.warn('[TaskManager] batch load failed, falling back to sequential:', e);
+            // Sequential fallback
+            for (const key of keys) {
+                try {
+                    const v = await StorageManager.getItem(key);
+                    if (v) batchData[key] = v;
+                } catch(_) {}
+            }
         }
 
-        // One-time migration from old monolithic key
+        // Parse each day's data
+        for (const key of keys) {
+            const raw = batchData[key];
+            if (!raw || typeof raw !== 'string' || raw.trim() === '') continue;
+            const dateStr = key.slice(2); // strip 't:'
+            let parsed = null;
+            try { parsed = JSON.parse(raw); } catch(_) { continue; }
+            if (!parsed || typeof parsed !== 'object') continue;
+            if (!Array.isArray(parsed.tasks)) parsed.tasks = [];
+            if (typeof parsed.mood !== 'string') parsed.mood = '';
+            // Sanitise task objects — reject anything missing id or text
+            parsed.tasks = parsed.tasks.filter(
+                t => t && typeof t === 'object' && t.id != null && typeof t.text === 'string'
+            );
+            this._data[dateStr] = parsed;
+            anyFound = true;
+        }
+
+        // One-time migration from legacy monolithic 'tasks_v1' key
         if (!anyFound) {
             try {
                 const raw = await StorageManager.getItem('tasks_v1');
-                if (raw) {
-                    let parsed;
-                    try { parsed = JSON.parse(raw); } catch(_) { parsed = null; }
+                if (raw && raw.trim() !== '') {
+                    let parsed = null;
+                    try { parsed = JSON.parse(raw); } catch(_) {}
                     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
                         for (const [ds, v] of Object.entries(parsed)) {
                             if (!v || typeof v !== 'object') continue;
@@ -3044,18 +3128,16 @@ const TaskManager = {
                             );
                             this._data[ds] = v;
                         }
-                        // Migrate: write each day to its own key
-                        console.log('[TaskManager] migrating from tasks_v1 to per-day keys...');
+                        console.log('[TaskManager] migrating tasks_v1 → per-day keys…');
                         for (const ds of Object.keys(this._data)) {
                             try { await this._saveDay(ds); } catch(_) {}
                         }
-                        // Delete the old blob so we don't re-migrate
                         try { await StorageManager.setItem('tasks_v1', ''); } catch(_) {}
-                        console.log('[TaskManager] migration complete');
+                        console.log('[TaskManager] migration complete ✅');
                     }
                 }
             } catch(e) {
-                console.warn('[TaskManager] migration load failed:', e);
+                console.warn('[TaskManager] legacy migration failed:', e);
             }
         }
     },
@@ -3944,19 +4026,35 @@ const diary = {
     applyTheme(theme) {
         this.theme = theme;
         document.body.classList.remove('theme-dark');
-        if (theme === 'dark') document.body.classList.add('theme-dark');
-        StorageManager.setItem('theme', theme);
+        if (theme === 'dark') {
+            document.body.classList.add('theme-dark');
+            try {
+                if (window.Telegram && Telegram.WebApp) {
+                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#0d1117');
+                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#0d1117');
+                }
+            } catch(_) {}
+        } else {
+            try {
+                if (window.Telegram && Telegram.WebApp) {
+                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#ff4500');
+                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#ff4500');
+                }
+            } catch(_) {}
+        }
+        if (!EncryptionManager._key) { console.warn('[diary] applyTheme called before unlock — save skipped'); }
+        else { StorageManager.setItem('theme', theme); }
         this._updateSheetChecks();
         this._updateSettingsBar();
         this.closeSheet();
-        // Re-apply galaxy overlay based on new theme
         if (typeof ShopManager !== 'undefined') ShopManager._toggleGalaxy();
     },
 
     applyLang(lang) {
         this.lang = lang;
         document.documentElement.lang = lang;
-        StorageManager.setItem('lang', lang);
+        if (!EncryptionManager._key) { console.warn('[diary] applyLang called before unlock — save skipped'); }
+        else { StorageManager.setItem('lang', lang); }
         this._updateSheetChecks();
         this.applyTranslations();
         this.renderAll();
@@ -4040,30 +4138,59 @@ const diary = {
         this._updateSettingsBar();
     },
 
+    // Safe JSON parser — returns fallback on any parse error.
+    // Prevents a single malformed cloud value from crashing the entire load.
+    _safeParse(raw, fallback) {
+        if (!raw || typeof raw !== 'string') return fallback;
+        try { return JSON.parse(raw); } catch(e) { return fallback; }
+    },
+
     async load() {
         const data = await StorageManager.getItems([
             'notes','habits','memories','lang','theme','fireStreak','lastActiveDate'
         ]);
 
-        this.notes     = this._sortPinned(JSON.parse(data.notes    || '[]'));
-        this.habits    = this._sortPinned(JSON.parse(data.habits   || '[]'));
-        this.memories  = this._sortPinned(JSON.parse(data.memories || '[]'));
+        // _safeParse guards against corrupt / legacy unencrypted values
+        this.notes    = this._sortPinned(this._safeParse(data.notes,    []));
+        this.habits   = this._sortPinned(this._safeParse(data.habits,   []));
+        this.memories = this._sortPinned(this._safeParse(data.memories, []));
 
-        if (data.lang)  this.lang  = data.lang;
-        if (data.theme) this.theme = data.theme;
-        this.fireStreak     = parseInt(data.fireStreak    || '0');
+        // Only override defaults if the stored values are valid strings
+        if (data.lang  && typeof data.lang  === 'string') this.lang  = data.lang;
+        if (data.theme && typeof data.theme === 'string') this.theme = data.theme;
+        this.fireStreak     = parseInt(data.fireStreak || '0', 10) || 0;
         this.lastActiveDate = data.lastActiveDate || '';
 
+        // ── Apply theme ───────────────────────────────────────────
         document.body.classList.remove('theme-dark');
-        if (this.theme === 'dark') document.body.classList.add('theme-dark');
+        if (this.theme === 'dark') {
+            document.body.classList.add('theme-dark');
+            // Keep Telegram header in sync with dark theme
+            try {
+                if (window.Telegram && Telegram.WebApp) {
+                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#0d1117');
+                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#0d1117');
+                }
+            } catch(_) {}
+        } else {
+            try {
+                if (window.Telegram && Telegram.WebApp) {
+                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#ff4500');
+                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#ff4500');
+                }
+            } catch(_) {}
+        }
+
         document.documentElement.lang = this.lang;
+        EncryptionManager.applyLang(this.lang);
+        SidebarUI.applyTranslations && SidebarUI.applyTranslations(this.lang);
 
         this.applyTranslations();
         this._updateSheetChecks();
         this.renderAll();
         this.updateFooter();
 
-        // Load tasks
+        // Load tasks BEFORE render so TaskManager.render() has data
         await TaskManager.load();
         TaskManager.render();
     },
@@ -4072,9 +4199,21 @@ const diary = {
         return [...arr].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     },
 
-    async saveNotes()    { await StorageManager.setItem('notes',    JSON.stringify(this.notes));    this.renderNotes();    this.updateFooter(); },
-    async saveHabits()   { await StorageManager.setItem('habits',   JSON.stringify(this.habits));   this.renderHabits();   this.updateFooter(); },
-    async saveMemories() { await StorageManager.setItem('memories', JSON.stringify(this.memories)); this.renderMemories(); this.updateFooter(); },
+    async saveNotes() {
+        if (!EncryptionManager._key) { this.toast('⚠️ Not unlocked — save skipped', 'error'); return; }
+        await StorageManager.setItem('notes', JSON.stringify(this.notes));
+        this.renderNotes(); this.updateFooter();
+    },
+    async saveHabits() {
+        if (!EncryptionManager._key) { this.toast('⚠️ Not unlocked — save skipped', 'error'); return; }
+        await StorageManager.setItem('habits', JSON.stringify(this.habits));
+        this.renderHabits(); this.updateFooter();
+    },
+    async saveMemories() {
+        if (!EncryptionManager._key) { this.toast('⚠️ Not unlocked — save skipped', 'error'); return; }
+        await StorageManager.setItem('memories', JSON.stringify(this.memories));
+        this.renderMemories(); this.updateFooter();
+    },
 
     switchTab(tab) {
         ['notes','habits','tasks','memory'].forEach(t => {
@@ -4125,6 +4264,7 @@ const diary = {
 
     async saveNote(e) {
         e.preventDefault();
+        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const id      = document.getElementById('noteId').value ? +document.getElementById('noteId').value : Date.now();
         const title   = document.getElementById('noteTitle').value.trim();
         const category= document.getElementById('noteCategory').value;
@@ -4224,6 +4364,7 @@ const diary = {
 
     async saveHabit(e) {
         e.preventDefault();
+        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const id   = document.getElementById('habitId').value ? +document.getElementById('habitId').value : Date.now();
         const name = document.getElementById('habitName').value.trim();
         const start= document.getElementById('habitStartDate').value;
@@ -4399,6 +4540,7 @@ const diary = {
 
     async saveMemory(e) {
         e.preventDefault();
+        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const id     = document.getElementById('memoryId').value ? +document.getElementById('memoryId').value : Date.now();
         const title  = document.getElementById('memoryTitle').value.trim();
         const type   = document.getElementById('memoryType').value;
@@ -4473,6 +4615,7 @@ const diary = {
 
     async saveEvent(e) {
         e.preventDefault();
+        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const memId   = +document.getElementById('eventMemoryId').value;
         const editIdx = document.getElementById('editEventIdx').value;
         const date    = document.getElementById('eventDate').value;
@@ -4650,62 +4793,122 @@ const diary = {
     },
 
     async _saveStreak() {
+        if (!EncryptionManager._key) return; // skip if not yet unlocked
         await StorageManager.setItem('fireStreak',     this.fireStreak.toString());
         await StorageManager.setItem('lastActiveDate', this.lastActiveDate);
     },
 
-    async init() {
-        // Show a subtle loading indicator while we boot (especially helpful on slow connections)
-        const appContent = document.getElementById('appContent');
-        if (appContent) appContent.style.opacity = '0.4';
+    // Guard: prevents double-init when both auto-unlock and manual unlock
+    // paths both call diary.init() in the same session.
+    _initialized: false,
 
+    async init() {
+        if (this._initialized) {
+            // Already fully initialised — just re-load data and re-render
+            // (handles the edge case where init() is called after a sync)
+            console.log('[diary] init() called again — re-loading data only');
+            try { await this.load(); } catch(e) { console.error('[diary] reload failed:', e); }
+            return;
+        }
+        this._initialized = true;
+
+        // ── Step 0: Telegram WebApp SDK setup ────────────────────
+        // MUST happen before expand() or any UI measurement, otherwise
+        // the viewport height is wrong and the app looks "dark/cut off".
         try {
             if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.ready();
                 Telegram.WebApp.expand();
+                // Sync Telegram header colour to our accent so the status-bar
+                // area above the Mini App matches the app gradient.
+                if (Telegram.WebApp.setHeaderColor) {
+                    try { Telegram.WebApp.setHeaderColor('#ff4500'); } catch(_) {}
+                }
+                if (Telegram.WebApp.setBackgroundColor) {
+                    try { Telegram.WebApp.setBackgroundColor('#ff4500'); } catch(_) {}
+                }
             }
-        } catch(e) {}
+        } catch(e) { console.warn('[diary] Telegram SDK setup error:', e); }
 
-        // StorageManager MUST be initialised before any read/write
+        // ── Step 1: Ensure appContent is visible ─────────────────
+        // By the time init() is called, EncryptionManager has already set
+        // appContent to display:block. We DON'T hide it again here — doing
+        // so was causing the "dark screen" bug when init took > 1 frame.
+        const appContent = document.getElementById('appContent');
+
+        // ── Step 2: StorageManager must be ready before any read/write ──
         StorageManager.init();
 
-        // Load all data — each module has its own error boundary
-        try { await this.load(); } catch(e) { console.error('[diary] load failed:', e); }
-
-        if (appContent) appContent.style.opacity = '';
-
-        // Wire form submits
-        document.getElementById('noteForm').addEventListener('submit',   e => this.saveNote(e));
-        document.getElementById('habitForm').addEventListener('submit',  e => this.saveHabit(e));
-        document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
-        document.getElementById('eventForm').addEventListener('submit',  e => this.saveEvent(e));
-
-        // Task quick-add — click only (not touchend) to avoid iOS double-fire
-        const qi = document.getElementById('taskQuickInput');
-        if (qi) {
-            qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
+        // ── Step 3: Show a non-blocking loading shimmer ──────────
+        // Use opacity + pointer-events rather than display:none so the
+        // DOM is already laid out and measurements are correct.
+        if (appContent) {
+            appContent.style.opacity        = '0.55';
+            appContent.style.pointerEvents  = 'none';
+            appContent.style.transition     = 'opacity 0.35s ease';
         }
+
+        // ── Step 4: Load all persisted data ──────────────────────
+        try {
+            await this.load();
+        } catch(e) {
+            console.error('[diary] load failed:', e);
+            // Even on failure: render empty state so the UI isn't stuck
+            try { this.renderAll(); this.updateFooter(); } catch(_) {}
+        }
+
+        // ── Step 5: Reveal app ───────────────────────────────────
+        if (appContent) {
+            appContent.style.opacity       = '1';
+            appContent.style.pointerEvents = '';
+        }
+
+        // ── Step 6: Wire form submits (once only) ────────────────
+        // Use { once: false } deliberately — we want persistent listeners,
+        // but we guard with _initialized so this block only runs once.
+        const safeAddSubmit = (id, fn) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('submit', fn);
+        };
+        safeAddSubmit('noteForm',   e => this.saveNote(e));
+        safeAddSubmit('habitForm',  e => this.saveHabit(e));
+        safeAddSubmit('memoryForm', e => this.saveMemory(e));
+        safeAddSubmit('eventForm',  e => this.saveEvent(e));
+
+        // ── Step 7: Task input listeners ─────────────────────────
+        const qi = document.getElementById('taskQuickInput');
+        if (qi) qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
+
         const taskAddBtn = document.getElementById('taskAddBtn');
         if (taskAddBtn) {
             taskAddBtn.addEventListener('click', e => { e.preventDefault(); TaskManager.quickAdd(); });
         }
 
-        document.getElementById('clearAll').addEventListener('click', async () => {
-            if (!confirm(this.t('confirm-clear-all'))) return;
-            this.notes = [];
-            await this.saveNotes();
-            this.toast(this.t('toast-all-deleted'));
-        });
+        // ── Step 8: Clear-all notes ──────────────────────────────
+        const clearAllBtn = document.getElementById('clearAll');
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener('click', async () => {
+                if (!confirm(this.t('confirm-clear-all'))) return;
+                this.notes = [];
+                await this.saveNotes();
+                this.toast(this.t('toast-all-deleted'));
+            });
+        }
 
+        // ── Step 9: Modal backdrop dismiss ───────────────────────
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
             overlay.addEventListener('click', e => { if (e.target === overlay) this.closeModals(); });
         });
 
+        // ── Step 10: Bottom-sheet swipe-to-dismiss ───────────────
         const sheet = document.getElementById('bottomSheet');
-        let sheetStartY = 0;
-        sheet.addEventListener('touchstart', e => { sheetStartY = e.touches[0].clientY; }, { passive: true });
-        sheet.addEventListener('touchend', e => { if (e.changedTouches[0].clientY - sheetStartY > 60) this.closeSheet(); }, { passive: true });
+        if (sheet) {
+            let sheetStartY = 0;
+            sheet.addEventListener('touchstart', e => { sheetStartY = e.touches[0].clientY; }, { passive: true });
+            sheet.addEventListener('touchend',   e => { if (e.changedTouches[0].clientY - sheetStartY > 60) this.closeSheet(); }, { passive: true });
+        }
 
+        // ── Step 11: Keyboard escape ─────────────────────────────
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 this.closeModals(); this.closeSheet();
@@ -4713,19 +4916,20 @@ const diary = {
             }
         });
 
+        // ── Step 12: Default dates for forms ────────────────────
         const todayStr = this.today();
-        document.getElementById('habitStartDate').value  = todayStr;
-        document.getElementById('memoryStartDate').value = todayStr;
-        document.getElementById('eventDate').value       = todayStr;
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        setVal('habitStartDate',  todayStr);
+        setVal('memoryStartDate', todayStr);
+        setVal('eventDate',       todayStr);
 
-        // Initialise sub-systems — each wrapped in its own error boundary so
-        // one broken module never prevents the others from loading
+        // ── Step 13: Sub-systems ─────────────────────────────────
         SidebarUI.init();
         AchievementsUI.init();
         try { await RubyManager.init(); } catch(e) { console.error('[diary] RubyManager.init failed:', e); }
         try { await ShopManager.init(); } catch(e) { console.error('[diary] ShopManager.init failed:', e); }
 
-        console.log('%c✅ DailyBookimix v5.2 — loaded!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v5.4 — loaded!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
@@ -5203,41 +5407,66 @@ const AchievementsUI = {
 
 
 // ================================================================
-//  BOOT SEQUENCE
+//  BOOT SEQUENCE — v5.4
+//  Order:
+//    1. Apply lock-screen language from LS hint (instant, no network)
+//    2. Wire lock-screen Enter key (already wired via onkeydown attr,
+//       this is a belt-and-suspenders fallback for older Telegram clients)
+//    3. Attempt session-storage auto-unlock (fast, no password prompt)
+//    4. If auto-unlock succeeds → diary.init() (full app boot)
+//    5. Otherwise → show lock screen, wait for user to type password
 // ================================================================
 (async function boot() {
-    // Apply saved language to lock screen BEFORE focusing the input so the
-    // placeholder and all labels are already in the right language.
-    // FIX: placeholder translation is now included in applyLang() (see EncryptionManager).
+    // ── 1. Lock-screen language ──────────────────────────────────
     let savedLang = 'en';
     try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch(e) {}
     EncryptionManager.applyLang(savedLang);
 
-    // Handle Enter key on password input.
-    // FIX: Removed the dead touchend listener that was here before — it did
-    //      nothing (no action inside) and added noise to iOS event handling.
+    // ── 2. Lock-screen Enter key (belt-and-suspenders) ───────────
     const pi = document.getElementById('lockPasswordInput');
     if (pi) {
+        // The onkeydown attr already handles this; addEventListener is kept
+        // only for browsers that strip inline handlers (CSP, etc.)
         pi.addEventListener('keydown', e => {
             if (e.key === 'Enter') EncryptionManager.unlock();
         });
-        pi.focus();
+        // Focus only after a short delay so iOS virtual keyboard doesn't
+        // immediately cover the whole screen on app open.
+        setTimeout(() => { try { pi.focus(); } catch(_) {} }, 300);
     }
 
-    // Try to auto-unlock from session storage
-    const autoUnlocked = await EncryptionManager.tryAutoUnlock();
-    if (autoUnlocked) {
-        await diary.init();
+    // ── 3. Attempt session auto-unlock ───────────────────────────
+    let autoUnlocked = false;
+    try {
+        autoUnlocked = await EncryptionManager.tryAutoUnlock();
+    } catch(e) {
+        console.warn('[boot] tryAutoUnlock threw:', e);
+        autoUnlocked = false;
     }
-    // Otherwise the lock screen stays open and user must enter password
+
+    // ── 4. Full app init if already authenticated ─────────────────
+    if (autoUnlocked) {
+        try {
+            await diary.init();
+        } catch(e) {
+            console.error('[boot] diary.init() after auto-unlock threw:', e);
+            // Show the app anyway — it may be partially usable
+            const ac = document.getElementById('appContent');
+            if (ac) { ac.style.display = 'block'; ac.style.opacity = '1'; ac.style.pointerEvents = ''; }
+        }
+    }
+    // ── 5. Otherwise lock screen stays open (already class="open") ─
 })();
 
-// Persist language hint (unencrypted, just for lock screen UI)
-const _patchApplyLang = diary.applyLang;
+// ── Persist language hint (unencrypted, just for lock-screen UI) ──
+// Patch diary.applyLang so the LS hint stays in sync whenever the
+// user switches language inside the app.
+const _patchApplyLang = diary.applyLang.bind(diary);
 diary.applyLang = function(lang) {
     try { localStorage.setItem('dbmix_lang_hint', lang); } catch(e) {}
-    _patchApplyLang.call(diary, lang);
-    EncryptionManager.applyLang(lang);
+    _patchApplyLang(lang);
+    // applyLang inside diary already calls EncryptionManager.applyLang
+    // via the patched version at the bottom of diary.applyLang — no double call needed.
 };
 </script>
 </body>
