@@ -1772,12 +1772,12 @@
             <div class="sidebar-item-label" id="sb-item-achievements">Achievements</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
-        <div class="sidebar-item" onclick="ShopManager.openModal()">
+        <div class="sidebar-item" id="sidebar-item-shop" onclick="ShopManager.openModal()">
             <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(245,158,11,0.22),rgba(180,100,0,0.18));border:1px solid rgba(245,158,11,0.35)">🛍️</div>
             <div class="sidebar-item-label" id="sb-item-shop">Shop</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
-        <div class="sidebar-item" onclick="SidebarUI.openDailyChallenges()">
+        <div class="sidebar-item" id="sidebar-item-daily-challenges" onclick="SidebarUI.openDailyChallenges()">
             <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(200,20,20,0.22),rgba(120,0,0,0.18));border:1px solid rgba(200,40,40,0.35)">
                 <svg width="18" height="26" viewBox="0 0 22 32" fill="none">
                     <defs>
@@ -2974,13 +2974,14 @@ const T = {
 //   • Local-date aware (no UTC shift)
 // ================================================================
 const AppCalendar = {
-    _viewDate:  null,  // currently selected date string 'YYYY-MM-DD'
-    _calYear:   null,
-    _calMonth:  null,
-    _calMode:   'week', // 'week' | 'month'
-    _container: null,
-    _onSelect:  null,  // callback(dateStr)
-    _getActivity: null, // callback(dateStr) → bool (has tasks?)
+    _viewDate:     null,  // currently selected date string 'YYYY-MM-DD'
+    _calYear:      null,
+    _calMonth:     null,
+    _calMode:      'week', // 'week' | 'month'
+    _container:    null,
+    _onSelect:     null,  // callback(dateStr)
+    _getActivity:  null,  // callback(dateStr) → bool (has tasks?)
+    _userNavigated: false, // true when user clicked ‹›«» — prevents TaskManager.render() from resetting month
 
     MONTHS_EN: ['January','February','March','April','May','June','July','August','September','October','November','December'],
     MONTHS_RU: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
@@ -3018,6 +3019,7 @@ const AppCalendar = {
     selectDate(dateStr) {
         const today = this._localToday();
         if (dateStr > today) return; // block future
+        this._userNavigated = false; // explicit date pick → re-anchor month to selection
         this._viewDate = dateStr;
         const d = this._parseDate(dateStr);
         this._calYear  = d.getFullYear();
@@ -3026,12 +3028,13 @@ const AppCalendar = {
         if (this._onSelect) this._onSelect(dateStr);
     },
 
-    prevYear()  { this._calYear--;  this.render(); },
+    prevYear()  { this._userNavigated = true; this._calYear--;  this.render(); },
     nextYear()  {
         const today = this._parseDate(this._localToday());
-        if (this._calYear < today.getFullYear()) { this._calYear++; this.render(); }
+        if (this._calYear < today.getFullYear()) { this._userNavigated = true; this._calYear++; this.render(); }
     },
     prevMonth() {
+        this._userNavigated = true;
         if (this._calMonth === 0) { this._calYear--; this._calMonth = 11; }
         else this._calMonth--;
         this.render();
@@ -3041,6 +3044,7 @@ const AppCalendar = {
         const nextY = this._calMonth === 11 ? this._calYear + 1 : this._calYear;
         const nextM = this._calMonth === 11 ? 0 : this._calMonth + 1;
         if (nextY > today.getFullYear() || (nextY === today.getFullYear() && nextM > today.getMonth())) return;
+        this._userNavigated = true;
         this._calMonth = nextM; this._calYear = nextY;
         this.render();
     },
@@ -3434,8 +3438,12 @@ const TaskManager = {
         let streak = 0;
         const today = this.today();
         for (let i = 0; ; i++) {
+            // Use local date (same as this.today()) to avoid UTC shift on iOS
             const d  = new Date(); d.setDate(d.getDate() - i);
-            const ds = d.toISOString().split('T')[0];
+            const y  = d.getFullYear();
+            const m  = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const ds = `${y}-${m}-${dd}`;
             if (ds > today) continue;
             const day = this._data[ds];
             if (!day || !day.tasks.some(t => t.completed)) break;
@@ -3593,7 +3601,9 @@ const TaskManager = {
         const calContainer = document.getElementById('appCalendarContainer');
         if (calContainer) {
             if (!AppCalendar._container) {
-                // First render: fully initialise the calendar
+                // First render: fully initialise the calendar.
+                // Also reset _userNavigated so the calendar anchors to today.
+                AppCalendar._userNavigated = false;
                 AppCalendar.init(
                     'appCalendarContainer',
                     dateStr,
@@ -3605,17 +3615,23 @@ const TaskManager = {
                     }
                 );
             } else {
-                // Subsequent renders: just update the selected date + dots
-                AppCalendar._viewDate   = dateStr;
-                AppCalendar._container  = calContainer;
-                AppCalendar._onSelect   = (ds) => { TaskManager.viewDate(ds); };
+                // Subsequent renders: update callbacks and selected date.
+                // IMPORTANT: do NOT override _calYear/_calMonth if the user
+                // has manually navigated the month — that would silently jump
+                // the calendar back to today every time a task is toggled.
+                AppCalendar._viewDate    = dateStr;
+                AppCalendar._container   = calContainer;
+                AppCalendar._onSelect    = (ds) => { TaskManager.viewDate(ds); };
                 AppCalendar._getActivity = (ds) => {
                     const d = TaskManager._data[ds];
                     return !!(d && d.tasks && d.tasks.length > 0);
                 };
-                const d = AppCalendar._parseDate(dateStr);
-                AppCalendar._calYear  = d.getFullYear();
-                AppCalendar._calMonth = d.getMonth();
+                if (!AppCalendar._userNavigated) {
+                    // Only re-anchor month when user hasn't manually navigated
+                    const d = AppCalendar._parseDate(dateStr);
+                    AppCalendar._calYear  = d.getFullYear();
+                    AppCalendar._calMonth = d.getMonth();
+                }
                 AppCalendar.render();
             }
         }
@@ -4677,8 +4693,10 @@ const diary = {
         });
         // Refresh tasks when switching to that tab
         if (tab === 'tasks') {
-            // Reset calendar container ref so it re-initialises with current data
-            AppCalendar._container = null;
+            // Reset calendar container ref so it re-initialises with current data.
+            // Also clear _userNavigated so the calendar anchors back to today.
+            AppCalendar._container    = null;
+            AppCalendar._userNavigated = false;
             TaskManager.render();
         }
     },
@@ -5455,7 +5473,81 @@ const diary = {
         try { await RubyManager.init(); } catch(e) { console.error('[diary] RubyManager.init failed:', e); }
         try { await ShopManager.init(); } catch(e) { console.error('[diary] ShopManager.init failed:', e); }
 
+        // ── Step 14: New-user feature gating ────────────────────────
+        // Detected AFTER all cloud data is loaded so we never misclassify
+        // an existing user as new due to a slow first-read.
+        //
+        // isOnyxUser  = has ever earned Onyx OR owns shop items.
+        // isTasksUser = has any Daily Tasks history in the last 30 days
+        //               OR set a persistent flag on a previous session.
+        //
+        // We persist dbmix_tasks_ever_used in CloudStorage so users with
+        // data older than 30 days are still recognised as existing users.
+        this._applyNewUserGating();
+
         console.log('%c✅ DailyBookimix v5.4 — loaded!', 'color:#ff8c42;font-weight:900;font-size:16px');
+    },
+
+    // ── New-user gating ────────────────────────────────────────────
+    // Called once after all subsystems are initialised.
+    // Safe to call again (e.g. after Force Sync) — idempotent.
+    async _applyNewUserGating() {
+        // ── Determine Onyx user status ───────────────────────────
+        const isOnyxUser = (
+            RubyManager._loaded && (
+                RubyManager._total > 0 ||
+                Object.keys(RubyManager._progress).length > 0 ||
+                ShopManager._owned.length > 0
+            )
+        );
+
+        // ── Determine Tasks user status ──────────────────────────
+        // First check in-memory data from last 30 days
+        let isTasksUser = Object.keys(TaskManager._data).length > 0;
+
+        // If not found in memory, check the persistent flag in CloudStorage
+        // (covers users whose task history is older than 30 days)
+        if (!isTasksUser) {
+            try {
+                const flag = await StorageManager.getItem('dbmix_tasks_ever_used');
+                if (flag === '1') isTasksUser = true;
+            } catch(_) {}
+        }
+
+        // If this session proved the user has tasks, write the persistent flag
+        if (isTasksUser) {
+            try { StorageManager.setItem('dbmix_tasks_ever_used', '1'); } catch(_) {}
+        }
+
+        // ── Apply Onyx UI gating for new users ───────────────────
+        // Hide Onyx badge in header, Daily Challenges & Shop in sidebar.
+        // Existing owners keep everything.
+        const rubyBadge = document.getElementById('rubyHeaderBadge');
+        if (rubyBadge) rubyBadge.style.display = isOnyxUser ? '' : 'none';
+
+        const sbShopItem = document.getElementById('sidebar-item-shop');
+        if (sbShopItem) sbShopItem.style.display = isOnyxUser ? '' : 'none';
+
+        const sbChallengesItem = document.getElementById('sidebar-item-daily-challenges');
+        if (sbChallengesItem) sbChallengesItem.style.display = isOnyxUser ? '' : 'none';
+
+        // ── Apply Tasks UI gating for new users ──────────────────
+        // Hide the Tasks tab entirely. Do not delete any data.
+        const tasksTabBtn = document.getElementById('tasksTabBtn');
+        if (tasksTabBtn) tasksTabBtn.style.display = isTasksUser ? '' : 'none';
+
+        // If the tasks tab is currently active and user has no history,
+        // silently switch to the Notes tab to avoid a blank screen.
+        if (!isTasksUser) {
+            const tasksSection = document.getElementById('tasksSection');
+            if (tasksSection && !tasksSection.classList.contains('hidden')) {
+                this.switchTab('notes');
+            }
+        }
+
+        console.log(
+            `[diary] gating — onyxUser:${isOnyxUser}, tasksUser:${isTasksUser}`
+        );
     }
 };
 
@@ -5614,7 +5706,8 @@ const SidebarUI = {
 
             // 2. Clear static data keys through StorageManager (so they go to cloud too)
             const keys = ['notes','habits','memories','fireStreak','lastActiveDate',
-                          'userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1'];
+                          'userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1',
+                          'dbmix_tasks_ever_used'];
             for (const key of keys) {
                 try { await StorageManager.setItem(key, ''); } catch(_) {}
             }
@@ -5652,6 +5745,8 @@ const SidebarUI = {
         setTimeout(async () => {
             diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизация…' : 'Syncing…'));
             await StorageManager.forceSync();
+            // Re-evaluate new-user gating after fresh data arrives
+            try { await diary._applyNewUserGating(); } catch(_) {}
         }, 320);
     },
 
