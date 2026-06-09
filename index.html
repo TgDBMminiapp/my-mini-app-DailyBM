@@ -1,88 +1,5 @@
 <!DOCTYPE html>
-<!-- ============================================================
-     DailyBookimix v5.5 — PERFORMANCE & UI OPTIMISATION BUILD
-     ============================================================
-     ROOT CAUSE OF DATA LOSS (fixed in v5.3):
-       Telegram CloudStorage hard-caps each value at 4 096 bytes.
-       v5.x stored ALL task history in one 'tasks_v1' key and ALL
-       Onyx challenge progress in 'rubies_v1'. After 6-7 days of
-       normal use the encrypted blobs exceeded the limit. Telegram's
-       backend silently rejected writes — no error was returned —
-       so tasks appeared to save (toast showed ✅) but were gone on
-       the next session. Ruby progress was lost after ~30 days.
-
-     FIXES:
-       A. PER-DAY TASK SHARDING
-          Each day now stored in its own 't:YYYY-MM-DD' key (~500 B).
-          Only the changed day is written per operation — fast & safe.
-          One-time migration reads 'tasks_v1' and splits it out, then
-          clears the old key so it never grows large again.
-
-       B. PER-DAY RUBY-PROGRESS SHARDING
-          Challenge progress stored in 'rp:YYYY-MM-DD' per day.
-          'rubies_v1' now holds only { total: N } — a few dozen bytes.
-          Old inline-progress format detected and migrated on first open.
-
-       C. CROSS-DEVICE SYNC FIX
-          Previously localStorage could supply a stale salt from a
-          previous install, causing key derivation to silently use the
-          wrong salt and make all cloud data appear missing/corrupt on a
-          second device. Fix: when Telegram CloudStorage is reachable,
-          its salt is ALWAYS authoritative — localStorage is never used
-          as a fallback for the salt if the cloud is online.
-          Added a "🔄 Enter the password from your first device" hint
-          shown when cloud has a salt but the entered password is wrong,
-          helping new-device users understand what to type.
-
-       D. STORAGEMANAGER _enqueue BUG FIX
-          The write-queue was storing `next.catch(()=>{})` — a promise
-          that always resolves — so every enqueued write thought the
-          slot was free and ran immediately, defeating the mutex. Fixed
-          to store a settled-but-non-rejecting sentinel that still lets
-          the chain wait for the actual in-flight write.
-
-       E. ACCOUNT DELETION (updated in v5.4)
-          executeDeleteAccount now uses EncryptionManager._csDel() for
-          salt/sentinel wipe, clears 90 days of shards (up from 60),
-          shows a loading state on the confirm button, and reloads the
-          page after deletion so the lock screen comes up clean.
-
-       F. NEW IN v5.4 — PASSWORD / ENCRYPTION RELIABILITY
-          • Salt retrieval retries up to 3× with exponential back-off
-            (0 → 500 → 1500 → 4000 ms) to survive transient cloud
-            failures on first open from a new device.
-          • Live loading indicator on lock screen shows step-by-step
-            progress ("Loading key…", "Verifying password…") so users
-            know the app is working.
-          • Precise, language-aware error messages replace the single
-            generic "wrong password" hint.
-          • Re-entrancy guard prevents double-tap race conditions.
-          • Sentinel-recovery: if salt exists but sentinel is missing
-            (interrupted first-setup) the app rewrites the sentinel
-            instead of permanently locking the user out.
-
-       G. NEW IN v5.4 — "FORGOT PASSWORD? RESET ACCOUNT" BUTTON
-          Prominently displayed on the lock screen. Triggers a modal
-          that explains the consequence (total data wipe), then calls
-          EncryptionManager.executeReset() which:
-            1. Clears dbmix_salt + dbmix_sentinel from CloudStorage.
-            2. Clears all 90-day task/ruby shards + static keys.
-            3. Calls localStorage.clear() + sessionStorage.clear().
-            4. Reloads the page so the user can set a new password.
-          Crucially, this works BEFORE any unlock attempt, so users
-          who forgot their password on every device can still recover.
-
-       H. NEW IN v5.4 — FORCE SYNC BUTTON IN SIDEBAR
-          "Force Sync from Cloud" sidebar item re-enables CloudStorage
-          (resetting _cloudDisabled) and triggers diary.load() to pull
-          the latest data from Telegram servers. Useful after a
-          network interruption or when switching devices.
-
-       I. NEW IN v5.4 — STORAGE SELF-HEALING
-          StorageManager auto-re-enables cloud writes after 60 s when
-          it was disabled due to repeated failures, so the app
-          self-heals after a temporary network outage.
-     ============================================================ -->
+<!-- DailyBookimix v6.0 -->
 <html lang="ru" class="h-full">
 <head>
     <meta charset="UTF-8">
@@ -95,13 +12,7 @@
     <meta name="theme-color" content="#e03d00" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- ══ PERF FIX: call ready() + expand() the instant the SDK loads,
-         BEFORE any other script runs. Telegram's WebView queues all
-         fetch() / CloudStorage calls until ready() is called — if you
-         call it later (e.g. inside diary.init()) every CloudStorage read
-         that already started is frozen in the queue, causing the 20-30s
-         blank screen seen inside Telegram. Calling it here unblocks the
-         queue immediately, cutting load time to ~1-2s. ══ -->
+    <!-- Call ready() + expand() immediately to unblock CloudStorage queue -->
     <script>
     (function(){
         try {
@@ -1647,40 +1558,18 @@ const ShopManager = {
     applyTranslations() {}
 };
 // ================================================================
-//  ENCRYPTION MANAGER v5.4 — AES-256-GCM via Web Crypto API
-//
-//  Key improvements over v5.3:
-//   • Salt retrieval retried up to 3× with exponential back-off
-//     (500 ms → 1500 ms → 4000 ms) to survive transient cloud
-//     failures on first open from a new device.
-//   • Live loading indicator so users see progress, not a frozen UI.
-//   • Precise error messages: "wrong password", "connection error",
-//     "enter a password" — each shown in the correct language.
-//   • "Forgot password? Reset account" button on lock screen always
-//     visible — executes a full wipe even before first unlock.
-//   • Re-entrancy guard: double-tapping Unlock is a no-op.
-//   • Sentinel-recovery: if salt exists but sentinel is missing
-//     (interrupted first-setup), the sentinel is rewritten rather
-//     than locking the user out permanently.
-//   • Coloured debug logs ([EM][SALT], [EM][KEY], [EM][CLOUD]…)
-//     for easy console diagnosis.
+//  ENCRYPTION MANAGER — AES-256-GCM via Web Crypto API
+//  Handles password-based key derivation, encryption/decryption,
+//  salt storage, sentinel verification, and lock screen logic.
 // ================================================================
 const EncryptionManager = {
     _key:  null,       // CryptoKey (in-memory only)
     _salt: null,       // Uint8Array for PBKDF2
     _unlocking: false, // re-entrancy guard
 
-    // ── Debug logger with colour-coded console output ────────────
     _dbg(step, msg, data) {
-        const styles = {
-            SALT: 'color:#f59e0b;font-weight:700', KEY:   'color:#34d399;font-weight:700',
-            CLOUD:'color:#60a5fa;font-weight:700', ERROR: 'color:#f87171;font-weight:700',
-            OK:   'color:#a3e635;font-weight:700', RESET: 'color:#fb923c;font-weight:700',
-        };
-        const s = styles[step] || 'color:#c4b5fd;font-weight:700';
-        data !== undefined
-            ? console.debug(`%c[EM][${step}] ${msg}`, s, data)
-            : console.debug(`%c[EM][${step}] ${msg}`, s);
+        if (data !== undefined) console.debug('[EM][' + step + '] ' + msg, data);
+        else console.debug('[EM][' + step + '] ' + msg);
     },
 
     // ── Loading indicator on lock screen ─────────────────────────
@@ -1707,9 +1596,8 @@ const EncryptionManager = {
             Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
         );
         if (!hasCloud) return null;
-        // iOS FIX: reduced retry delays — 0/300/1000/2500ms (was 0/500/1500/4000)
         // Shorter delays mean we fail-fast on genuinely missing keys (new users)
-        // and retry quicker on transient blips, cutting unlock time on iOS.
+        // and retry quicker on transient blips.
         const delays = [0, 300, 1000, 2500];
         for (let i = 0; i < Math.min(maxTries, delays.length); i++) {
             if (delays[i]) {
@@ -1718,7 +1606,6 @@ const EncryptionManager = {
             }
             const val = await new Promise(res => {
                 let done = false;
-                // iOS FIX: reduced individual timeout 7s→4s
                 const t = setTimeout(() => { if (!done) { done=true; res(null); } }, 4000);
                 try {
                     Telegram.WebApp.CloudStorage.getItem(key, (err, v) => {
@@ -1745,7 +1632,6 @@ const EncryptionManager = {
         if (!hasCloud) return;
         await new Promise(res => {
             let done = false;
-            // iOS FIX: reduced from 8s→5s
             const t = setTimeout(() => { done=true; res(); }, 5000);
             try {
                 Telegram.WebApp.CloudStorage.setItem(key, val, () => {
@@ -1771,7 +1657,7 @@ const EncryptionManager = {
         );
     },
 
-    // Encode Uint8Array → Base64 (chunked to avoid iOS stack overflow on large buffers)
+    // Encode Uint8Array → Base64 (chunked for large buffers)
     _b64encode(buf) {
         const bytes = new Uint8Array(buf);
         let binary = '';
@@ -1990,8 +1876,6 @@ const EncryptionManager = {
         try { pw = sessionStorage.getItem('dbmix_pw'); } catch(_) {}
         if (!pw) return false;
         this._dbg('OK', 'tryAutoUnlock: session token found');
-
-        // iOS FIX: wrap the entire auto-unlock in a hard timeout so iOS
         // CloudStorage hangs don't leave the app frozen on the lock screen.
         // If the timeout fires we return false — user sees the password screen.
         const _autoUnlockWithTimeout = async () => {
@@ -2051,7 +1935,7 @@ const EncryptionManager = {
             }
         };
 
-        // Race against a 10s deadline — avoids permanent freeze on iOS
+        // Race against a 10s timeout
         const timeoutPromise = new Promise(res => setTimeout(() => {
             this._dbg('ERROR', 'tryAutoUnlock: 10s timeout — falling back to lock screen');
             this._setLoading(false);
@@ -2159,205 +2043,152 @@ const EncryptionManager = {
 
 
 // ================================================================
-//  STORAGE MANAGER v5.4 — Per-key sharding + robust cloud sync
+//  STORAGE MANAGER v6.0 — Clean, reliable, iOS-free
 //
-//  Improvements over v5.3:
-//   • _cloudGet now retries once on failure (transient Telegram
-//     backend blips cause reads to fail intermittently on mobile).
-//   • setItem write retry delays reduced to [0, 400, 1200, 2500]
-//     for snappier perceived performance.
-//   • forceSync() public method re-enables cloud after a temporary
-//     outage and is exposed in the sidebar as "Force Sync".
-//   • _cloudDisabled resets automatically after 60 s of success
-//     so the app self-heals after a network interruption.
-//   • Verbose logging uses consistent [SM] prefix + emoji so it's
-//     easy to grep in the Telegram debug console.
+//  Design:
+//   • Primary store : Telegram CloudStorage (when available, v6.9+)
+//   • Fallback store: localStorage (browser / offline)
+//   • Per-key write queue so concurrent saves for the same key
+//     are serialised — no races, no lost updates.
+//   • All values are AES-GCM encrypted via EncryptionManager before
+//     storage and decrypted on read.
+//   • Telegram CloudStorage hard-caps each value at 4 096 bytes;
+//     per-day sharding (t:YYYY-MM-DD) keeps every key well under that.
+//   • getItems() uses the native batch API for fast bulk reads.
 // ================================================================
 const StorageManager = {
-    supportsCloud:  false,
-    _writeQueues:   {},
-    _cloudFailCount: 0,
-    _cloudDisabled:  false,
-    _CLOUD_FAIL_THRESHOLD: 5,
-    _MAX_KEY_LEN:    128,
-    _MAX_VALUE_LEN:  3800, // conservative; Telegram hard cap is 4096
+    supportsCloud: false,
+    _writeQueues:  {},
 
     init() {
         try {
             this.supportsCloud = !!(
-                window.Telegram && Telegram.WebApp.CloudStorage &&
-                Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+                window.Telegram &&
+                Telegram.WebApp.CloudStorage &&
+                Telegram.WebApp.isVersionAtLeast &&
+                Telegram.WebApp.isVersionAtLeast('6.9')
             );
         } catch(e) { this.supportsCloud = false; }
-        this._log('init', `supportsCloud=${this.supportsCloud}`);
-    },
-
-    _log(op, msg) {
-        try { console.debug(`[SM][${op}] ${msg}`); } catch(_) {}
+        console.debug('[SM] init supportsCloud=' + this.supportsCloud);
     },
 
     // ── Cloud primitives ─────────────────────────────────────────
-    _cloudSet(key, value) {
+    _csSet(key, value) {
         return new Promise((resolve, reject) => {
             let done = false;
-            // iOS FIX: reduced timeout from 8s→5s; Telegram callbacks on iOS
-            // rarely take >3s — a shorter timeout lets retry kick in sooner.
-            const t = setTimeout(() => { if (!done) { done=true; reject(new Error('CS timeout')); } }, 5000);
+            const t = setTimeout(() => { if (!done) { done = true; reject(new Error('CS timeout')); } }, 8000);
             try {
                 Telegram.WebApp.CloudStorage.setItem(key, value, err => {
-                    if (done) return; done=true; clearTimeout(t);
+                    if (done) return;
+                    done = true; clearTimeout(t);
                     if (err) reject(new Error(String(err))); else resolve();
                 });
-            } catch(e) { if (!done) { done=true; clearTimeout(t); reject(e); } }
+            } catch(e) { if (!done) { done = true; clearTimeout(t); reject(e); } }
         });
     },
 
-    // _cloudGet retries once on failure — transient backend errors
-    // are common on mobile Telegram clients (slow DNS, TLS reuse etc.)
-    async _cloudGet(key) {
-        const _get = () => new Promise((resolve, reject) => {
+    _csGet(key) {
+        return new Promise((resolve, reject) => {
             let done = false;
-            // iOS FIX: 5s timeout (was 8s) — see _cloudSet comment above
-            const t = setTimeout(() => { if (!done) { done=true; reject(new Error('CS timeout')); } }, 5000);
+            const t = setTimeout(() => { if (!done) { done = true; reject(new Error('CS timeout')); } }, 8000);
             try {
                 Telegram.WebApp.CloudStorage.getItem(key, (err, v) => {
-                    if (done) return; done=true; clearTimeout(t);
+                    if (done) return;
+                    done = true; clearTimeout(t);
                     if (err) reject(new Error(String(err)));
                     else resolve((v !== null && v !== undefined && v !== '') ? v : null);
                 });
-            } catch(e) { if (!done) { done=true; clearTimeout(t); reject(e); } }
+            } catch(e) { if (!done) { done = true; clearTimeout(t); reject(e); } }
         });
-        try {
-            return await _get();
-        } catch(e) {
-            this._log('get', `⚠️ "${key}" first attempt failed (${e.message}), retrying…`);
-            await new Promise(r => setTimeout(r, 600));
-            return await _get(); // may throw — caller handles
-        }
     },
 
-    // ── Write queue ───────────────────────────────────────────────
-    // Stores `next` (not next.catch) so the chain actually waits for
-    // in-flight writes. The stored sentinel never rejects so the queue
-    // itself stays alive even when individual writes fail.
+    _csBatchGet(keys) {
+        return new Promise((resolve, reject) => {
+            let done = false;
+            const t = setTimeout(() => { if (!done) { done = true; reject(new Error('CS batch timeout')); } }, 10000);
+            try {
+                Telegram.WebApp.CloudStorage.getItems(keys, (err, values) => {
+                    if (done) return;
+                    done = true; clearTimeout(t);
+                    if (err) reject(new Error(String(err))); else resolve(values || {});
+                });
+            } catch(e) { if (!done) { done = true; clearTimeout(t); reject(e); } }
+        });
+    },
+
+    // ── Write queue — serialises concurrent saves for the same key ──
     _enqueue(key, writeFn) {
         const prev = this._writeQueues[key] || Promise.resolve();
         const next = prev.then(writeFn, writeFn);
+        // Store a non-rejecting sentinel so the chain never breaks
         this._writeQueues[key] = next.then(() => {}, () => {});
         return next;
     },
 
     // ── setItem ───────────────────────────────────────────────────
+    // Encrypts the value, then writes to CloudStorage (with one retry)
+    // and mirrors to localStorage for offline resilience.
     async setItem(key, value) {
-        if (key.length > this._MAX_KEY_LEN) {
-            const msg = `[SM] key too long (${key.length}): ${key.slice(0,40)}`;
-            console.error(msg); throw new Error(msg);
-        }
-        // Encrypt before enqueue so the async work doesn't hold the lock
         const toStore = (value === '' || value === null || value === undefined)
-            ? '' : await EncryptionManager.encrypt(value);
+            ? ''
+            : await EncryptionManager.encrypt(value);
 
         return this._enqueue(key, async () => {
-            // Re-check cloud state inside the queue (may have changed while waiting)
-            const useCloud = this.supportsCloud && !this._cloudDisabled
-                          && new TextEncoder().encode(toStore).length <= this._MAX_VALUE_LEN;
-
-            if (!useCloud && this.supportsCloud && !this._cloudDisabled)
-                console.warn(`[SM] value too large for cloud, LS-only: key="${key}"`);
-
-            if (useCloud) {
-                const delays = [0, 400, 1200, 2500];
-                let lastErr;
-                for (let i = 0; i < delays.length; i++) {
-                    if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
+            if (this.supportsCloud) {
+                try {
+                    await this._csSet(key, toStore);
+                    try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
+                    return;
+                } catch(e) {
+                    console.warn('[SM] cloud setItem failed (' + e.message + '), retrying once…');
+                    await new Promise(r => setTimeout(r, 500));
                     try {
-                        await this._cloudSet(key, toStore);
+                        await this._csSet(key, toStore);
                         try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
-                        this._cloudFailCount = 0;
-                        this._log('set', `✅ "${key}" try=${i+1}`);
                         return;
-                    } catch(e) {
-                        lastErr = e;
-                        this._log('set', `⚠️ "${key}" try=${i+1} err=${e.message}`);
+                    } catch(e2) {
+                        console.error('[SM] cloud setItem retry failed (' + e2.message + '), falling back to LS');
                     }
                 }
-                this._cloudFailCount++;
-                if (this._cloudFailCount >= this._CLOUD_FAIL_THRESHOLD) {
-                    this._cloudDisabled = true;
-                    console.warn('[SM] cloud persistently unreachable — switching to LS-only mode');
-                    // Auto-recover after 60 s so the app self-heals when network returns
-                    setTimeout(() => {
-                        this._cloudDisabled = false;
-                        this._cloudFailCount = 0;
-                        this._log('init', '🔄 cloud re-enabled after 60s back-off');
-                    }, 60000);
-                }
-                try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
-                throw lastErr;
-            } else {
-                try { localStorage.setItem('dbmix_' + key, toStore); }
-                catch(e) { throw e; }
             }
+            // localStorage fallback
+            try { localStorage.setItem('dbmix_' + key, toStore); }
+            catch(e) { throw e; }
         });
     },
 
     // ── getItem ───────────────────────────────────────────────────
     async getItem(key) {
         let raw = null;
-        if (this.supportsCloud && !this._cloudDisabled) {
+
+        if (this.supportsCloud) {
             try {
-                raw = await this._cloudGet(key);
-                this._log('get', `"${key}" cloud=${raw !== null}`);
+                raw = await this._csGet(key);
             } catch(e) {
-                this._log('get', `"${key}" cloud err (${e.message}), falling back to LS`);
-                raw = null;
+                console.warn('[SM] cloud getItem failed (' + e.message + '), falling back to LS');
             }
         }
+
         if (!raw) {
             try { raw = localStorage.getItem('dbmix_' + key) || null; } catch(_) {}
         }
         if (!raw) return null;
 
-        // Decrypt the value.  If decryption produces a string that looks
-        // identical to the raw ciphertext (i.e. the key is not set or the
-        // value was stored unencrypted by an older version), check whether
-        // the result is still valid for the caller — callers use _safeParse
-        // so corrupt/legacy values will just fall back to the empty default.
         try {
-            const decrypted = await EncryptionManager.decrypt(raw);
-            return decrypted;
+            return await EncryptionManager.decrypt(raw);
         } catch(e) {
-            this._log('get', `"${key}" decrypt threw — returning null`);
+            console.warn('[SM] decrypt failed for "' + key + '" — returning null');
             return null;
         }
     },
 
+    // ── getItems — batch read ─────────────────────────────────────
     async getItems(keys) {
-        // PERF FIX: use the native CloudStorage.getItems() batch API instead of
-        // sequential getItem() calls. For 30 task-day keys this cuts round-trips
-        // from 30 serial callbacks → 1 batch callback, saving ~2-4s on iOS.
-        if (this.supportsCloud && !this._cloudDisabled) {
+        if (this.supportsCloud) {
             try {
-                const batchResult = await new Promise((resolve, reject) => {
-                    let done = false;
-                    // 7s batch timeout (30 keys takes longer than single-key reads)
-                    const t = setTimeout(() => {
-                        if (!done) { done = true; reject(new Error('getItems batch timeout')); }
-                    }, 7000);
-                    try {
-                        Telegram.WebApp.CloudStorage.getItems(keys, (err, values) => {
-                            if (done) return; done = true; clearTimeout(t);
-                            if (err) reject(new Error(String(err)));
-                            else resolve(values || {});
-                        });
-                    } catch(e) {
-                        if (!done) { done = true; clearTimeout(t); reject(e); }
-                    }
-                });
-
-                // Decrypt all values in parallel — Promise.all gives a further
-                // ~60% speedup vs sequential decryption on a 30-key batch.
-                const entries = Object.entries(batchResult).filter(([, v]) => v && v !== '');
+                const batch = await this._csBatchGet(keys);
+                // Decrypt all values in parallel
+                const entries = Object.entries(batch).filter(([, v]) => v && v !== '');
                 const decrypted = await Promise.all(
                     entries.map(([k, v]) =>
                         EncryptionManager.decrypt(v)
@@ -2366,18 +2197,15 @@ const StorageManager = {
                     )
                 );
                 const result = {};
-                for (const [k, v] of decrypted) {
-                    if (v !== null) result[k] = v;
-                }
-                this._log('get', `batch ✅ ${keys.length} keys → ${Object.keys(result).length} hits`);
+                for (const [k, v] of decrypted) { if (v !== null) result[k] = v; }
+                console.debug('[SM] batch read ' + keys.length + ' keys → ' + Object.keys(result).length + ' hits');
                 return result;
             } catch(e) {
-                this._log('get', `batch failed (${e.message}) — falling back to sequential`);
-                // Fall through to sequential fallback below
+                console.warn('[SM] batch read failed (' + e.message + '), falling back to sequential');
             }
         }
 
-        // Sequential fallback (non-cloud or batch API failed)
+        // Sequential fallback
         const result = {};
         for (const k of keys) {
             try { const v = await this.getItem(k); if (v !== null) result[k] = v; }
@@ -2386,20 +2214,16 @@ const StorageManager = {
         return result;
     },
 
-    // ── Force Sync: re-enable cloud and re-read diary data ────────
-    // Called from the sidebar "Force Sync" button.
+    // ── Force Sync — re-reads all data from cloud ─────────────────
     async forceSync() {
         if (!EncryptionManager._key) {
             console.warn('[SM] forceSync called before unlock — ignoring');
             return;
         }
-        this._cloudDisabled  = false;
-        this._cloudFailCount = 0;
-        this._log('init', '🔄 forceSync() — cloud re-enabled, reloading data…');
+        console.debug('[SM] forceSync() starting…');
         try {
-            // Reset task view to today so re-load shows fresh data
             TaskManager._viewDate = null;
-            AppCalendar._container = null; // force calendar re-init with new data
+            AppCalendar._container = null;
             await diary.load();
             diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизировано' : 'Synced from cloud'));
         } catch(e) {
@@ -2408,7 +2232,6 @@ const StorageManager = {
         }
     }
 };
-
 
 // ================================================================
 //  TRANSLATIONS
@@ -2792,37 +2615,20 @@ const AppCalendar = {
 
 
 // ================================================================
-//  TASK MANAGER — Daily Tasks feature
-//  Data structure per day:  { tasks: [...], mood: 'great'|'normal'|'meh'|'hard'|'' }
-//  Task object: { id, text, important, completed, completedAt, createdAt }
-//
-//  iOS FIX NOTES (v5.1):
-//  1. _saveInProgress mutex — serialises all saves; prevents concurrent
-//     CloudStorage writes racing each other on slow iOS connections.
-//  2. _toggleLock set — prevents double-fire from iOS touchend+click on
-//     checkboxes and delete buttons (both events fire on a single tap).
-//  3. _addLock flag — prevents quickAdd() double-call from touchend+click
-//     on the add button (iOS fires both events for a single tap).
-//  4. Task IDs use Date.now() + Math.random() to guarantee uniqueness even
-//     if two taps land within the same millisecond.
-//  5. StorageManager.setItem now properly throws after exhausting retries
-//     so rollback catch blocks actually execute.
-//  6. Inline onclick replaced with JS event delegation on the task list —
-//     eliminates double-event firing on iOS for task-check and delete.
-//  7. Mood buttons wired via JS delegation, not inline onclick — same fix.
-//  8. _save() serialises: if a save is in-flight, the next one queues and
-//     runs immediately after, always with the latest in-memory state.
+//  TASK MANAGER v6.0 — Per-day sharding (t:YYYY-MM-DD)
+//  Each day stored in its own CloudStorage key (~500 B each),
+//  well under Telegram's 4096-byte per-key limit.
 // ================================================================
 const TaskManager = {
     _data: {},
     _viewDate:       null,
     _newTaskImp:     false,
 
-    // ── iOS safety: mutex for saves ───────────────────────────────
+    // ── Save mutex — prevents concurrent writes ─────────────────────
     _saveInProgress: false,
     _savePending:    false,   // a newer save arrived while one was in flight
 
-    // ── iOS safety: debounce locks ────────────────────────────────
+    // ── Debounce locks — prevent double-taps ─────────────────────
     _addLock:    false,       // prevents double quickAdd from touch+click
     _toggleLock: new Set(),   // IDs currently mid-toggle (prevents re-entry)
     _deleteLock: new Set(),   // IDs currently mid-delete
@@ -2859,7 +2665,6 @@ const TaskManager = {
 
     // ── Quick-add ─────────────────────────────────────────────────
     async quickAdd() {
-        // iOS: touchend fires before click — both call quickAdd() on a single tap.
         // _addLock prevents the second call from doing anything.
         if (this._addLock) return;
         this._addLock = true;
@@ -2919,7 +2724,7 @@ const TaskManager = {
 
     // ── Toggle completion ─────────────────────────────────────────
     async toggleTask(dateStr, taskId) {
-        // Prevent re-entrant toggle for the same task (iOS double-event)
+        // Prevent re-entrant toggle for the same task (double-event)
         const lockKey = dateStr + ':' + taskId;
         if (this._toggleLock.has(lockKey)) return;
         this._toggleLock.add(lockKey);
@@ -2991,7 +2796,7 @@ const TaskManager = {
     },
 
     // ── Mood ──────────────────────────────────────────────────────
-    // _moodLock prevents the iOS touchend+click double-fire on mood buttons
+    // _moodLock prevents double-fire on mood buttons
     _moodLock: false,
     async setMood(dateStr, mood) {
         if (this._moodLock) return;
@@ -3052,7 +2857,7 @@ const TaskManager = {
         let streak = 0;
         const today = this.today();
         for (let i = 0; ; i++) {
-            // Use local date (same as this.today()) to avoid UTC shift on iOS
+            // Use local date parts to avoid UTC shift
             const d  = new Date(); d.setDate(d.getDate() - i);
             const y  = d.getFullYear();
             const m  = String(d.getMonth() + 1).padStart(2, '0');
@@ -3129,9 +2934,7 @@ const TaskManager = {
         const days = [];
         for (let i = 0; i < 30; i++) {
             const d = new Date(); d.setDate(d.getDate() - i);
-            // FIX: use local date parts instead of toISOString() which returns
-            // UTC midnight — this gives the WRONG date for timezones behind UTC
-            // (e.g. Americas, Pacific) causing iOS users to lose today's tasks.
+            // Use local date parts to avoid UTC midnight shift in negative-offset timezones.
             const y  = d.getFullYear();
             const m  = String(d.getMonth() + 1).padStart(2, '0');
             const dd = String(d.getDate()).padStart(2, '0');
@@ -3270,7 +3073,7 @@ const TaskManager = {
         }
 
         // Task list — wired via JS delegation, NOT inline onclick
-        // This eliminates the iOS double-event-fire from inline handlers
+        // Task list uses a delegated listener to prevent double-fire
         const list    = document.getElementById('tasksList');
         const dayData = this.dayData(dateStr);
         const tasks   = dayData.tasks;
@@ -3295,8 +3098,7 @@ const TaskManager = {
                 }).join('');
             }
 
-            // Single delegated listener — replaces all inline onclick handlers.
-            // Using 'click' only (not touchend), so iOS fires it exactly once.
+            // Delegated click handler for task list.
             list.onclick = (e) => {
                 const item   = e.target.closest('[data-id]');
                 if (!item) return;
@@ -3330,7 +3132,7 @@ const TaskManager = {
                     ${m.icon}<span class="mood-label">${m.label}</span>
                 </button>`).join('');
 
-            // Delegated click — single event, no inline onclick, no double-fire on iOS
+            // Delegated click handler.
             moodRow.onclick = (e) => {
                 const btn = e.target.closest('[data-mood]');
                 if (btn) TaskManager.setMood(dateStr, btn.dataset.mood);
@@ -4325,7 +4127,6 @@ const diary = {
             _lsMsg.style.animation = 'lsMsgFade 0.4s ease both';
         };
         // Auto-increment progress naturally while data loads.
-        // iOS FIX: progress intentionally never stalls at 88% — we use a
         // linear increment so the bar always moves visually, even if cloud
         // reads are slow. The real completion is driven by _lsHide() below.
         let _lsHideCalled = false;
@@ -4336,9 +4137,7 @@ const diary = {
             _lsSetMsg(_lsMsgs[_lsMsgIdx]);
         }, 1800);
 
-        // iOS SAFETY NET: if diary.load() hangs for any reason
-        // (e.g. CloudStorage callback never fires on old iOS Telegram),
-        // force-complete the loading screen after 12 seconds.
+        // Safety net: force-complete loading screen after 12s
         const _lsSafetyTimer = setTimeout(() => {
             if (!_lsHideCalled) {
                 console.warn('[diary] Loading screen safety timeout — forcing hide');
@@ -4829,7 +4628,7 @@ const AchievementsUI = {
 
     // FIX: _save() now properly awaits StorageManager and uses exponential
     //      back-off (500 ms, then 2 000 ms) instead of a flat 1.5 s retry,
-    //      giving CloudStorage more time to recover on slow iOS connections.
+    //      giving CloudStorage more time to recover on slow connections.
     //      Two retries are kept because a single retry is sometimes not enough
     //      when Telegram is re-establishing the CloudStorage session.
     async _save() {
@@ -5012,11 +4811,10 @@ const AchievementsUI = {
 //  PERF HELPERS — v5.5
 // ================================================================
 
-// requestIdleCallback polyfill for iOS Safari
 window.ric = window.requestIdleCallback || (cb => setTimeout(() => cb({ timeRemaining: () => 50 }), 16));
 
 // ================================================================
-//  BOOT SEQUENCE — v5.5 (iOS-hardened)
+//  BOOT SEQUENCE — v6.0
 //  Order:
 //    1. Apply lock-screen language from LS hint (instant, no network)
 //    2. Wire lock-screen Enter key
@@ -5024,13 +4822,12 @@ window.ric = window.requestIdleCallback || (cb => setTimeout(() => cb({ timeRema
 //    4. If auto-unlock succeeds → diary.init() (full app boot)
 //    5. Otherwise → show lock screen, wait for user to type password
 //
-//  iOS FIX: wrapped in DOMContentLoaded so getElementById() calls are
 //  guaranteed to find their targets even if the script tag is parsed
 //  before some browsers have fully settled the DOM tree.
 // ================================================================
 function _runBoot() {
     (async function boot() {
-        // ── 0. Extra-safety: call ready() again in case head script ran too early
+        // ── 0. Ensure Telegram SDK is ready ──────────────────────────────
         try {
             if (window.Telegram && Telegram.WebApp) {
                 Telegram.WebApp.ready();
@@ -5049,8 +4846,7 @@ function _runBoot() {
             pi.addEventListener('keydown', e => {
                 if (e.key === 'Enter') EncryptionManager.unlock();
             });
-            // Delay focus so iOS keyboard doesn't pop up before user sees the screen
-            setTimeout(() => { try { pi.focus(); } catch(_) {} }, 150);
+            try { pi.focus(); } catch(_) {}
         }
 
         // ── 3. Attempt session auto-unlock ───────────────────────────
@@ -5082,8 +4878,6 @@ function _runBoot() {
         // ── 5. Otherwise lock screen stays open (already class="open") ─
     })();
 }
-
-// iOS FIX: ensure DOM is ready before running boot
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _runBoot);
 } else {
