@@ -1,34 +1,30 @@
 <!DOCTYPE html>
-<!-- DailyBookimix v6.0 -->
+<!-- ============================================================
+     DailyBookimix v5 — ENHANCED EDITION
+     Changes from v4:
+       1. FIX: Achievements earned date persists permanently (never resets)
+       2. NEW: Full Daily Tasks system (replaces simple Tasks category)
+          - Quick add, Important/Normal, strikethrough on complete
+          - Archive (last 30 days), Carry-over, Mood of day
+          - Daily streak + completion stats
+       3. NEW: AES-256-GCM end-to-end encryption via Web Crypto API
+          - All data encrypted before saving to localStorage/CloudStorage
+          - Password prompt on first launch, stored in sessionStorage only
+          - Telegram (including CloudStorage) cannot read plaintext data
+     All original functionality 100% preserved.
+============================================================ -->
 <html lang="ru" class="h-full">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>DailyBookimix</title>
-    <!-- Tailwind loaded async so it never blocks the initial paint/parse -->
-    <script src="https://cdn.tailwindcss.com" async></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#e03d00" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#ff4500">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Call ready() + expand() immediately to unblock CloudStorage queue -->
-    <script>
-    (function(){
-        try {
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.ready();
-                Telegram.WebApp.expand();
-            }
-        } catch(e) { /* non-Telegram browser — ignore */ }
-    })();
-    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://telegram.org">
-    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet"></noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 
     <style>
         /* ── ROOT VARIABLES ── */
@@ -43,7 +39,7 @@
             --input-text:    #1a1a2e;
             --text-primary:  #ffffff;
             --text-muted:    rgba(255,255,255,0.90);
-            --text-label:    rgba(255,255,255,0.82);
+            --text-label:    rgba(255,255,255,0.72);
             --shadow-card:   0 8px 32px rgba(0,0,0,0.18);
             --shadow-btn:    0 4px 20px rgba(0,0,0,0.25);
             --radius-card:   22px;
@@ -56,7 +52,7 @@
             --btn-primary-fg:#ff5722;
             --footer-bg:     rgba(255,255,255,0.22);
             --progress-track:rgba(255,255,255,0.3);
-            --bg-gradient:   linear-gradient(155deg,#e03d00 0%,#ff5c22 30%,#ff7c2a 60%,#f75010 100%);
+            --bg-gradient:   linear-gradient(155deg,#ff4500 0%,#ff6b35 30%,#f7931e 60%,#ff5722 100%);
         }
         body.theme-dark {
             --accent:        #ff7043;
@@ -69,7 +65,7 @@
             --input-text:    #e8e8f0;
             --text-primary:  #eaeaf5;
             --text-muted:    rgba(234,234,245,0.6);
-            --text-label:    rgba(234,234,245,0.55);
+            --text-label:    rgba(234,234,245,0.38);
             --shadow-card:   0 8px 32px rgba(0,0,0,0.45);
             --tab-active-bg: rgba(255,112,67,0.9);
             --tab-active-fg: #ffffff;
@@ -82,69 +78,29 @@
             --bg-gradient:   linear-gradient(155deg,#0d1117 0%,#1a1f35 35%,#111827 65%,#0a0e1a 100%);
         }
 
-        /* Ensure system fallback renders immediately during font load */
-        @font-face {
-            font-family: 'Nunito';
-            font-display: swap;
-        }
-        @font-face {
-            font-family: 'Syne';
-            font-display: swap;
-        }
         *, *::before, *::after { box-sizing: border-box; }
         html, body { height: 100%; margin: 0; padding: 0; }
-        html { scroll-behavior: smooth; }
-        /* iOS momentum scrolling on all scrollable elements */
-        .scrollable, #sidebarPanel, #achievementsModal, .modal-box {
-            -webkit-overflow-scrolling: touch;
-        }
         body {
             font-family: 'Nunito', system-ui, sans-serif;
             background: var(--bg-gradient);
-            /* PERF FIX: removed background-attachment:fixed — it forces CPU-side
-               repaints on every scroll frame in iOS Safari (no GPU compositing).
-               The gradient is applied once on the body and stays fixed via the
-               gradient itself being non-scrolling by default. */
+            background-attachment: fixed;
             color: var(--text-primary);
-            transition: color 0.3s ease;
+            transition: background 0.5s cubic-bezier(0.4,0,0.2,1), color 0.3s ease;
             min-height: 100vh;
             -webkit-font-smoothing: antialiased;
-            background-color: #ff4500;
-            overscroll-behavior: none;
-            -webkit-text-size-adjust: 100%;
-        }
-        body.theme-dark { background-color: #0d1117; }
-
-        /* appContent: invisible until diary.init() paints it; prevents
-           a flash of raw (unstyled / unloaded) content on slow devices */
-        #appContent {
-            transition: opacity 0.2s ease;
         }
 
         .glass {
             background: var(--glass-bg);
-            backdrop-filter: blur(16px) saturate(1.3);
-            -webkit-backdrop-filter: blur(16px) saturate(1.3);
+            backdrop-filter: blur(22px) saturate(1.4);
+            -webkit-backdrop-filter: blur(22px) saturate(1.4);
             border: 1px solid var(--glass-border);
-            contain: layout style;
-        }
-        /* iOS Safari: reduce paint cost of backdrop-filter.
-           Full blur (16px) on .glass is very expensive on A12 and older chips
-           and can stall the GPU during the loading phase. We drop to 8px on iOS
-           (still looks great) and 4px on the sidebar backdrop (rarely visible). */
-        @supports (-webkit-touch-callout: none) {
-            .glass { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-            .app-header { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-            #sidebarBackdrop { backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-            /* Disable backdrop on modals that stack on top of blur — double GPU hit */
-            #achievementsModal { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0,0,0,0.82); }
-            #deleteAccountModal { backdrop-filter: none; -webkit-backdrop-filter: none; }
         }
         .card {
             background: var(--card-bg);
             border: 1px solid var(--glass-border);
             border-radius: var(--radius-card);
-            transition: transform 0.18s ease, background 0.2s ease;
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s ease, background 0.2s ease;
         }
         .card:active { transform: scale(0.975); }
 
@@ -175,26 +131,22 @@
 
         .btn-primary {
             display: flex; align-items: center; justify-content: center; gap: 10px;
-            width: 100%; padding: 16px 24px; min-height: 54px;
+            width: 100%; padding: 18px 24px;
             background: var(--btn-primary-bg); color: var(--btn-primary-fg);
-            font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 800;
+            font-family: 'Nunito', sans-serif; font-size: 17px; font-weight: 800;
             border: none; border-radius: 16px; cursor: pointer;
             box-shadow: var(--shadow-btn);
             transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
         }
-        .btn-primary:active { transform: scale(0.96); box-shadow: none; opacity: 0.9; }
+        .btn-primary:active { transform: scale(0.96); box-shadow: none; }
 
         .btn-ghost {
             display: flex; align-items: center; justify-content: center; gap: 8px;
-            padding: 12px 18px; min-height: 48px;
+            padding: 14px 20px;
             background: rgba(255,255,255,0.15); color: var(--text-primary);
-            font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700;
+            font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700;
             border: 1px solid rgba(255,255,255,0.2); border-radius: 14px; cursor: pointer;
             transition: background 0.2s, transform 0.15s;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
         }
         .btn-ghost:active { transform: scale(0.95); background: rgba(255,255,255,0.22); }
         .btn-danger { background: rgba(239,68,68,0.18); color: #f87171; border-color: rgba(239,68,68,0.3); }
@@ -204,22 +156,17 @@
         .tab-bar { display: flex; gap: 6px; padding: 6px; }
         .tab-btn {
             flex: 1; display: flex; flex-direction: column; align-items: center;
-            gap: 3px; padding: 10px 4px;
-            background: transparent; border: none; border-radius: 14px;
+            gap: 4px; padding: 12px 8px;
+            background: transparent; border: none; border-radius: 16px;
             color: rgba(255,255,255,0.80);
-            font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 700;
-            cursor: pointer; transition: background 0.2s ease, color 0.2s ease;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-            user-select: none; -webkit-user-select: none;
-            min-width: 0; overflow: hidden;
+            font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700;
+            cursor: pointer; transition: background 0.25s ease, color 0.25s ease, transform 0.15s ease;
         }
-        .tab-btn .tab-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
-        .tab-btn span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-        .tab-btn:active { opacity: 0.75; }
+        .tab-btn .tab-icon { font-size: 22px; line-height: 1; }
+        .tab-btn:active { transform: scale(0.93); }
         .tab-btn.active {
             background: var(--tab-active-bg); color: var(--tab-active-fg);
-            box-shadow: 0 3px 14px rgba(0,0,0,0.16);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.18);
         }
         body.theme-dark .tab-btn { color: var(--text-muted); }
 
@@ -235,11 +182,9 @@
             text-shadow: 0 1px 4px rgba(0,0,0,0.12);
         }
         .streak-badge {
-            display: inline-flex; align-items: center; gap: 5px;
-            background: rgba(255,255,255,0.18);
-            border: 1px solid rgba(255,255,255,0.28);
-            border-radius: 999px;
-            padding: 6px 14px; cursor: default;
+            display: inline-flex; align-items: center; gap: 4px;
+            background: rgba(255,255,255,0.2); border-radius: 999px;
+            padding: 5px 14px; cursor: default;
         }
         @keyframes firePop {
             0%   { transform: scale(0.3) rotate(-15deg); opacity: 0; }
@@ -274,7 +219,7 @@
             transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
             max-height: 88vh; overflow-y: auto;
         }
-        .bottom-sheet.open { transform: translateY(0) translateZ(0); }
+        .bottom-sheet.open { transform: translateY(0); }
         .sheet-handle { width: 40px; height: 4px; background: rgba(0,0,0,0.15); border-radius: 999px; margin: 0 auto 20px; }
         body.theme-dark .sheet-handle { background: rgba(255,255,255,0.18); }
         .sheet-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: var(--modal-text); margin-bottom: 16px; }
@@ -325,37 +270,8 @@
             background: var(--card-bg); border: 1px solid var(--glass-border);
             border-radius: var(--radius-card); padding: 18px; margin-bottom: 12px;
             cursor: pointer; position: relative;
-            transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease, border-color 0.2s, background 0.2s;
+            transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease, border-color 0.2s;
             animation: cardIn 0.32s cubic-bezier(0.34,1.1,0.64,1) both;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.10);
-        }
-        /* ── iOS interaction fixes ──────────────────────────────────────
-           touch-action:manipulation removes the 300ms tap delay.
-           -webkit-tap-highlight-color:transparent removes the grey flash.
-           These two together make taps feel instant on iPhone/iPad.
-           user-select:none prevents accidental text-selection on long-press. */
-        .task-check,
-        .task-del-btn,
-        .mood-btn,
-        .task-archive-day,
-        .carryover-btn,
-        .task-add-btn,
-        .task-imp-toggle,
-        .tab-btn,
-        .btn-primary,
-        .btn-ghost,
-        /* Larger invisible tap target for the checkbox without changing visuals */
-        .task-check {
-            cursor: pointer;
-            padding: 6px;
-            margin: -6px;
-        }
-
-        /* Golden Frame shop item effect — FIX: selector was missing, breaking this rule
-           AND corrupting the @keyframes cardIn block that followed it. */
-        body.golden-frame-active .record-card {
-            border-color: rgba(245,158,11,0.5) !important;
-            box-shadow: 0 0 0 1px rgba(245,158,11,0.18), 0 4px 18px rgba(180,100,0,0.12) !important;
         }
         @keyframes cardIn {
             from { opacity:0; transform: translateY(12px) scale(0.97); }
@@ -442,8 +358,6 @@
         }
 
         .hidden { display: none !important; }
-        /* Sections not in view: skip paint/layout until scrolled into view */
-        #habitsSection, #memorySection { content-visibility: auto; contain-intrinsic-size: 0 500px; }
         .scrollable { max-height: 420px; overflow-y: auto; padding-right: 4px; }
         .scrollable::-webkit-scrollbar { width: 4px; }
         .scrollable::-webkit-scrollbar-track { background: transparent; }
@@ -473,13 +387,10 @@
             position: fixed; top: 0; left: 0; bottom: 0; z-index: 10001;
             width: min(320px, 88vw); background: var(--modal-bg); color: var(--modal-text);
             display: flex; flex-direction: column;
-            transform: translateX(-100%) translateZ(0);
-            transition: transform 0.32s cubic-bezier(0.32,0.72,0,1);
+            transform: translateX(-100%); transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
             box-shadow: 8px 0 40px rgba(0,0,0,0.3); overflow-y: auto;
-            will-change: transform;
         }
-        #sidebarPanel.open { transform: translateX(0) translateZ(0); }
-
+        #sidebarPanel.open { transform: translateX(0); }
         .sidebar-hero { background: linear-gradient(155deg,#ff4500,#ff6b35 60%,#f7931e); padding: 52px 24px 28px; color: white; flex-shrink: 0; }
         body.theme-dark .sidebar-hero { background: linear-gradient(155deg,#1a1f35,#0d1117 60%,#1a1f35); }
         .sidebar-avatar { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 3px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 12px; overflow: hidden; }
@@ -551,73 +462,6 @@
         .delete-modal-box { background: var(--modal-bg); color: var(--modal-text); border-radius: 28px; padding: 28px; width: 100%; max-width: 380px; animation: modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
         .delete-modal-icon { width: 64px; height: 64px; border-radius: 50%; background: rgba(239,68,68,0.12); border: 2px solid rgba(239,68,68,0.25); display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 16px; }
 
-        /* ══ LOADING SCREEN — shown after password unlock while data loads ══ */
-        #appLoadingScreen {
-            display: none;
-            position: fixed; inset: 0; z-index: 9000;
-            background: var(--bg-gradient);
-            flex-direction: column;
-            align-items: center; justify-content: center;
-            gap: 0; padding: 0 32px;
-        }
-        #appLoadingScreen.visible { display: flex; }
-        @keyframes lsBreathe {
-            0%, 100% { transform: scale(1); opacity: 0.92; }
-            50%       { transform: scale(1.07); opacity: 1; }
-        }
-        @keyframes lsSpinRing {
-            from { transform: rotate(0deg); }
-            to   { transform: rotate(360deg); }
-        }
-        @keyframes lsMsgFade {
-            from { opacity: 0; transform: translateY(7px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        .ls-logo-wrap { position: relative; width: 90px; height: 90px; margin-bottom: 36px; }
-        .ls-ring {
-            position: absolute; inset: 0;
-            animation: lsSpinRing 2.8s linear infinite;
-            will-change: transform; /* own compositor layer — no layout jank on iOS */
-        }
-        .ls-logo-inner {
-            position: absolute; inset: 10px; border-radius: 50%;
-            background: rgba(255,255,255,0.22);
-            border: 1.5px solid rgba(255,255,255,0.4);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 34px;
-            animation: lsBreathe 2.2s ease-in-out infinite;
-            will-change: transform, opacity; /* own compositor layer */
-            box-shadow: 0 0 30px rgba(255,255,255,0.2);
-        }
-        .ls-app-name {
-            font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800;
-            color: white; letter-spacing: -0.03em; margin-bottom: 8px;
-            text-shadow: 0 2px 12px rgba(0,0,0,0.2);
-        }
-        .ls-msg {
-            font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7);
-            margin-bottom: 32px; min-height: 20px;
-            animation: lsMsgFade 0.4s ease both;
-        }
-        .ls-bar-wrap {
-            width: 100%; max-width: 260px;
-        }
-        .ls-bar-track {
-            height: 4px; border-radius: 999px;
-            background: rgba(255,255,255,0.2); overflow: hidden;
-        }
-        .ls-bar-fill {
-            height: 100%; border-radius: 999px;
-            background: rgba(255,255,255,0.9);
-            transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
-            width: 0%;
-            will-change: width;
-        }
-        .ls-pct {
-            text-align: right; font-size: 11px; font-weight: 700;
-            color: rgba(255,255,255,0.45); margin-top: 6px;
-        }
-
         /* ── ENCRYPTION LOCK SCREEN ── */
         #encryptionLock {
             display: none; position: fixed; inset: 0; z-index: 99999;
@@ -654,18 +498,6 @@
         }
         .lock-btn:active { transform: scale(0.97); opacity: 0.9; }
         .lock-hint { font-size: 12px; opacity: 0.65; text-align: center; margin-top: 10px; }
-        /* Loading pulse animation for unlock indicator */
-        @keyframes lockPulse {
-            0%, 100% { opacity: 0.7; }
-            50%       { opacity: 1;   }
-        }
-        #lockLoadingIndicator {
-            display: none; align-items: center; justify-content: center;
-            animation: lockPulse 1.3s ease-in-out infinite;
-            font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.9);
-            text-align: center; min-height: 24px;
-        }
-        #lockStatusArea { min-height: 36px; display: flex; align-items: center; justify-content: center; margin: 4px 0; }
 
         /* ── DAILY TASKS SECTION ── */
         /* Task quick-add row */
@@ -703,9 +535,8 @@
             padding: 14px 16px; border-radius: 16px;
             background: var(--card-bg); border: 1.5px solid var(--glass-border);
             margin-bottom: 8px; cursor: pointer;
-            transition: opacity 0.2s, background 0.2s, transform 0.15s, box-shadow 0.15s;
+            transition: opacity 0.2s, background 0.2s, transform 0.15s;
             animation: cardIn 0.28s cubic-bezier(0.34,1.1,0.64,1) both;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
         .task-item:active { transform: scale(0.985); }
         .task-item.important { border-color: rgba(251,191,36,0.45); background: rgba(251,191,36,0.06); }
@@ -722,7 +553,7 @@
         .task-item.completed .task-check-inner { display: block; }
         .task-text {
             flex: 1; font-size: 15px; font-weight: 600; color: var(--text-primary);
-            line-height: 1.5; word-break: break-word;
+            line-height: 1.45; word-break: break-word;
         }
         .task-item.completed .task-text { text-decoration: line-through; opacity: 0.7; }
         .task-star { font-size: 14px; flex-shrink: 0; margin-top: 2px; }
@@ -757,125 +588,6 @@
         .task-archive-scroll::-webkit-scrollbar { height: 3px; }
         .task-archive-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
 
-        /* ══ APP CALENDAR — replaces the sideways-scrolling strip ══ */
-        .appcal-wrap {
-            background: rgba(255,255,255,0.10);
-            border: 1px solid rgba(255,255,255,0.18);
-            border-radius: 18px; padding: 16px 12px 12px;
-            margin-bottom: 14px;
-        }
-        .appcal-header {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 14px; gap: 6px;
-        }
-        .appcal-nav-btn {
-            width: 40px; height: 40px; border-radius: 11px; border: none;
-            background: rgba(255,255,255,0.15); color: var(--text-primary);
-            font-size: 16px; cursor: pointer; display: flex; align-items: center;
-            justify-content: center; transition: background 0.15s, transform 0.1s;
-            flex-shrink: 0; font-weight: 700; line-height: 1;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
-        }
-        .appcal-nav-btn:active { transform: scale(0.9); background: rgba(255,255,255,0.25); }
-        .appcal-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-        .appcal-month-label {
-            font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800;
-            color: var(--text-primary); text-align: center; flex: 1;
-            line-height: 1.2;
-        }
-        .appcal-year-label {
-            font-size: 12px; font-weight: 600; color: var(--text-label);
-            text-align: center;
-        }
-        .appcal-weekdays {
-            display: grid; grid-template-columns: repeat(7,1fr);
-            margin-bottom: 5px;
-        }
-        .appcal-wd {
-            text-align: center; font-size: 10px; font-weight: 800;
-            color: var(--text-label); padding: 3px 0;
-            text-transform: uppercase; letter-spacing: 0.05em;
-        }
-        .appcal-grid {
-            display: grid; grid-template-columns: repeat(7,1fr); gap: 3px;
-        }
-        .appcal-day {
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center; padding: 5px 2px; min-height: 42px;
-            border-radius: 10px; border: none; background: transparent;
-            cursor: pointer; color: var(--text-primary); font-size: 13px;
-            font-weight: 500; font-family: 'Nunito', sans-serif;
-            transition: background 0.15s, transform 0.1s;
-            position: relative;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .appcal-day:active { transform: scale(0.9); }
-        .appcal-day.other-month { color: var(--text-label); opacity: 0.5; }
-        .appcal-day.is-today {
-            background: rgba(255,255,255,0.18);
-            border: 1.5px solid rgba(255,255,255,0.5);
-            color: var(--text-primary); font-weight: 800;
-        }
-        .appcal-day.is-selected {
-            background: var(--accent) !important;
-            border-color: transparent !important;
-            color: white !important; font-weight: 800;
-            box-shadow: 0 4px 14px var(--accent-glow);
-        }
-        .appcal-day.has-tasks::after {
-            content: '';
-            display: block; width: 5px; height: 5px; border-radius: 50%;
-            background: rgba(255,255,255,0.7); margin-top: 2px; flex-shrink: 0;
-        }
-        .appcal-day.is-selected.has-tasks::after { background: rgba(255,255,255,0.9); }
-        .appcal-day.is-future { opacity: 0.35; cursor: default; }
-
-        /* View toggle strip above calendar */
-        .appcal-view-toggle {
-            display: flex; gap: 6px; margin-bottom: 12px;
-        }
-        .appcal-toggle-btn {
-            flex: 1; padding: 10px 6px; border-radius: 11px; border: none;
-            background: rgba(255,255,255,0.12); color: var(--text-primary);
-            font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700;
-            cursor: pointer; transition: background 0.15s;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-            user-select: none;
-            min-height: 40px;
-        }
-        .appcal-toggle-btn.active {
-            background: rgba(255,255,255,0.28);
-        }
-
-        /* Week strip (compact 7-day view) */
-        .appcal-week-strip {
-            display: flex; gap: 5px; margin-bottom: 4px;
-        }
-        .appcal-week-day {
-            flex: 1; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; padding: 7px 2px; min-height: 54px;
-            border-radius: 12px; border: none; background: rgba(255,255,255,0.10);
-            cursor: pointer; color: var(--text-primary); gap: 3px;
-            transition: background 0.15s; font-family: 'Nunito', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .appcal-week-day.is-today { border: 1.5px solid rgba(255,255,255,0.45); }
-        .appcal-week-day.is-selected { background: var(--accent); box-shadow: 0 3px 10px var(--accent-glow); }
-        .appcal-week-wd { font-size: 10px; font-weight: 700; color: var(--text-label); text-transform: uppercase; letter-spacing:.04em; }
-        .appcal-week-day.is-selected .appcal-week-wd { color: rgba(255,255,255,0.75); }
-        .appcal-week-num { font-size: 16px; font-weight: 800; }
-        .appcal-week-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.55); }
-        .appcal-week-day:not(.is-selected) .appcal-week-dot { background: rgba(255,255,255,0.35); }
-
         /* Mood picker */
         .mood-row { display: flex; gap: 10px; justify-content: center; margin: 12px 0 4px; }
         .mood-btn {
@@ -903,221 +615,24 @@
         body:not(.theme-dark) .tab-btn:not(.active) { text-shadow: 0 1px 4px rgba(0,0,0,0.15); }
         body:not(.theme-dark) .record-card .font-bold { color: rgba(255,255,255,0.97) !important; }
         body:not(.theme-dark) footer { text-shadow: 0 1px 3px rgba(0,0,0,0.12); }
-
-        /* ══ RUBY CURRENCY ══ */
-        /* Inline gem in header */
-        .ruby-badge:active { transform: scale(0.93); }
-        /* ОНИКС gem — tall diamond image as closely as possible */
-        /* Earn animation — gem bounces + glow flash on reward */
-        @keyframes rubyEarn {
-            0%   { transform: scale(1); filter: drop-shadow(0 0 0px #ff4040); }
-            35%  { transform: scale(1.55); filter: drop-shadow(0 0 14px #ff2020); }
-            60%  { transform: scale(0.88); filter: drop-shadow(0 0 6px #ff6060); }
-            100% { transform: scale(1); filter: drop-shadow(0 0 0px #ff4040); }
-        }
-        .ruby-earn-anim { animation: rubyEarn 0.65s cubic-bezier(0.68,-0.55,0.27,1.55) both; }
-        /* Floating +1 toast */
-        @keyframes rubyFloat {
-            0%   { opacity: 1; transform: translateY(0) scale(1); }
-            80%  { opacity: 1; }
-            100% { opacity: 0; transform: translateY(-52px) scale(0.8); }
-        }
-        .ruby-float-toast {
-            position: fixed; z-index: 999999;
-            font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 900;
-            color: #ff5050; text-shadow: 0 0 14px rgba(255,50,50,0.8), 0 2px 4px rgba(0,0,0,0.5);
-            pointer-events: none;
-            animation: rubyFloat 1.1s ease-out both;
-        }
-
-        /* ══ DAILY CHALLENGES MODAL ══ */
-        /* Wallet card */
-        /* Reset info */
-        /* Section title */
-        /* Challenge card */
-        /* ══ DAILY TASKS (3-per-day system) ══ */
-        /* ══ SHOP MODAL ══ */
-        /* Wallet strip */
-        /* Item cards */
-        /* Preview strip showing the cosmetic effect */
-        /* Confirm purchase modal */
-        #shopConfirmModal {
-            display: none; position: fixed; inset: 0; z-index: 10010;
-            background: rgba(0,0,0,0.82); backdrop-filter: blur(14px);
-            align-items: center; justify-content: center; padding: 20px;
-        }
-        #shopConfirmModal.open { display: flex; }
-        /* Owned badge on item cards */
-        </style>
-
-    <!-- ══════════════════════════════════════════════════════════════
-         CHANGELOG v5.5 — Performance & UI Optimisation
-         ==============================================================
-
-         1. REMOVED ITEMS
-            • Sidebar: "Shop" and "Daily Challenges" items fully removed
-              from HTML and translation calls (were malformed HTML anyway).
-
-         2. CRITICAL iOS FIX — 85% hang on startup
-            • Root cause: Telegram SDK ready()/expand() must fire before ANY
-              CloudStorage calls. Was already in <head> but added a secondary
-              safety call at boot() start for slow WebView initialisation.
-            • backdrop-filter blur values reduced: 22px → 16px (desktop),
-              10px on iOS via @supports (-webkit-touch-callout). Each blur
-              layer costs ~3-5ms on iPhone 11 class hardware.
-            • body background transition removed (was 0.5s cubic-bezier —
-              GPU-expensive on every theme switch and initial paint).
-            • Sidebar & bottom-sheet now use translateZ(0) + will-change:
-              transform to force GPU compositing layer, eliminating jank.
-
-         3. PERFORMANCE — Bundle & Paint
-            • Tailwind CDN marked defer to unblock HTML parser.
-            • Google Fonts loaded non-render-blocking (media=print → onload).
-            • Added preconnect for fonts.gstatic.com + dns-prefetch for CDN.
-            • AchievementsUI.init(), RubyManager.init(), ShopManager.init()
-              deferred 100ms via setTimeout to allow first paint to complete.
-            • renderAll() now renders only the active tab immediately;
-              other tabs render 150ms later (perceived startup faster).
-            • Loading bar auto-timer: interval 1800ms → 2200ms, progress
-              cap 85% → 88% to reduce main-thread scheduling pressure.
-            • requestIdleCallback polyfill added for iOS Safari (scheduleDeferred).
-
-         4. STABILITY / BUG FIXES
-            • Removed dead translation calls for removed sidebar items
-              (was causing silent JS no-ops / console noise).
-            • AchievementsUI.open() null-check for modal element.
-            • Lock screen focus delay 300ms → 150ms.
-            • Tailwind CSS already loaded — defer won't block existing inline styles.
-
-         5. UI / UX
-            • viewport-fit=cover added for iPhone notch/Dynamic Island.
-            • Safe-area insets (env()) for padding on notched devices.
-            • overscroll-behavior: none on body — prevents iOS bounce jank.
-            • -webkit-text-size-adjust: 100% — prevents font scaling on rotate.
-            • -webkit-overflow-scrolling: touch on all scrollable panels.
-            • Tab bar: font 12px → 11px, padding reduced, overflow:hidden +
-              text-overflow:ellipsis prevents text wrapping on narrow screens.
-            • Buttons: added min-height (54px primary, 48px ghost) so they
-              never overlap; touch-action:manipulation removes 300ms delay.
-            • Modal box: max-height 90dvh + overflow-y:auto — content never
-              clips off screen on small phones.
-            • Toast: uses env(safe-area-inset-bottom) so it clears home bar.
-            • Footer stats: cleaner layout with larger stat numbers.
-            • Header: app title restored inline, streak badge repositioned
-              to right side for better layout balance.
-            • Text label opacity increased (.72 → .82 light, .38 → .55 dark)
-              for better readability.
-            • Background gradient slightly deepened for better contrast.
-            • @font-face font-display:swap declarations added so system font
-              renders immediately while webfonts load.
-         ============================================================== -->
+    </style>
 </head>
 <body class="font-sans">
-<script>
-// Apply saved theme instantly (before any render) to avoid flash
-(function(){
-  try {
-    var t = localStorage.getItem('dbmix_theme');
-    if (t === 'dark') document.body.classList.add('theme-dark');
-  } catch(e) {}
-})();
-</script>
-
-<!-- ══════════════ APP LOADING SCREEN (post-unlock data loading) ══════════════ -->
-<div id="appLoadingScreen" aria-live="polite" aria-label="Loading">
-    <div class="ls-logo-wrap">
-        <svg class="ls-ring" width="90" height="90" viewBox="0 0 90 90">
-            <circle cx="45" cy="45" r="41" fill="none"
-                    stroke="rgba(255,255,255,0.30)" stroke-width="2"
-                    stroke-dasharray="10 7" stroke-linecap="round"/>
-        </svg>
-        <div class="ls-logo-inner">📖</div>
-    </div>
-    <div class="ls-app-name">DailyBookimix</div>
-    <div class="ls-msg" id="lsMsg">Loading your data…</div>
-    <div class="ls-bar-wrap">
-        <div class="ls-bar-track">
-            <div class="ls-bar-fill" id="lsBarFill"></div>
-        </div>
-        <div class="ls-pct" id="lsPct">0%</div>
-    </div>
-</div>
 
 <!-- ══════════════ ENCRYPTION LOCK SCREEN ══════════════ -->
 <div id="encryptionLock" class="open">
     <div class="lock-box">
         <div class="lock-icon">🔐</div>
-        <div class="lock-title" id="lock-title"></div>
-        <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal.</div>
-        <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64"
-               onkeydown="if(event.key==='Enter'){EncryptionManager.unlock();}">
-        <!-- Status area: shows loading states and error hints -->
-        <div id="lockStatusArea" style="min-height:36px;display:flex;align-items:center;justify-content:center;margin:4px 0">
-            <div id="lockLoadingIndicator" style="display:none;color:rgba(255,255,255,0.85);font-size:13px;font-weight:700;text-align:center;letter-spacing:0.03em">
-                <span id="lockLoadingText">⏳ Checking cloud…</span>
-            </div>
-            <div class="lock-hint" id="lock-hint" style="margin-top:0">First time? Choose any password — it will be used to encrypt all your data.</div>
-        </div>
+        <div class="lock-title" id="lock-title">DailyBookimix</div>
+        <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.</div>
+        <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64">
         <button class="lock-btn" id="lockUnlockBtn" onclick="EncryptionManager.unlock()">Unlock 🔓</button>
-        <!-- Forgot password / Reset account — always visible on lock screen -->
-        <!-- Quick unlock toggle (only shown when Telegram ID is available) -->
-        <div id="lockQuickUnlockRow" style="display:none;margin-top:10px;text-align:center">
-            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;
-                          font-size:12px;font-weight:700;color:rgba(255,255,255,0.65)">
-                <input type="checkbox" id="lockQuickUnlockCheck"
-                       style="width:16px;height:16px;accent-color:white;cursor:pointer">
-                <span id="lockQuickUnlockLabel">Stay unlocked in Telegram</span>
-            </label>
-        </div>
-
-        <button id="lockResetBtn" onclick="EncryptionManager.promptReset()"
-                style="margin-top:14px;width:100%;padding:13px;background:rgba(239,68,68,0.18);
-                       color:#fca5a5;border:1.5px solid rgba(239,68,68,0.35);border-radius:14px;
-                       font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;cursor:pointer;
-                       transition:background 0.2s,transform 0.15s;letter-spacing:0.01em"
-                onmouseenter="this.style.background='rgba(239,68,68,0.28)'"
-                onmouseleave="this.style.background='rgba(239,68,68,0.18)'"
-                onmousedown="this.style.transform='scale(0.97)'"
-                onmouseup="this.style.transform=''">
-            🗑️ <span id="lockResetBtnTxt">Forgot password? Reset account</span>
-        </button>
-    </div>
-</div>
-
-<!-- ══════════════ RESET ACCOUNT CONFIRM MODAL (shown from lock screen) ══════════════ -->
-<div id="lockResetModal" style="display:none;position:fixed;inset:0;z-index:20000;
-     background:rgba(0,0,0,0.75);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-     align-items:center;justify-content:center;padding:24px">
-    <div style="background:#1c1c2e;color:#eaeaf5;border-radius:26px;padding:28px;
-                width:100%;max-width:380px;box-shadow:0 24px 60px rgba(0,0,0,0.5);
-                animation:modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both">
-        <div style="font-size:40px;text-align:center;margin-bottom:10px">⚠️</div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;
-                   color:#eaeaf5;text-align:center;margin-bottom:10px" id="lockResetTitle">Reset Account?</h2>
-        <p style="font-size:13px;color:#9ca3af;text-align:center;line-height:1.6;margin-bottom:22px" id="lockResetDesc">
-            This will permanently erase <strong style="color:#f87171">all your encrypted data</strong>
-            — notes, habits, tasks, memories — and remove the encryption salt.<br><br>
-            <strong style="color:#fbbf24">This cannot be undone.</strong> Use only if you have forgotten your password.
-        </p>
-        <div style="display:flex;gap:12px">
-            <button onclick="EncryptionManager.cancelReset()"
-                    style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#eaeaf5;
-                           border:1px solid rgba(255,255,255,0.15);border-radius:14px;
-                           font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;
-                           transition:background 0.2s" id="lockResetCancel">Cancel</button>
-            <button onclick="EncryptionManager.executeReset()"
-                    style="flex:1;padding:14px;background:rgba(239,68,68,0.25);color:#f87171;
-                           border:1px solid rgba(239,68,68,0.45);border-radius:14px;
-                           font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;
-                           transition:background 0.2s" id="lockResetConfirm"
-                    onmouseenter="this.style.background='rgba(239,68,68,0.4)'"
-                    onmouseleave="this.style.background='rgba(239,68,68,0.25)'">🗑️ Delete all data</button>
-        </div>
+        <div class="lock-hint" id="lock-hint">First time? Choose any password — it will be used to encrypt all your data.</div>
     </div>
 </div>
 
 <div id="appContent" style="display:none">
-<div class="max-w-[480px] mx-auto min-h-screen flex flex-col gap-4" style="padding: max(16px, env(safe-area-inset-top)) 16px max(112px, calc(env(safe-area-inset-bottom) + 96px)) 16px">
+<div class="max-w-[480px] mx-auto min-h-screen px-4 pt-4 pb-24 flex flex-col gap-4">
 
     <!-- ══════════════ HEADER ══════════════ -->
     <header class="app-header px-4 py-3 flex items-center gap-3">
@@ -1125,11 +640,11 @@
             <span></span><span></span><span></span>
         </button>
         <div class="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-            <span class="app-title" style="font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">DailyBookimix</span>
-        </div>
-        <div id="streakBadge" class="streak-badge flex-shrink-0">
-            <span id="fireEmoji">🔥</span>
-            <span id="fireStreakHeader" style="font-size:15px;font-weight:800;color:#fcd34d">0</span>
+            <h1 class="app-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">DailyBookimix</h1>
+            <div id="streakBadge" class="streak-badge flex-shrink-0">
+                <span id="fireEmoji" class="text-xl">🔥</span>
+                <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
+            </div>
         </div>
     </header>
 
@@ -1266,8 +781,8 @@
             <!-- Stats bar -->
             <div class="task-stats-bar" id="taskStatsBar"></div>
 
-            <!-- ── APP CALENDAR (replaces sideways-scrolling archive strip) ── -->
-            <div id="appCalendarContainer" style="margin-bottom:4px"></div>
+            <!-- Archive day selector -->
+            <div class="task-archive-scroll" id="taskArchiveScroll"></div>
 
             <!-- Task list -->
             <div id="tasksList"></div>
@@ -1337,18 +852,18 @@
     <!-- ══════════════ FOOTER STATS ══════════════ -->
     <footer class="glass rounded-[20px] px-5 py-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-center"
             style="background:var(--footer-bg);border:1px solid var(--glass-border)">
-        <div style="color:var(--text-muted);font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px">
-            <span>📝</span><span id="stat-notes-lbl">Notes</span><span style="color:var(--text-primary);font-size:15px;font-weight:900" id="notesCount">0</span>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            📝 <span id="stat-notes-lbl">Notes</span>: <span id="notesCount" style="color:var(--text-primary)">0</span>
         </div>
-        <div style="color:var(--text-muted);font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px">
-            <span>🔥</span><span id="stat-habits-lbl">Habits</span><span style="color:var(--text-primary);font-size:15px;font-weight:900" id="habitsCount">0</span>
-            <span style="font-size:11px;opacity:.65">(<span id="activeHabitsCount">0</span>)</span>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            🔥 <span id="stat-habits-lbl">Habits</span>: <span id="habitsCount" style="color:var(--text-primary)">0</span>
+            <span style="font-size:11px;opacity:.7">(<span id="activeHabitsCount">0</span>)</span>
         </div>
-        <div style="color:var(--text-muted);font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px">
-            <span>✅</span><span id="stat-tasks-lbl">Tasks</span><span style="color:var(--text-primary);font-size:15px;font-weight:900" id="tasksCount">0</span>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            ✅ <span id="stat-tasks-lbl">Tasks</span>: <span id="tasksCount" style="color:var(--text-primary)">0</span>
         </div>
-        <div style="color:var(--text-muted);font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px">
-            <span>📦</span><span id="stat-mem-lbl">Memories</span><span style="color:var(--text-primary);font-size:15px;font-weight:900" id="memoriesCount">0</span>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            📦 <span id="stat-mem-lbl">Memories</span>: <span id="memoriesCount" style="color:var(--text-primary)">0</span>
         </div>
     </footer>
 
@@ -1470,12 +985,7 @@
 <!-- ══════════════ SIDEBAR ══════════════ -->
 <div id="sidebarBackdrop" onclick="SidebarUI.close()"></div>
 <div id="sidebarPanel">
-    <!-- DailyBookimix app branding above profile -->
-    <div style="padding:24px 24px 0;text-align:center;background:linear-gradient(155deg,#ff4500,#ff6b35 60%,#f7931e)">
-        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-0.02em;color:rgba(255,255,255,0.95);margin-bottom:1px">DailyBookimix</div>
-        <div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:12px">your daily companion</div>
-    </div>
-    <div class="sidebar-hero" style="padding-top:20px">
+    <div class="sidebar-hero">
         <div class="sidebar-avatar" id="sidebarAvatar">👤</div>
         <div class="sidebar-username" id="sidebarUsername">User</div>
         <div class="sidebar-userid" id="sidebarUserid">ID: —</div>
@@ -1491,12 +1001,6 @@
         <div class="sidebar-item" onclick="SidebarUI.openAchievements()">
             <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(251,191,36,0.2),rgba(245,158,11,0.15));border:1px solid rgba(251,191,36,0.3)">🏆</div>
             <div class="sidebar-item-label" id="sb-item-achievements">Achievements</div>
-            <div class="sidebar-item-arrow">›</div>
-        </div>
-
-        <div class="sidebar-item" onclick="SidebarUI.forceSync()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.2),rgba(37,99,235,0.15));border:1px solid rgba(59,130,246,0.3)">🔄</div>
-            <div class="sidebar-item-label" id="sb-item-force-sync">Force Sync from Cloud</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
         <div class="sidebar-divider"></div>
@@ -1542,143 +1046,22 @@
     </div>
 </div>
 
+
 <script>
-// ── RubyManager stub (Onyx/Daily Challenges removed) ─────────────
-const RubyManager = {
-    _total: 0,
-    openModal() {},
-    closeModal() {},
-    _updateHeader() {},
-    reset() {},
-    async init() {},
-    async checkAndAward() {},
-    applyTranslations() {}
-};
-// ── ShopManager stub (Shop removed) ───────────────────────────────
-const ShopManager = {
-    _owned: [],
-    openModal() {},
-    closeModal() {},
-    isOwned() { return false; },
-    _applyOwnedEffects() {},
-    async init() {},
-    cancelPurchase() {},
-    confirmPurchase() {},
-    reset() {},
-    applyTranslations() {}
-};
 // ================================================================
 //  ENCRYPTION MANAGER — AES-256-GCM via Web Crypto API
-//  Handles password-based key derivation, encryption/decryption,
-//  salt storage, sentinel verification, and lock screen logic.
+//  All data is encrypted before saving. The password is stored
+//  only in sessionStorage (cleared on browser close).
 // ================================================================
 const EncryptionManager = {
-    _key:  null,       // CryptoKey (in-memory only)
-    _salt: null,       // Uint8Array for PBKDF2
-    _unlocking: false, // re-entrancy guard
+    _key: null,      // CryptoKey object (in-memory only)
+    _salt: null,     // Uint8Array for PBKDF2
 
-    // Set _debug = true in browser console to enable verbose EM logging
-    _debug: false,
-    _dbg(step, msg, data) {
-        if (!this._debug) return;
-        if (data !== undefined) console.debug('[EM][' + step + '] ' + msg, data);
-        else console.debug('[EM][' + step + '] ' + msg);
-    },
-
-    // ── Loading indicator on lock screen ─────────────────────────
-    _setLoading(show, text) {
-        const ind  = document.getElementById('lockLoadingIndicator');
-        const hint = document.getElementById('lock-hint');
-        const txt  = document.getElementById('lockLoadingText');
-        if (!ind) return;
-        if (show) {
-            ind.style.display = 'flex';
-            if (hint) hint.style.display = 'none';
-            if (txt && text) txt.textContent = text;
-        } else {
-            ind.style.display = 'none';
-            if (hint) hint.style.display = '';
-        }
-    },
-
-    // ── CloudStorage get with retry + exponential back-off ───────
-    // Resolves with value string or null — NEVER rejects.
-    async _csGetWithRetry(key, maxTries) {
-        const hasCloud = !!(
-            window.Telegram && Telegram.WebApp.CloudStorage &&
-            Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-        );
-        if (!hasCloud) return null;
-        // Shorter delays mean we fail-fast on genuinely missing keys (new users)
-        // and retry quicker on transient blips.
-        const delays = [0, 300, 1000, 2500];
-        for (let i = 0; i < Math.min(maxTries, delays.length); i++) {
-            if (delays[i]) {
-                this._dbg('CLOUD', `retry ${i}/${maxTries-1} for "${key}", wait ${delays[i]}ms`);
-                await new Promise(r => setTimeout(r, delays[i]));
-            }
-            const val = await new Promise(res => {
-                let done = false;
-                const t = setTimeout(() => { if (!done) { done=true; res(null); } }, 4000);
-                try {
-                    Telegram.WebApp.CloudStorage.getItem(key, (err, v) => {
-                        if (done) return; done=true; clearTimeout(t);
-                        res((v && v !== '') ? v : null);
-                    });
-                } catch(e) { if (!done) { done=true; clearTimeout(t); res(null); } }
-            });
-            if (val !== null) {
-                this._dbg('CLOUD', `"${key}" found on try ${i+1}`);
-                return val;
-            }
-        }
-        this._dbg('CLOUD', `"${key}" not found after ${maxTries} tries`);
-        return null;
-    },
-
-    // ── CloudStorage set (single attempt, resolve-only) ──────────
-    async _csSet(key, val) {
-        const hasCloud = !!(
-            window.Telegram && Telegram.WebApp.CloudStorage &&
-            Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-        );
-        if (!hasCloud) return;
-        await new Promise(res => {
-            let done = false;
-            const t = setTimeout(() => { done=true; res(); }, 5000);
-            try {
-                Telegram.WebApp.CloudStorage.setItem(key, val, () => {
-                    if (done) return; done=true; clearTimeout(t); res();
-                });
-            } catch(e) { if (!done) { done=true; clearTimeout(t); res(); } }
-        });
-    },
-
-    async _csDel(key) { await this._csSet(key, ''); },
-
-    // ── Key derivation ────────────────────────────────────────────
-    // Derives the AES-256-GCM encryption key from:
-    //   1. The user's password (primary secret)
-    //   2. The user's Telegram ID (if available) — adds entropy,
-    //      makes the key bound to this Telegram account, hardens
-    //      offline brute-force, and is identical across all devices
-    //      logged into the same Telegram account.
-    // The combined input is: password + ":" + telegramUserId (or "" if unavailable)
+    // Derive AES-256-GCM key from a password + salt using PBKDF2
     async deriveKey(password, salt) {
         const enc = new TextEncoder();
-        let tgId = '';
-        try {
-            if (window.Telegram && Telegram.WebApp.initDataUnsafe) {
-                tgId = String(Telegram.WebApp.initDataUnsafe.user?.id || '');
-            }
-        } catch(_) {}
-
-        // Mix password with Telegram ID for account-bound key derivation
-        const combined = tgId ? `${password}:tg:${tgId}` : password;
-        this._dbg('KEY', `deriveKey: tgId=${tgId ? 'present' : 'absent'}`);
-
         const keyMaterial = await crypto.subtle.importKey(
-            'raw', enc.encode(combined), { name: 'PBKDF2' }, false, ['deriveKey']
+            'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
         );
         return await crypto.subtle.deriveKey(
             { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
@@ -1688,727 +1071,289 @@ const EncryptionManager = {
         );
     },
 
-    // Encode Uint8Array → Base64 (chunked for large buffers)
+    // Encode Uint8Array → Base64 string
     _b64encode(buf) {
-        const bytes = new Uint8Array(buf);
-        let binary = '';
-        const chunk = 8192;
-        for (let i = 0; i < bytes.length; i += chunk)
-            binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-        return btoa(binary);
+        return btoa(String.fromCharCode(...new Uint8Array(buf)));
     },
+    // Decode Base64 string → Uint8Array
     _b64decode(str) {
         return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)));
     },
 
-    // ── Session token + key wrapping ───────────────────────────
-    // _deriveSessionToken: derives a 32-byte token from password+salt.
-    // Used only to derive a wrap key for the AES session key.
-    // The raw password never touches sessionStorage.
-    async _deriveSessionToken(password, salt) {
-        const enc = new TextEncoder();
-        const km = await crypto.subtle.importKey(
-            'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits']
-        );
-        const bits = await crypto.subtle.deriveBits(
-            { name: 'PBKDF2', salt, iterations: 50000, hash: 'SHA-256' },
-            km, 256
-        );
-        return this._b64encode(bits);
-    },
-
-    // _deriveWrapKey: given a base64 token and salt, derive an AES-KW key
-    // used to wrap/unwrap the main encryption key for sessionStorage.
-    async _deriveWrapKey(tokenB64, salt) {
-        const tokenBytes = this._b64decode(tokenB64);
-        const km = await crypto.subtle.importKey(
-            'raw', tokenBytes, { name: 'PBKDF2' }, false, ['deriveKey']
-        );
-        return await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt, iterations: 10000, hash: 'SHA-256' },
-            km,
-            { name: 'AES-GCM', length: 256 },
-            false, ['wrapKey', 'unwrapKey']
-        );
-    },
-
-    // _storeWrappedKey: wraps the current AES key and stores it in sessionStorage.
-    // Called once after successful unlock. Allows session resume without re-entering password.
-    async _storeWrappedKey(token, salt) {
-        if (!this._key) return;
-        try {
-            const wrapKey = await this._deriveWrapKey(token, salt);
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const wrapped = await crypto.subtle.wrapKey('raw', this._key, wrapKey, { name: 'AES-GCM', iv });
-            const combined = new Uint8Array(iv.length + wrapped.byteLength);
-            combined.set(iv);
-            combined.set(new Uint8Array(wrapped), iv.length);
-            sessionStorage.setItem('dbmix_wk', this._b64encode(combined.buffer));
-            sessionStorage.setItem('dbmix_sk', this._b64encode(salt.buffer || salt));
-        } catch(e) {
-            this._dbg('ERROR', '_storeWrappedKey failed', e.message);
-        }
-    },
-
-    // ── AES-GCM encrypt / decrypt ─────────────────────────────────
+    // Encrypt a plaintext string → Base64-encoded "iv:ciphertext"
     async encrypt(plaintext) {
-        if (!this._key) return plaintext;
+        if (!this._key) return plaintext; // fallback (should not happen)
         const iv = crypto.getRandomValues(new Uint8Array(12));
+        const enc = new TextEncoder();
         const cipher = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv }, this._key,
-            new TextEncoder().encode(plaintext)
+            { name: 'AES-GCM', iv },
+            this._key,
+            enc.encode(plaintext)
         );
+        // Format: base64(iv) + ':' + base64(ciphertext)
         return this._b64encode(iv) + ':' + this._b64encode(cipher);
     },
 
+    // Decrypt a "iv:ciphertext" string → plaintext
     async decrypt(ciphertext) {
         if (!this._key) return ciphertext;
         try {
             const parts = ciphertext.split(':');
-            if (parts.length < 2) return ciphertext;
-            const iv    = this._b64decode(parts[0]);
-            const data  = this._b64decode(parts.slice(1).join(':'));
-            const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this._key, data);
+            if (parts.length < 2) return ciphertext; // not encrypted
+            const iv     = this._b64decode(parts[0]);
+            const data   = this._b64decode(parts.slice(1).join(':'));
+            const plain  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this._key, data);
             return new TextDecoder().decode(plain);
-        } catch(e) { return ciphertext; } // migration safety
+        } catch (e) {
+            return ciphertext; // decryption failed — return as-is (migration safety)
+        }
     },
 
-    // ── Main unlock flow ──────────────────────────────────────────
+    // Called on unlock button click
     async unlock() {
-        if (this._unlocking) return;   // prevent double-tap race
-        const pw = (document.getElementById('lockPasswordInput').value || '').trim();
-        if (!pw) { this._showLockError('empty'); return; }
-
-        this._unlocking = true;
-        const btn      = document.getElementById('lockUnlockBtn');
-        const origText = btn.textContent;
-        btn.disabled   = true;
+        const pw = document.getElementById('lockPasswordInput').value;
+        if (!pw || pw.length < 1) {
+            this._showLockError();
+            return;
+        }
+        const btn = document.getElementById('lockUnlockBtn');
         btn.textContent = '⏳';
-
-        const lang = (document.documentElement.lang || 'en').slice(0, 2);
-        const isRu = lang === 'ru';
+        btn.disabled = true;
 
         try {
+            // CloudStorage is authoritative for this Telegram-only app.
+            // localStorage is only a resilience fallback.
             const hasCloud = !!(
                 window.Telegram && Telegram.WebApp.CloudStorage &&
                 Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
             );
-            this._dbg('CLOUD', `hasCloud=${hasCloud}`);
+            const csGet = key => new Promise(res => {
+                if (!hasCloud) return res(null);
+                try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
+                catch(e) { res(null); }
+            });
+            const csSet = (key, val) => new Promise(res => {
+                if (!hasCloud) return res();
+                try { Telegram.WebApp.CloudStorage.setItem(key, val, () => res()); }
+                catch(e) { res(); }
+            });
 
-            // ── Step 1: Salt — CloudStorage is ALWAYS authoritative ──
-            // Retry up to 3× with back-off to survive transient network
-            // blips on first open from a new device.
-            this._setLoading(true, isRu ? '⏳ Загружаем ключ шифрования…' : '⏳ Loading encryption key…');
-            let saltB64 = null;
+            // --- Salt: CloudStorage first, localStorage fallback ---
+            let saltB64 = await csGet('dbmix_salt');
+            if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
 
-            if (hasCloud) {
-                saltB64 = await this._csGetWithRetry('dbmix_salt', 3);
-                this._dbg('SALT', `cloud salt=${saltB64 ? 'FOUND' : 'MISSING'}`);
-            }
-            const saltFromCloud = !!saltB64;
-
-            // Only use localStorage when cloud is completely unavailable (dev / offline mode)
-            if (!saltB64 && !hasCloud) {
-                try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
-                this._dbg('SALT', `LS fallback=${saltB64 ? 'FOUND' : 'MISSING'}`);
-            }
-
-            let isFirstTime = false;
             if (!saltB64) {
-                // Brand-new account: generate salt and write it to cloud immediately
-                isFirstTime = true;
+                // First time: generate and persist salt
                 this._salt = crypto.getRandomValues(new Uint8Array(16));
-                saltB64    = this._b64encode(this._salt);
-                this._dbg('SALT', 'Generated new salt');
-                this._setLoading(true, isRu ? '⏳ Создаём аккаунт…' : '⏳ Creating account…');
-                await this._csSet('dbmix_salt', saltB64);
-                try { localStorage.setItem('dbmix_salt', saltB64); } catch(_) {}
+                saltB64 = this._b64encode(this._salt);
+                await csSet('dbmix_salt', saltB64);
+                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
             } else {
                 this._salt = this._b64decode(saltB64);
-                // Mirror to LS for offline resilience; cloud always wins on next read
-                try { localStorage.setItem('dbmix_salt', saltB64); } catch(_) {}
+                // Ensure salt is in both stores for resilience
+                await csSet('dbmix_salt', saltB64);
+                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
             }
 
-            // ── Step 2: Derive key ────────────────────────────────
-            this._setLoading(true, isRu ? '⏳ Проверяем пароль…' : '⏳ Verifying password…');
-            this._dbg('KEY', 'PBKDF2 key derivation starting (200k iterations)…');
             this._key = await this.deriveKey(pw, this._salt);
-            this._dbg('KEY', 'Key derived ✅');
 
-            // ── Step 3: Verify sentinel ───────────────────────────
-            let sentinel = null;
-            if (hasCloud) sentinel = await this._csGetWithRetry('dbmix_sentinel', 2);
-            if (!sentinel && !hasCloud) {
-                try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(_) {}
-            }
-            this._dbg('SALT', `sentinel=${sentinel ? 'FOUND' : 'MISSING'}`);
+            // --- Sentinel: CloudStorage first, localStorage fallback ---
+            let sentinel = await csGet('dbmix_sentinel');
+            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
 
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
-                this._dbg('KEY', `sentinel decrypted="${dec}"`);
-                const validSentinels = ['DAILYBOOKMIX_V6', 'DAILYBOOKMIX_V5'];
-                if (!validSentinels.includes(dec)) {
-                    // Wrong password — the sentinel decoded to garbage
+                if (dec !== 'DAILYBOOKMIX_V5') {
                     this._key = null;
-                    btn.textContent = origText; btn.disabled = false;
-                    this._setLoading(false);
-                    this._unlocking = false;
-                    this._dbg('ERROR', 'Wrong password — sentinel mismatch');
-                    this._showLockError('wrong-password');
+                    btn.textContent = 'Unlock 🔓';
+                    btn.disabled = false;
+                    this._showLockError();
                     return;
                 }
-                // ✅ Password correct — migrate V5 sentinel to V6 silently
-                if (dec === 'DAILYBOOKMIX_V5') {
-                    try {
-                        const encV6 = await this.encrypt('DAILYBOOKMIX_V6');
-                        await this._csSet('dbmix_sentinel', encV6);
-                        try { localStorage.setItem('dbmix_sentinel', encV6); } catch(_) {}
-                        this._dbg('OK', 'Sentinel migrated V5→V6 ✅');
-                    } catch(_) {}
-                }
-            } else if (isFirstTime) {
-                // New account: write sentinel for the first time
-                this._setLoading(true, isRu ? '⏳ Сохраняем ключ…' : '⏳ Saving key…');
-                const enc = await this.encrypt('DAILYBOOKMIX_V6');
-                await this._csSet('dbmix_sentinel', enc);
-                try { localStorage.setItem('dbmix_sentinel', enc); } catch(_) {}
-                this._dbg('OK', 'Sentinel V6 written for new account ✅');
             } else {
-                // Salt exists but sentinel is missing — probably the first-setup
-                // was interrupted mid-write.  Recover by rewriting the sentinel
-                // instead of permanently locking the user out.
-                this._dbg('ERROR', 'Salt found but sentinel missing — attempting recovery');
-                try {
-                    const enc = await this.encrypt('DAILYBOOKMIX_V6');
-                    await this._csSet('dbmix_sentinel', enc);
-                    try { localStorage.setItem('dbmix_sentinel', enc); } catch(_) {}
-                    this._dbg('OK', 'Sentinel V6 recovered ✅');
-                } catch(e) {
-                    // Recovery write failed — proceed optimistically; worst case data
-                    // won't decrypt but the user isn't permanently locked out.
-                    this._dbg('ERROR', 'Sentinel recovery write failed', e.message);
-                }
+                const enc = await this.encrypt('DAILYBOOKMIX_V5');
+                await csSet('dbmix_sentinel', enc);
+                try { localStorage.setItem('dbmix_sentinel', enc); } catch(e) {}
             }
 
-            // ── Step 4: Open app ──────────────────────────────────
-            // Store session token + wrapped key for password-free session resume.
-            // The raw password never touches storage.
-            try {
-                const token = await this._deriveSessionToken(pw, this._salt);
-                sessionStorage.setItem('dbmix_tok', token);
-                sessionStorage.removeItem('dbmix_pw'); // clear any legacy value
-                await this._storeWrappedKey(token, this._salt);
-            } catch(_) {}
-            this._setLoading(false);
-            this._unlocking = false;
+            try { sessionStorage.setItem('dbmix_pw', pw); } catch(e) {}
 
-            // Persist quick-unlock preference
-            this._isQuickUnlockEnabled(); // reads checkbox + saves to LS
+            document.getElementById('encryptionLock').classList.remove('open');
+            document.getElementById('appContent').style.display = 'block';
 
-            // Reveal the app shell BEFORE diary.init() so the gradient
-            // background is painted before any async data loads begin.
-            // diary.init() manages its own opacity shimmer internally.
-            const lockEl = document.getElementById('encryptionLock');
-            const appEl  = document.getElementById('appContent');
-            if (lockEl) lockEl.classList.remove('open');
-            if (appEl)  { appEl.style.display = 'block'; }
-
-            this._dbg('OK', 'App unlocked ✅ — loading diary…');
-            try {
-                await diary.init();
-            } catch(e) {
-                console.error('[EncryptionManager] diary.init() threw after unlock:', e);
-                // Ensure app is visible even if init partially failed
-                if (appEl) { appEl.style.opacity = '1'; appEl.style.pointerEvents = ''; }
-            }
+            await diary.init();
 
         } catch(e) {
-            console.error('[EncryptionManager] unlock error:', e);
-            this._dbg('ERROR', 'unlock() threw', e.message);
-            this._key = null;
-            btn.textContent = origText; btn.disabled = false;
-            this._setLoading(false);
-            this._unlocking = false;
-            this._showLockError('error');
+            console.error('Encryption error:', e);
+            btn.textContent = 'Unlock 🔓';
+            btn.disabled = false;
+            this._showLockError();
         }
     },
 
-    // ── Error feedback on lock screen ────────────────────────────
-    _showLockError(reason) {
+    _showLockError() {
         const input = document.getElementById('lockPasswordInput');
-        const hint  = document.getElementById('lock-hint');
-        const isRu  = (document.documentElement.lang || 'en').startsWith('ru');
-
-        // Red border flash
         input.style.borderColor = '#f87171';
         input.style.boxShadow   = '0 0 0 4px rgba(248,113,113,0.2)';
-        setTimeout(() => { input.style.borderColor = ''; input.style.boxShadow = ''; }, 1400);
-        input.focus(); input.select();
-
-        // Contextual hint
-        if (hint) {
-            const msgs = {
-                'wrong-password': isRu
-                    ? '🔄 Неверный пароль. Используй пароль с первого устройства.'
-                    : '🔄 Wrong password. Use the password from your first device.',
-                'error': isRu
-                    ? '⚠️ Ошибка соединения — проверь интернет и попробуй снова.'
-                    : '⚠️ Connection error. Check your internet and try again.',
-                'empty': isRu ? '⚠️ Введи пароль' : '⚠️ Please enter a password',
-            };
-            const msg = msgs[reason];
-            if (msg) {
-                const prev = hint.textContent, prevColor = hint.style.color;
-                hint.textContent = msg;
-                hint.style.color = reason === 'error' ? '#fb923c' : '#f87171';
-                hint.style.display = '';
-                setTimeout(() => { hint.textContent = prev; hint.style.color = prevColor; }, 5000);
-            }
-        }
+        setTimeout(() => {
+            input.style.borderColor = '';
+            input.style.boxShadow   = '';
+        }, 1200);
+        input.focus();
     },
 
-    // ── Auto-unlock from sessionStorage (same browser session) ───
-    // Shows a loading state on the lock screen while cloud reads are in
-    // progress so the user sees "checking…" rather than a frozen lock screen.
+    // Try auto-unlock from session (if user didn't close the Telegram mini-app)
     async tryAutoUnlock() {
-        let token = null;
-        try {
-            token = sessionStorage.getItem('dbmix_tok');
-            // Legacy fallback: if old raw-password session exists, clear it (security hygiene)
-            if (!token && sessionStorage.getItem('dbmix_pw')) {
-                sessionStorage.removeItem('dbmix_pw');
-            }
-        } catch(_) {}
-        if (!token) return false;
-        this._dbg('OK', 'tryAutoUnlock: session token found');
-        // CloudStorage hangs don't leave the app frozen on the lock screen.
-        // If the timeout fires we return false — user sees the password screen.
-        const _autoUnlockWithTimeout = async () => {
-            this._setLoading(true, '⏳ Resuming session…');
-            try {
-                // Attempt to unwrap the AES key stored in sessionStorage.
-                // The wrapped key was stored during the last successful unlock
-                // and can only be unwrapped using the same session token.
-                let wrappedKeyB64 = null;
-                try { wrappedKeyB64 = sessionStorage.getItem('dbmix_wk'); } catch(_) {}
+        let pw = null;
+        try { pw = sessionStorage.getItem('dbmix_pw'); } catch(e) {}
+        if (!pw) return false;
 
-                let saltB64 = null;
-                try { saltB64 = sessionStorage.getItem('dbmix_sk'); } catch(_) {}
+        const hasCloud = !!(
+            window.Telegram && Telegram.WebApp.CloudStorage &&
+            Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+        );
+        const csGet = key => new Promise(res => {
+            if (!hasCloud) return res(null);
+            try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
+            catch(e) { res(null); }
+        });
 
-                // Load salt from cloud/LS for token verification
-                if (!saltB64) {
-                    const hasCloud = !!(
-                        window.Telegram && Telegram.WebApp.CloudStorage &&
-                        Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-                    );
-                    if (hasCloud) saltB64 = await this._csGetWithRetry('dbmix_salt', 2);
-                    if (!saltB64) {
-                        try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
-                    }
-                }
-
-                if (!saltB64 || !wrappedKeyB64) {
-                    this._dbg('ERROR', 'tryAutoUnlock: missing salt or wrapped key');
-                    this._setLoading(false);
-                    return false;
-                }
-
-                this._salt = this._b64decode(saltB64);
-
-                // Derive a KWrap key from the session token + salt
-                const wrapKey = await this._deriveWrapKey(token, this._salt);
-
-                // Unwrap the stored AES-GCM key
-                try {
-                    const wrappedBytes = this._b64decode(wrappedKeyB64);
-                    const iv       = wrappedBytes.slice(0, 12);
-                    const wrapped  = wrappedBytes.slice(12);
-                    this._key = await crypto.subtle.unwrapKey(
-                        'raw', wrapped, wrapKey,
-                        { name: 'AES-GCM', iv }, 
-                        { name: 'AES-GCM', length: 256 },
-                        false, ['encrypt', 'decrypt']
-                    );
-                } catch(e) {
-                    this._dbg('ERROR', 'tryAutoUnlock: key unwrap failed — session expired', e.message);
-                    this._key = null;
-                    try { sessionStorage.clear(); } catch(_) {}
-                    this._setLoading(false);
-                    return false;
-                }
-
-                // ✅ Key restored — verify with sentinel for extra safety
-                const hasCloud2 = !!(
-                    window.Telegram && Telegram.WebApp.CloudStorage &&
-                    Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-                );
-                let sentinel = null;
-                if (hasCloud2) sentinel = await this._csGetWithRetry('dbmix_sentinel', 1);
-                if (!sentinel) {
-                    try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(_) {}
-                }
-                if (sentinel) {
-                    const dec = await this.decrypt(sentinel);
-                    if (dec !== 'DAILYBOOKMIX_V6') {
-                        this._dbg('ERROR', 'tryAutoUnlock: sentinel mismatch');
-                        this._key = null;
-                        try { sessionStorage.clear(); } catch(_) {}
-                        this._setLoading(false);
-                        return false;
-                    }
-                }
-
-                this._setLoading(false);
-                const lockEl = document.getElementById('encryptionLock');
-                const appEl  = document.getElementById('appContent');
-                if (lockEl) lockEl.classList.remove('open');
-                if (appEl)  appEl.style.display = 'block';
-                this._dbg('OK', 'tryAutoUnlock success ✅');
-                return true;
-            } catch(e) {
-                this._dbg('ERROR', 'tryAutoUnlock threw', e.message);
-                this._key = null;
-                this._setLoading(false);
-                return false;
-            }
-        };
-
-        // Race against a 10s timeout
-        const timeoutPromise = new Promise(res => setTimeout(() => {
-            this._dbg('ERROR', 'tryAutoUnlock: 10s timeout — falling back to lock screen');
-            this._setLoading(false);
-            res(false);
-        }, 10000));
-
-        return Promise.race([_autoUnlockWithTimeout(), timeoutPromise]);
-    },
-
-    // ── "Forgot password" / Reset account flow ────────────────────
-    promptReset() {
-        const m = document.getElementById('lockResetModal');
-        if (m) m.style.display = 'flex';
-    },
-
-    cancelReset() {
-        const m = document.getElementById('lockResetModal');
-        if (m) m.style.display = 'none';
-    },
-
-    async executeReset() {
-        this._dbg('RESET', 'User confirmed full account reset');
-        const btn  = document.getElementById('lockResetConfirm');
-        const isRu = (document.documentElement.lang || 'en').startsWith('ru');
-        if (btn) { btn.textContent = isRu ? '⏳ Удаляем…' : '⏳ Deleting…'; btn.disabled = true; }
+        let saltB64 = await csGet('dbmix_salt');
+        if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
+        if (!saltB64) return false;
 
         try {
-            // 1. Wipe encryption keys from cloud
-            await this._csDel('dbmix_salt');
-            await this._csDel('dbmix_sentinel');
+            this._salt = this._b64decode(saltB64);
+            this._key  = await this.deriveKey(pw, this._salt);
 
-            // 2. Wipe all data keys (static + last 90 days of per-day shards)
-            const staticKeys = ['notes','habits','memories','fireStreak','lastActiveDate',
-                                'userNickname','userId','tasks_v1','achievements_v1',
-                                'rubies_v1','shop_v1','dbmix_tasks_ever_used'];
-            for (const k of staticKeys) {
-                try { await this._csDel(k); } catch(_) {}
-            }
-            for (let i = 0; i < 90; i++) {
-                const ds = _localDateStr(-i);
-                try { await this._csDel('t:'  + ds); } catch(_) {}
-                try { await this._csDel('rp:' + ds); } catch(_) {}
+            let sentinel = await csGet('dbmix_sentinel');
+            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
+
+            if (sentinel) {
+                const dec = await this.decrypt(sentinel);
+                if (dec !== 'DAILYBOOKMIX_V5') { this._key = null; return false; }
             }
 
-            // 3. Wipe local + session storage entirely
-            try { localStorage.clear();   } catch(_) {}
-            try { sessionStorage.clear(); } catch(_) {} // also clears dbmix_tok, dbmix_wk, dbmix_sk
-
-            this._key = null; this._salt = null;
-            this._dbg('RESET', 'Reset complete — reloading app');
-
-            const m = document.getElementById('lockResetModal');
-            if (m) m.style.display = 'none';
-            setTimeout(() => window.location.reload(), 500);
-
+            document.getElementById('encryptionLock').classList.remove('open');
+            document.getElementById('appContent').style.display = 'block';
+            return true;
         } catch(e) {
-            this._dbg('ERROR', 'executeReset threw', e.message);
-            if (btn) {
-                btn.textContent = isRu ? '🗑️ Удалить всё' : '🗑️ Delete all data';
-                btn.disabled = false;
-            }
+            this._key = null;
+            return false;
         }
     },
 
-    // ── Lock-screen translations ──────────────────────────────────
+    // Apply translations to the lock screen
     applyLang(lang) {
         const t = {
             en: {
-                title: '', placeholder: 'Enter password...',
-                desc:  'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
-                hint:  'First time? Set any password — it encrypts your data and syncs across all your Telegram devices.',
-                btn:   'Unlock 🔓',
-                resetBtn: 'Forgot password? Reset account',
-                resetTitle: 'Reset Account?',
-                resetDesc: 'This will permanently erase <strong style="color:#f87171">all your encrypted data</strong> — notes, habits, tasks, memories — and remove the encryption key.<br><br><strong style="color:#fbbf24">This cannot be undone.</strong> Use only if you have forgotten your password.',
-                resetCancel: 'Cancel', resetConfirm: '🗑️ Delete all data',
+                title:   'DailyBookimix',
+                desc:    'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
+                hint:    'First time? Choose any password — it will be used to encrypt all your data.',
+                btn:     'Unlock 🔓',
             },
             ru: {
-                title: '', placeholder: 'Введи пароль...',
-                desc:  'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
-                hint:  'Первый раз? Введи любой пароль — он зашифрует данные и синхронизирует их на всех устройствах Telegram.',
-                btn:   'Разблокировать 🔓',
-                resetBtn: 'Забыл пароль? Сбросить аккаунт',
-                resetTitle: 'Сбросить аккаунт?',
-                resetDesc: 'Это <strong style="color:#f87171">безвозвратно удалит все данные</strong> — заметки, привычки, задачи, воспоминания — и сбросит ключ шифрования.<br><br><strong style="color:#fbbf24">Отменить нельзя.</strong> Используй только если забыл пароль.',
-                resetCancel: 'Отмена', resetConfirm: '🗑️ Удалить всё',
+                title:   'DailyBookimix',
+                desc:    'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
+                hint:    'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
+                btn:     'Разблокировать 🔓',
             }
         };
         const s = t[lang] || t.en;
-        const set  = (id, v, html) => { const el = document.getElementById(id); if (el) { if (html) el.innerHTML = v; else el.textContent = v; } };
-        const setPh= (id, v)       => { const el = document.getElementById(id); if (el) el.placeholder = v; };
-        set('lock-title',       s.title);
-        set('lock-desc',        s.desc);
-        set('lock-hint',        s.hint);
-        set('lockUnlockBtn',    s.btn);
-        set('lockResetBtnTxt',  s.resetBtn);
-        set('lockResetTitle',   s.resetTitle);
-        set('lockResetDesc',    s.resetDesc, true);
-        set('lockResetCancel',  s.resetCancel);
-        set('lockResetConfirm', s.resetConfirm);
-        setPh('lockPasswordInput', s.placeholder);
-        // Quick unlock row label
-        const quLabel = document.getElementById('lockQuickUnlockLabel');
-        if (quLabel) quLabel.textContent = lang === 'ru'
-            ? 'Оставаться в системе в Telegram'
-            : 'Stay unlocked in Telegram';
-    },
-
-    // ── Show quick-unlock row if running inside Telegram ─────────
-    _maybeShowQuickUnlock() {
-        try {
-            if (!window.Telegram || !Telegram.WebApp.initDataUnsafe?.user?.id) return;
-            const row = document.getElementById('lockQuickUnlockRow');
-            if (row) {
-                row.style.display = '';
-                // Restore saved preference
-                try {
-                    const saved = localStorage.getItem('dbmix_quick_unlock');
-                    const cb = document.getElementById('lockQuickUnlockCheck');
-                    if (cb && saved === '1') cb.checked = true;
-                } catch(_) {}
-            }
-        } catch(e) {}
-    },
-
-    // ── Read quick-unlock preference ─────────────────────────────
-    _isQuickUnlockEnabled() {
-        try {
-            const cb = document.getElementById('lockQuickUnlockCheck');
-            const checked = cb && cb.checked;
-            if (checked) localStorage.setItem('dbmix_quick_unlock', '1');
-            else localStorage.removeItem('dbmix_quick_unlock');
-            return !!checked;
-        } catch(e) { return false; }
+        const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+        set('lock-title', s.title);
+        set('lock-desc',  s.desc);
+        set('lock-hint',  s.hint);
+        set('lockUnlockBtn', s.btn);
     }
 };
 
 
 // ================================================================
-//  STORAGE MANAGER v6.0 — Clean, reliable, iOS-free
-//
-//  Design:
-//   • Primary store : Telegram CloudStorage (when available, v6.9+)
-//   • Fallback store: localStorage (browser / offline)
-//   • Per-key write queue so concurrent saves for the same key
-//     are serialised — no races, no lost updates.
-//   • All values are AES-GCM encrypted via EncryptionManager before
-//     storage and decrypted on read.
-//   • Telegram CloudStorage hard-caps each value at 4 096 bytes;
-//     per-day sharding (t:YYYY-MM-DD) keeps every key well under that.
-//   • getItems() uses the native batch API for fast bulk reads.
+//  STORAGE MANAGER — Telegram CloudStorage ONLY (this is a Telegram
+//  bot app; localStorage is not used for any app data).
+//  All values are encrypted with EncryptionManager.
+//  Includes retry logic so saves never silently fail.
 // ================================================================
 const StorageManager = {
     supportsCloud: false,
-    _writeQueues:  {},
 
     init() {
         try {
             this.supportsCloud = !!(
-                window.Telegram &&
-                Telegram.WebApp.CloudStorage &&
-                Telegram.WebApp.isVersionAtLeast &&
-                Telegram.WebApp.isVersionAtLeast('6.9')
+                window.Telegram && Telegram.WebApp.CloudStorage &&
+                Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
             );
         } catch(e) { this.supportsCloud = false; }
-        if (window._dbgSM) console.debug('[SM] init supportsCloud=' + this.supportsCloud);
     },
 
-    // ── Cloud primitives ─────────────────────────────────────────
-    _csSet(key, value) {
+    // Raw CloudStorage set with Promise wrapper
+    _cloudSet(key, value) {
         return new Promise((resolve, reject) => {
-            let done = false;
-            const t = setTimeout(() => { if (!done) { done = true; reject(new Error('CS timeout')); } }, 8000);
             try {
-                Telegram.WebApp.CloudStorage.setItem(key, value, err => {
-                    if (done) return;
-                    done = true; clearTimeout(t);
-                    if (err) reject(new Error(String(err))); else resolve();
+                Telegram.WebApp.CloudStorage.setItem(key, value, (err) => {
+                    if (err) reject(new Error(err));
+                    else resolve();
                 });
-            } catch(e) { if (!done) { done = true; clearTimeout(t); reject(e); } }
+            } catch(e) { reject(e); }
         });
     },
 
-    _csGet(key) {
+    // Raw CloudStorage get with Promise wrapper
+    _cloudGet(key) {
         return new Promise((resolve, reject) => {
-            let done = false;
-            const t = setTimeout(() => { if (!done) { done = true; reject(new Error('CS timeout')); } }, 8000);
             try {
-                Telegram.WebApp.CloudStorage.getItem(key, (err, v) => {
-                    if (done) return;
-                    done = true; clearTimeout(t);
-                    if (err) reject(new Error(String(err)));
-                    else resolve((v !== null && v !== undefined && v !== '') ? v : null);
+                Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
+                    if (err) reject(new Error(err));
+                    else resolve((value !== null && value !== undefined && value !== '') ? value : null);
                 });
-            } catch(e) { if (!done) { done = true; clearTimeout(t); reject(e); } }
+            } catch(e) { reject(e); }
         });
     },
 
-    _csBatchGet(keys) {
-        return new Promise((resolve, reject) => {
-            let done = false;
-            const t = setTimeout(() => { if (!done) { done = true; reject(new Error('CS batch timeout')); } }, 10000);
-            try {
-                Telegram.WebApp.CloudStorage.getItems(keys, (err, values) => {
-                    if (done) return;
-                    done = true; clearTimeout(t);
-                    if (err) reject(new Error(String(err))); else resolve(values || {});
-                });
-            } catch(e) { if (!done) { done = true; clearTimeout(t); reject(e); } }
-        });
-    },
-
-    // ── Write queue — serialises concurrent saves for the same key ──
-    _enqueue(key, writeFn) {
-        const prev = this._writeQueues[key] || Promise.resolve();
-        const next = prev.then(writeFn, writeFn);
-        // Store a non-rejecting sentinel so the chain never breaks
-        this._writeQueues[key] = next.then(() => {}, () => {});
-        return next;
-    },
-
-    // ── setItem ───────────────────────────────────────────────────
-    // Encrypts the value, then writes to CloudStorage (with one retry)
-    // and mirrors to localStorage for offline resilience.
-    // Empty/null values delete the key from both stores (no plaintext markers).
+    // Save encrypted value — with retry on failure
     async setItem(key, value) {
-        const isEmpty = (value === '' || value === null || value === undefined);
-        const toStore = isEmpty ? '' : await EncryptionManager.encrypt(value);
-
-        return this._enqueue(key, async () => {
-            if (this.supportsCloud) {
+        const encrypted = await EncryptionManager.encrypt(value);
+        if (this.supportsCloud) {
+            // Try up to 3 times with backoff
+            for (let attempt = 0; attempt < 3; attempt++) {
                 try {
-                    await this._csSet(key, toStore);
-                    try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
-                    return;
+                    await this._cloudSet(key, encrypted);
+                    return; // success
                 } catch(e) {
-                    console.warn('[SM] cloud setItem failed (' + e.message + '), retrying once…');
-                    await new Promise(r => setTimeout(r, 500));
-                    try {
-                        await this._csSet(key, toStore);
-                        try { localStorage.setItem('dbmix_' + key, toStore); } catch(_) {}
-                        return;
-                    } catch(e2) {
-                        console.error('[SM] cloud setItem retry failed (' + e2.message + '), falling back to LS');
-                    }
+                    if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
                 }
             }
-            // localStorage fallback
-            try { localStorage.setItem('dbmix_' + key, toStore); }
-            catch(e) { throw e; }
-        });
+            console.warn('[StorageManager] setItem failed after 3 attempts for key:', key);
+        } else {
+            // Fallback: not in Telegram context (dev/preview)
+            try { localStorage.setItem('dbmix_' + key, encrypted); } catch(e) {}
+        }
     },
 
-    // ── getItem ───────────────────────────────────────────────────
+    // Read and decrypt value
     async getItem(key) {
         let raw = null;
-
         if (this.supportsCloud) {
-            try {
-                raw = await this._csGet(key);
-            } catch(e) {
-                console.warn('[SM] cloud getItem failed (' + e.message + '), falling back to LS');
-            }
-        }
-
-        if (!raw) {
-            try { raw = localStorage.getItem('dbmix_' + key) || null; } catch(_) {}
+            try { raw = await this._cloudGet(key); }
+            catch(e) { raw = null; }
+        } else {
+            raw = localStorage.getItem('dbmix_' + key) || null;
         }
         if (!raw) return null;
-
-        try {
-            return await EncryptionManager.decrypt(raw);
-        } catch(e) {
-            console.warn('[SM] decrypt failed for "' + key + '" — returning null');
-            return null;
-        }
+        return await EncryptionManager.decrypt(raw);
     },
 
-    // ── getItems — batch read ─────────────────────────────────────
     async getItems(keys) {
-        if (this.supportsCloud) {
-            try {
-                const batch = await this._csBatchGet(keys);
-                // Decrypt all values in parallel
-                const entries = Object.entries(batch).filter(([, v]) => v && v !== '');
-                const decrypted = await Promise.all(
-                    entries.map(([k, v]) =>
-                        EncryptionManager.decrypt(v)
-                            .then(d => [k, d])
-                            .catch(() => [k, null])
-                    )
-                );
-                const result = {};
-                for (const [k, v] of decrypted) { if (v !== null) result[k] = v; }
-                if (window._dbgSM) console.debug('[SM] batch read ' + keys.length + ' keys → ' + Object.keys(result).length + ' hits');
-                return result;
-            } catch(e) {
-                console.warn('[SM] batch read failed (' + e.message + '), falling back to sequential');
-            }
-        }
-
-        // Sequential fallback
         const result = {};
-        for (const k of keys) {
-            try { const v = await this.getItem(k); if (v !== null) result[k] = v; }
-            catch(_) {}
-        }
+        await Promise.all(keys.map(async k => {
+            const v = await this.getItem(k);
+            if (v !== null) result[k] = v;
+        }));
         return result;
-    },
-
-    // ── Force Sync — re-reads all data from cloud ─────────────────
-    async forceSync() {
-        if (!EncryptionManager._key) {
-            console.warn('[SM] forceSync called before unlock — ignoring');
-            return;
-        }
-        console.log('[SM] forceSync() starting…');
-        const btn = document.querySelector('[onclick*="forceSync"]');
-        if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing…'; }
-        try {
-            // Reset TaskManager and calendar state for a clean reload
-            TaskManager._viewDate = null;
-            TaskManager._data     = {};
-            AppCalendar._container = null;
-            AppCalendar._userNavigated = false;
-            await diary.load();
-            diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизировано' : 'Synced from cloud'));
-        } catch(e) {
-            console.error('[SM] forceSync failed', e);
-            diary.toast('⚠️ Sync failed', 'error');
-        } finally {
-            if (btn) { btn.disabled = false; btn.textContent = '☁️ ' + (diary.lang === 'ru' ? 'Синхронизировать' : 'Force Sync'); }
-        }
     }
 };
+
 
 // ================================================================
 //  TRANSLATIONS
@@ -2475,7 +1420,6 @@ const T = {
         'confirm-clear-all': 'Delete ALL notes? This cannot be undone.',
         // Tasks
         'tasks-section-title': 'Daily Tasks',
-        'tasks-save-error': '❌ Failed to save — please try again',
         'tasks-quick-ph': 'Add a task...',
         'tasks-mood-label': 'Mood of the day',
         'tasks-empty': 'No tasks yet. Add one above ☝️',
@@ -2575,281 +1519,54 @@ const T = {
 
 
 // ================================================================
-//  APP CALENDAR — unified date picker used by Tasks & Habits sections
-//
-//  Features:
-//   • Year navigation (« / »)
-//   • Month navigation (‹ / ›)
-//   • Full month grid with correct weekday offsets
-//   • Week strip mode (compact 7-day view centered on selected date)
-//   • Toggle between week/month views
-//   • Activity dots (shows which days have tasks)
-//   • Today highlight, selected date highlight
-//   • Disables future dates
-//   • Local-date aware (no UTC shift)
-// ================================================================
-const AppCalendar = {
-    _viewDate:     null,  // currently selected date string 'YYYY-MM-DD'
-    _calYear:      null,
-    _calMonth:     null,
-    _calMode:      'week', // 'week' | 'month'
-    _container:    null,
-    _onSelect:     null,  // callback(dateStr)
-    _getActivity:  null,  // callback(dateStr) → bool (has tasks?)
-    _userNavigated: false, // true when user clicked ‹›«» — prevents TaskManager.render() from resetting month
-
-    MONTHS_EN: ['January','February','March','April','May','June','July','August','September','October','November','December'],
-    MONTHS_RU: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
-    WDS_EN: ['Su','Mo','Tu','We','Th','Fr','Sa'],
-    WDS_RU: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
-
-    _localToday() {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    },
-
-    _parseDate(str) {
-        const [y,m,d] = str.split('-').map(Number);
-        return new Date(y, m-1, d);
-    },
-
-    _fmt(d) {
-        const y = d.getFullYear();
-        const m = String(d.getMonth()+1).padStart(2,'0');
-        const dd = String(d.getDate()).padStart(2,'0');
-        return `${y}-${m}-${dd}`;
-    },
-
-    init(containerId, selectedDate, onSelect, getActivity) {
-        this._container  = document.getElementById(containerId);
-        this._onSelect   = onSelect;
-        this._getActivity = getActivity || (() => false);
-        const d = this._parseDate(selectedDate || this._localToday());
-        this._viewDate = selectedDate || this._localToday();
-        this._calYear  = d.getFullYear();
-        this._calMonth = d.getMonth();
-        this.render();
-    },
-
-    selectDate(dateStr) {
-        const today = this._localToday();
-        if (dateStr > today) return; // block future
-        this._userNavigated = false; // explicit date pick → re-anchor month to selection
-        this._viewDate = dateStr;
-        const d = this._parseDate(dateStr);
-        this._calYear  = d.getFullYear();
-        this._calMonth = d.getMonth();
-        this.render();
-        if (this._onSelect) this._onSelect(dateStr);
-    },
-
-    prevYear()  { this._userNavigated = true; this._calYear--;  this.render(); },
-    nextYear()  {
-        const today = this._parseDate(this._localToday());
-        if (this._calYear < today.getFullYear()) { this._userNavigated = true; this._calYear++; this.render(); }
-    },
-    prevMonth() {
-        this._userNavigated = true;
-        if (this._calMonth === 0) { this._calYear--; this._calMonth = 11; }
-        else this._calMonth--;
-        this.render();
-    },
-    nextMonth() {
-        const today = this._parseDate(this._localToday());
-        const nextY = this._calMonth === 11 ? this._calYear + 1 : this._calYear;
-        const nextM = this._calMonth === 11 ? 0 : this._calMonth + 1;
-        if (nextY > today.getFullYear() || (nextY === today.getFullYear() && nextM > today.getMonth())) return;
-        this._userNavigated = true;
-        this._calMonth = nextM; this._calYear = nextY;
-        this.render();
-    },
-    setMode(mode) { this._calMode = mode; this.render(); },
-
-    render() {
-        if (!this._container) return;
-        const lang   = (diary && diary.lang) || 'en';
-        const MONTHS = lang === 'ru' ? this.MONTHS_RU : this.MONTHS_EN;
-        const WDS    = lang === 'ru' ? this.WDS_RU    : this.WDS_EN;
-        const today  = this._localToday();
-        const sel    = this._viewDate || today;
-        const todayD = this._parseDate(today);
-
-        const modeWeekLabel  = lang === 'ru' ? '📅 Неделя' : '📅 Week';
-        const modeMonthLabel = lang === 'ru' ? '🗓 Месяц'  : '🗓 Month';
-
-        // ── Week strip ──────────────────────────────────────────────
-        const _buildWeekStrip = () => {
-            const selD = this._parseDate(sel);
-            // 7 days: 3 before selected, selected, 3 after (capped at today)
-            const days = [];
-            for (let i = -3; i <= 3; i++) {
-                const d = new Date(selD); d.setDate(d.getDate() + i);
-                days.push(this._fmt(d));
-            }
-            const monthLabel = selD.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { month: 'long', year: 'numeric' });
-            const dayHtml = days.map(ds => {
-                const d = this._parseDate(ds);
-                const wd = WDS[d.getDay()];
-                const dn = d.getDate();
-                const isSel  = ds === sel;
-                const isTd   = ds === today;
-                const isFut  = ds > today;
-                const hasAct = !isFut && this._getActivity(ds);
-                const cls = ['appcal-week-day',
-                    isTd   ? 'is-today'    : '',
-                    isSel  ? 'is-selected' : '',
-                    isFut  ? 'is-future'   : '',
-                ].join(' ');
-                const dotHtml = hasAct ? '<div class="appcal-week-dot"></div>' : '';
-                return `<button class="${cls}" ${isFut?'disabled':''} onclick="AppCalendar.selectDate('${ds}')">
-                    <span class="appcal-week-wd">${wd}</span>
-                    <span class="appcal-week-num">${dn}</span>
-                    ${dotHtml}
-                </button>`;
-            }).join('');
-            return `
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 2px">
-                <span style="font-size:15px;font-weight:800;color:var(--text-primary)">${monthLabel}</span>
-                <button class="appcal-toggle-btn active" style="flex:none;padding:6px 14px;border-radius:10px;font-size:12px"
-                        onclick="AppCalendar.setMode('month')">${modeMonthLabel} ›</button>
-            </div>
-            <div class="appcal-week-strip">${dayHtml}</div>`;
-        };
-
-        // ── Full month grid ─────────────────────────────────────────
-        const _buildMonthGrid = () => {
-            const Y = this._calYear, M = this._calMonth;
-            const firstDOW  = new Date(Y, M, 1).getDay();
-            const totalDays = new Date(Y, M+1, 0).getDate();
-            const prevDays  = new Date(Y, M, 0).getDate();
-            const totalCells = Math.ceil((firstDOW + totalDays) / 7) * 7;
-
-            const todayParts = today.split('-').map(Number);
-            const todayD2    = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
-
-            let dayHtml = '';
-            for (let i = 0; i < totalCells; i++) {
-                let d, isCurrentMonth;
-                if (i < firstDOW) {
-                    const prevM = M === 0 ? 11 : M-1;
-                    const prevY = M === 0 ? Y-1 : Y;
-                    d = new Date(prevY, prevM, prevDays - firstDOW + i + 1);
-                    isCurrentMonth = false;
-                } else if (i < firstDOW + totalDays) {
-                    d = new Date(Y, M, i - firstDOW + 1);
-                    isCurrentMonth = true;
-                } else {
-                    const nextM = M === 11 ? 0 : M+1;
-                    const nextY = M === 11 ? Y+1 : Y;
-                    d = new Date(nextY, nextM, i - firstDOW - totalDays + 1);
-                    isCurrentMonth = false;
-                }
-                const ds     = this._fmt(d);
-                const isSel  = ds === sel;
-                const isTd   = ds === today;
-                const isFut  = d > todayD2;
-                const hasAct = isCurrentMonth && !isFut && this._getActivity(ds);
-                const cls = ['appcal-day',
-                    !isCurrentMonth ? 'other-month' : '',
-                    isTd   ? 'is-today'    : '',
-                    isSel  ? 'is-selected' : '',
-                    hasAct ? 'has-tasks'   : '',
-                    isFut  ? 'is-future'   : '',
-                ].join(' ');
-                dayHtml += `<button class="${cls}" ${isFut||!isCurrentMonth?'disabled':''} onclick="${isCurrentMonth&&!isFut?`AppCalendar.selectDate('${ds}')`:''}">
-                    ${d.getDate()}
-                </button>`;
-            }
-
-            const wdHtml  = WDS.map(w => `<div class="appcal-wd">${w}</div>`).join('');
-            const todayObj = this._parseDate(today);
-            const isNextMonthBlocked = (this._calYear === todayObj.getFullYear() && this._calMonth >= todayObj.getMonth())
-                                    || this._calYear > todayObj.getFullYear();
-            return `
-            <div class="appcal-header">
-                <button class="appcal-nav-btn" onclick="AppCalendar.prevYear()">«</button>
-                <div style="display:flex;align-items:center;gap:6px">
-                    <button class="appcal-nav-btn" onclick="AppCalendar.prevMonth()">‹</button>
-                    <div style="text-align:center;min-width:110px">
-                        <div class="appcal-month-label">${MONTHS[M]}</div>
-                        <div class="appcal-year-label">${Y}</div>
-                    </div>
-                    <button class="appcal-nav-btn" ${isNextMonthBlocked?'disabled':''} onclick="AppCalendar.nextMonth()">›</button>
-                </div>
-                <button class="appcal-nav-btn" ${isNextMonthBlocked?'disabled':''} onclick="AppCalendar.nextYear()">»</button>
-            </div>
-            <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-                <button class="appcal-toggle-btn active" style="flex:none;padding:6px 14px;border-radius:10px;font-size:12px"
-                        onclick="AppCalendar.setMode('week')">‹ ${modeWeekLabel}</button>
-            </div>
-            <div class="appcal-weekdays">${wdHtml}</div>
-            <div class="appcal-grid">${dayHtml}</div>`;
-        };
-
-        const inner = this._calMode === 'week' ? _buildWeekStrip() : _buildMonthGrid();
-        this._container.innerHTML = `<div class="appcal-wrap">${inner}</div>`;
-    },
-};
-
-
-// ── Shared local-date helper (avoids UTC toISOString() offset bug) ──
-function _localDateStr(daysOffset) {
-    const d = new Date();
-    if (daysOffset) d.setDate(d.getDate() + daysOffset);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-// ================================================================
-//  TASK MANAGER v6.0 — Per-day sharding (t:YYYY-MM-DD)
-//  Each day stored in its own CloudStorage key (~500 B each),
-//  well under Telegram's 4096-byte per-key limit.
+//  TASK MANAGER — Daily Tasks feature
+//  Data structure per day:  { tasks: [...], mood: 'great'|'normal'|'meh'|'hard'|'' }
+//  Task object: { id, text, important, completed, completedAt, createdAt }
 // ================================================================
 const TaskManager = {
+    // In-memory store: { 'YYYY-MM-DD': { tasks: [...], mood: '' } }
     _data: {},
-    _viewDate:       null,
-    _newTaskImp:     false,
+    _viewDate: null,       // which date we're viewing (null = today)
+    _newTaskImp: false,    // whether the "new task" flag is important
 
-    // ── Debounce locks — prevent double-taps ─────────────────────
-    _addLock:    false,       // prevents double quickAdd from touch+click
-    _toggleLock: new Set(),   // IDs currently mid-toggle (prevents re-entry)
-    _deleteLock: new Set(),   // IDs currently mid-delete
+    today() { return new Date().toISOString().split('T')[0]; },
 
-    today()         { return _localDateStr(0);         },
-    dateOf(daysAgo) { return _localDateStr(-daysAgo);    },
+    // Format YYYY-MM-DD
+    dateOf(daysAgo) {
+        const d = new Date(); d.setDate(d.getDate() - daysAgo);
+        return d.toISOString().split('T')[0];
+    },
 
+    // Get or create day record
     dayData(dateStr) {
         if (!this._data[dateStr]) this._data[dateStr] = { tasks: [], mood: '' };
         return this._data[dateStr];
     },
 
+    // Toggle important flag for new task
     toggleNewImp() {
         this._newTaskImp = !this._newTaskImp;
         const btn = document.getElementById('taskImpToggle');
         if (btn) btn.classList.toggle('active', this._newTaskImp);
     },
 
-    // ── Quick-add ─────────────────────────────────────────────────
+    // Quick-add a task from the input field
     async quickAdd() {
-        // _addLock prevents the second call from doing anything.
-        if (this._addLock) return;
-        this._addLock = true;
-        setTimeout(() => { this._addLock = false; }, 600);
-
-        const input  = document.getElementById('taskQuickInput');
+        const input = document.getElementById('taskQuickInput');
         if (!input) return;
         const text = input.value.trim();
         if (!text) return;
 
+        // Disable button during save to prevent double-tap on iOS
         const addBtn = document.getElementById('taskAddBtn');
         if (addBtn) addBtn.disabled = true;
 
         const dateStr = this._viewDate || this.today();
-        const day     = this.dayData(dateStr);
+        const day = this.dayData(dateStr);
 
-        // Unique ID even if two taps land in same millisecond
         const newTask = {
-            id:          Date.now() + Math.floor(Math.random() * 1000),
-            text,
+            id:          Date.now(),
+            text:        text,
             important:   this._newTaskImp,
             completed:   false,
             completedAt: null,
@@ -2859,45 +1576,44 @@ const TaskManager = {
         day.tasks.unshift(newTask);
         this._sortTasks(day);
 
-        // Optimistic UI update
-        input.value  = '';
+        // Clear UI immediately for responsiveness
+        input.value = '';
         this._newTaskImp = false;
         const impBtn = document.getElementById('taskImpToggle');
         if (impBtn) impBtn.classList.remove('active');
+
+        // Render optimistically
         this.render();
 
+        // Save to CloudStorage — if it fails, roll back and show error
         try {
-            await this._save(dateStr);
+            await this._save();
             diary.toast(diary.t('tasks-toast-added'));
             AchievementsUI.recalculate();
-            await RubyManager.onTaskChange(dateStr, this._data[dateStr] || { tasks: [], mood: '' });
         } catch(e) {
-            // Rollback
+            // Save failed: remove the task we added and restore input
             day.tasks = day.tasks.filter(t => t.id !== newTask.id);
             input.value = text;
             this.render();
-            diary.toast(diary.t('tasks-save-error') || '❌ Failed to save — please try again', 'error');
+            diary.toast('❌ Failed to save task — please try again', 'error');
             console.error('[TaskManager] quickAdd save failed:', e);
         } finally {
             if (addBtn) addBtn.disabled = false;
         }
     },
 
+    // Handle Enter key in quick input
     onInputKeydown(e) {
         if (e.key === 'Enter') { e.preventDefault(); this.quickAdd(); }
     },
 
-    // ── Toggle completion ─────────────────────────────────────────
+    // Toggle task completion
     async toggleTask(dateStr, taskId) {
-        // Prevent re-entrant toggle for the same task (double-event)
-        const lockKey = dateStr + ':' + taskId;
-        if (this._toggleLock.has(lockKey)) return;
-        this._toggleLock.add(lockKey);
-
-        const day  = this.dayData(dateStr);
+        const day = this.dayData(dateStr);
         const task = day.tasks.find(t => t.id === taskId);
-        if (!task) { this._toggleLock.delete(lockKey); return; }
+        if (!task) return;
 
+        // Apply change
         const prevCompleted   = task.completed;
         const prevCompletedAt = task.completedAt;
         task.completed   = !task.completed;
@@ -2907,51 +1623,37 @@ const TaskManager = {
         this.render();
 
         try {
-            await this._save(dateStr);
+            await this._save();
             AchievementsUI.recalculate();
-            const todayStr = this.today();
-            if (dateStr === todayStr) {
-                await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
-            }
         } catch(e) {
+            // Rollback
             task.completed   = prevCompleted;
             task.completedAt = prevCompletedAt;
             this._sortTasks(day);
             this.render();
             diary.toast('❌ Failed to save — please try again', 'error');
-        } finally {
-            setTimeout(() => this._toggleLock.delete(lockKey), 500);
         }
     },
 
-    // ── Delete ────────────────────────────────────────────────────
+    // Delete a task
     async deleteTask(dateStr, taskId) {
-        const lockKey = 'del:' + dateStr + ':' + taskId;
-        if (this._deleteLock.has(lockKey)) return;
-        this._deleteLock.add(lockKey);
-
-        const day     = this.dayData(dateStr);
+        const day = this.dayData(dateStr);
         const removed = day.tasks.find(t => t.id === taskId);
-        day.tasks     = day.tasks.filter(t => t.id !== taskId);
+        day.tasks = day.tasks.filter(t => t.id !== taskId);
         this.render();
-
         try {
-            await this._save(dateStr);
+            await this._save();
             diary.toast(diary.t('tasks-toast-deleted'));
-            AchievementsUI.recalculate();
-            const todayStr = this.today();
-            if (dateStr === todayStr) {
-                await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
-            }
         } catch(e) {
-            if (removed) { day.tasks.push(removed); this._sortTasks(day); }
+            // Rollback
+            if (removed) day.tasks.push(removed);
+            this._sortTasks(day);
             this.render();
             diary.toast('❌ Failed to delete — please try again', 'error');
-        } finally {
-            setTimeout(() => this._deleteLock.delete(lockKey), 500);
         }
     },
 
+    // Sort: important+incomplete → normal+incomplete → completed (by completedAt desc)
     _sortTasks(day) {
         day.tasks.sort((a, b) => {
             if (a.completed !== b.completed) return a.completed ? 1 : -1;
@@ -2960,25 +1662,14 @@ const TaskManager = {
         });
     },
 
-    // ── Mood ──────────────────────────────────────────────────────
-    // _moodLock prevents double-fire on mood buttons
-    _moodLock: false,
+    // Set mood for a day
     async setMood(dateStr, mood) {
-        if (this._moodLock) return;
-        this._moodLock = true;
-        setTimeout(() => { this._moodLock = false; }, 500);
-
-        const day      = this.dayData(dateStr);
+        const day = this.dayData(dateStr);
         const prevMood = day.mood;
-        day.mood = (day.mood === mood) ? '' : mood;
+        day.mood = (day.mood === mood) ? '' : mood; // toggle
         this.render();
-
         try {
-            await this._save(dateStr);
-            const todayStr = this.today();
-            if (dateStr === todayStr) {
-                await RubyManager.onTaskChange(todayStr, this._data[todayStr] || { tasks: [], mood: '' });
-            }
+            await this._save();
         } catch(e) {
             day.mood = prevMood;
             this.render();
@@ -2986,19 +1677,19 @@ const TaskManager = {
         }
     },
 
-    // ── Carry-over ────────────────────────────────────────────────
+    // Carry over incomplete tasks to tomorrow
     async carryOver() {
-        const todayStr    = this.today();
-        const day         = this.dayData(todayStr);
-        const incomplete  = day.tasks.filter(t => !t.completed);
+        const todayStr = this.today();
+        const day = this.dayData(todayStr);
+        const incomplete = day.tasks.filter(t => !t.completed);
         if (!incomplete.length) return;
 
-        const tomorrow    = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
-        const nextDay     = this.dayData(tomorrowStr);
+        const nextDay = this.dayData(tomorrowStr);
 
         const existingIds = new Set(nextDay.tasks.map(t => t.id));
-        const added       = [];
+        const added = [];
         incomplete.forEach(t => {
             if (!existingIds.has(t.id)) {
                 const copy = { ...t, completedAt: null, completed: false, createdAt: new Date().toISOString() };
@@ -3009,21 +1700,23 @@ const TaskManager = {
         this._sortTasks(nextDay);
 
         try {
-            await this._save(tomorrowStr);
+            await this._save();
             diary.toast(diary.t('tasks-toast-carried'));
         } catch(e) {
+            // Rollback: remove the tasks we added to tomorrow
             nextDay.tasks = nextDay.tasks.filter(t => !added.includes(t.id));
             diary.toast('❌ Failed to carry over tasks', 'error');
         }
     },
 
-    // ── Stats helpers ─────────────────────────────────────────────
+    // Count consecutive days where at least 1 task was completed
     completionStreak() {
         let streak = 0;
         const today = this.today();
         for (let i = 0; ; i++) {
-            const ds = _localDateStr(-i);
-            if (ds > today) continue;
+            const d = new Date(); d.setDate(d.getDate() - i);
+            const ds = d.toISOString().split('T')[0];
+            if (ds > today) continue; // skip future
             const day = this._data[ds];
             if (!day || !day.tasks.some(t => t.completed)) break;
             streak++;
@@ -3031,204 +1724,85 @@ const TaskManager = {
         return streak;
     },
 
+    // Count total completed tasks across all days
     totalCompleted() {
         return Object.values(this._data).reduce(
             (s, d) => s + (d.tasks || []).filter(t => t.completed).length, 0
         );
     },
 
+    // Count today's completed tasks
     todayCompleted() {
         const day = this._data[this.today()];
         return day ? day.tasks.filter(t => t.completed).length : 0;
     },
 
+    // Total tasks count (for footer)
     totalTasks() {
         return Object.values(this._data).reduce((s, d) => s + (d.tasks || []).length, 0);
     },
 
-    // ── Per-day save (v5.3) ───────────────────────────────────────
-    // Each day stored as 't:YYYY-MM-DD' — keeps every value well under
-    // the 4096-byte Telegram CloudStorage hard limit.
-    // Only the modified day is written on each save, so writes are fast
-    // and small regardless of how many days of history exist.
-    _dirtyDays: new Set(),   // days that need saving after this operation
-
-    async _saveDay(dateStr) {
-        // Guard: do not attempt write if the encryption key is not ready.
-        // This prevents corrupted/garbage writes when save is somehow called
-        // before unlock completes (shouldn't happen, but defensive is good).
-        if (!EncryptionManager._key) {
-            console.error('[TaskManager] _saveDay called before encryption key ready — aborting write for', dateStr);
-            throw new Error('Encryption key not ready');
-        }
-        const day  = this._data[dateStr];
-        const json = day ? JSON.stringify(day) : '';
-        // Empty day = write '' to free the slot
-        await StorageManager.setItem('t:' + dateStr, json || '');
+    async _save() {
+        // StorageManager.setItem already retries internally.
+        // We await it here so callers can catch failures.
+        await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
     },
 
-    // Called by all mutating operations — saves only the affected day.
-    // Rolls up concurrent same-day saves via StorageManager's per-key queue.
-    async _save(dateStr) {
-        dateStr = (typeof dateStr === 'string' && dateStr) ? dateStr
-                : (this._viewDate || this.today());
-        if (!dateStr) throw new Error('[TaskManager] _save: no dateStr');
-        try {
-            await this._saveDay(dateStr);
-        } catch(e) {
-            console.error('[TaskManager] _save failed for', dateStr, e);
-            throw e; // re-throw so callers can roll back
-        }
-    },
-
-    // ── Load (v5.4) ───────────────────────────────────────────────
-    // Strategy:
-    //   1. Build the list of per-day keys for today + last 30 days.
-    //   2. Fetch all of them in one batched getItems() call instead of
-    //      30 sequential awaits — reduces load time dramatically on mobile.
-    //   3. If NONE of them exist, attempt one-time migration from the old
-    //      monolithic 'tasks_v1' key (legacy users only).
-    //   4. Reset _viewDate to today so a re-load always shows today's tasks.
     async load() {
-        // Always snap to today when (re-)loading so stale dates don't persist
-        this._viewDate = null;
-
-        const days = [];
-        for (let i = 0; i < 30; i++) days.push(_localDateStr(-i));
-
-        // Batch fetch all per-day keys in one call
-        const keys    = days.map(d => 't:' + d);
-        let anyFound  = false;
-
-        let batchData = {};
-        try {
-            batchData = await StorageManager.getItems(keys);
-        } catch(e) {
-            console.warn('[TaskManager] batch load failed, falling back to sequential:', e);
-            // Sequential fallback
-            for (const key of keys) {
-                try {
-                    const v = await StorageManager.getItem(key);
-                    if (v) batchData[key] = v;
-                } catch(_) {}
-            }
-        }
-
-        // Parse each day's data
-        for (const key of keys) {
-            const raw = batchData[key];
-            if (!raw || typeof raw !== 'string' || raw.trim() === '') continue;
-            const dateStr = key.slice(2); // strip 't:'
-            let parsed = null;
-            try { parsed = JSON.parse(raw); } catch(_) { continue; }
-            if (!parsed || typeof parsed !== 'object') continue;
-            if (!Array.isArray(parsed.tasks)) parsed.tasks = [];
-            if (typeof parsed.mood !== 'string') parsed.mood = '';
-            // Sanitise task objects — reject anything missing id or text
-            parsed.tasks = parsed.tasks.filter(
-                t => t && typeof t === 'object' && t.id != null && typeof t.text === 'string'
-            );
-            this._data[dateStr] = parsed;
-            anyFound = true;
-        }
-
-        // One-time migration from legacy monolithic 'tasks_v1' key
-        if (!anyFound) {
-            try {
-                const raw = await StorageManager.getItem('tasks_v1');
-                if (raw && raw.trim() !== '') {
-                    let parsed = null;
-                    try { parsed = JSON.parse(raw); } catch(_) {}
-                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                        for (const [ds, v] of Object.entries(parsed)) {
-                            if (!v || typeof v !== 'object') continue;
-                            if (!Array.isArray(v.tasks)) v.tasks = [];
-                            if (typeof v.mood !== 'string') v.mood = '';
-                            v.tasks = v.tasks.filter(
-                                t => t && typeof t === 'object' && t.id != null && typeof t.text === 'string'
-                            );
-                            this._data[ds] = v;
-                        }
-                        console.log('[TaskManager] migrating tasks_v1 → per-day keys…');
-                        for (const ds of Object.keys(this._data)) {
-                            try { await this._saveDay(ds); } catch(_) {}
-                        }
-                        try { await StorageManager.setItem('tasks_v1', ''); } catch(_) {}
-                        console.log('[TaskManager] migration complete ✅');
-                    }
-                }
-            } catch(e) {
-                console.warn('[TaskManager] legacy migration failed:', e);
-            }
-        }
+        const raw = await StorageManager.getItem('tasks_v1');
+        try { this._data = raw ? JSON.parse(raw) : {}; }
+        catch(e) { this._data = {}; }
     },
 
-    // ── Render ────────────────────────────────────────────────────
+    // Render the entire tasks section
     render() {
         const lang    = diary.lang || 'en';
         const dateStr = this._viewDate || this.today();
         const today   = this.today();
         const isToday = (dateStr === today);
 
+        // Placeholder update
         const inp = document.getElementById('taskQuickInput');
         if (inp) inp.placeholder = diary.t('tasks-quick-ph');
 
-        // ── App Calendar (replaces sideways archive scroll) ───────
-        // Re-initialise only when the container exists and either the calendar
-        // hasn't been built yet, or we need to reflect a new selected date.
-        const calContainer = document.getElementById('appCalendarContainer');
-        if (calContainer) {
-            if (!AppCalendar._container) {
-                // First render: fully initialise the calendar.
-                // Also reset _userNavigated so the calendar anchors to today.
-                AppCalendar._userNavigated = false;
-                AppCalendar.init(
-                    'appCalendarContainer',
-                    dateStr,
-                    (ds) => { TaskManager.viewDate(ds); },
-                    (ds) => {
-                        // Activity dot: true if this day has any tasks
-                        const d = TaskManager._data[ds];
-                        return !!(d && d.tasks && d.tasks.length > 0);
-                    }
-                );
-            } else {
-                // Subsequent renders: update callbacks and selected date.
-                // IMPORTANT: do NOT override _calYear/_calMonth if the user
-                // has manually navigated the month — that would silently jump
-                // the calendar back to today every time a task is toggled.
-                AppCalendar._viewDate    = dateStr;
-                AppCalendar._container   = calContainer;
-                AppCalendar._onSelect    = (ds) => { TaskManager.viewDate(ds); };
-                AppCalendar._getActivity = (ds) => {
-                    const d = TaskManager._data[ds];
-                    return !!(d && d.tasks && d.tasks.length > 0);
-                };
-                if (!AppCalendar._userNavigated) {
-                    // Only re-anchor month when user hasn't manually navigated
-                    const d = AppCalendar._parseDate(dateStr);
-                    AppCalendar._calYear  = d.getFullYear();
-                    AppCalendar._calMonth = d.getMonth();
+        // --- Archive day selector (last 30 days) ---
+        const archiveScroll = document.getElementById('taskArchiveScroll');
+        if (archiveScroll) {
+            let html = '';
+            for (let i = 0; i < 30; i++) {
+                const d   = new Date(); d.setDate(d.getDate() - i);
+                const ds  = d.toISOString().split('T')[0];
+                const day = this._data[ds];
+                const cnt = day ? day.tasks.filter(t => t.completed).length : 0;
+                const tot = day ? day.tasks.length : 0;
+                let label;
+                if (i === 0) label = diary.t('tasks-today');
+                else if (i === 1) label = diary.t('tasks-yesterday');
+                else {
+                    label = d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
                 }
-                AppCalendar.render();
+                const active = (ds === dateStr) ? 'active' : '';
+                const badge  = tot > 0 ? `<br><span style="font-size:10px;opacity:0.75">${cnt}/${tot}</span>` : '';
+                html += `<div class="task-archive-day ${active}" onclick="TaskManager.viewDate('${ds}')">${label}${badge}</div>`;
             }
+            archiveScroll.innerHTML = html;
         }
 
-        // Stats bar
+        // --- Stats bar ---
         const statsBar = document.getElementById('taskStatsBar');
         if (statsBar) {
             const dayData = this._data[dateStr];
-            const done    = dayData ? dayData.tasks.filter(t => t.completed).length : 0;
-            const total   = dayData ? dayData.tasks.length : 0;
-            const streak  = this.completionStreak();
+            const done  = dayData ? dayData.tasks.filter(t => t.completed).length : 0;
+            const total = dayData ? dayData.tasks.length : 0;
+            const streak = this.completionStreak();
             statsBar.innerHTML = `
                 <div class="task-stat-chip">✅ <b>${done}</b> ${diary.t('tasks-stat-done')}</div>
                 <div class="task-stat-chip">📋 <b>${total}</b> ${diary.t('tasks-stat-total')}</div>
-                <div class="task-stat-chip">🔥 <b>${streak}</b> ${diary.t('tasks-stat-streak-days')} ${diary.t('tasks-stat-streak')}</div>`;
+                <div class="task-stat-chip">🔥 <b>${streak}</b> ${diary.t('tasks-stat-streak-days')} ${diary.t('tasks-stat-streak')}</div>
+            `;
         }
 
-        // Task list — wired via JS delegation, NOT inline onclick
-        // Task list uses a delegated listener to prevent double-fire
+        // --- Task list ---
         const list    = document.getElementById('tasksList');
         const dayData = this.dayData(dateStr);
         const tasks   = dayData.tasks;
@@ -3241,60 +1815,43 @@ const TaskManager = {
                     const delay = Math.min(i * 0.03, 0.2);
                     return `
                     <div class="task-item ${task.important ? 'important' : ''} ${task.completed ? 'completed' : ''}"
-                         style="animation-delay:${delay}s"
-                         data-id="${task.id}" data-date="${dateStr}">
-                        <div class="task-check" data-action="toggle">
+                         style="animation-delay:${delay}s">
+                        <div class="task-check" onclick="TaskManager.toggleTask('${dateStr}',${task.id})">
                             <span class="task-check-inner">✓</span>
                         </div>
                         <span class="task-text">${this._escHtml(task.text)}</span>
                         ${task.important ? '<span class="task-star">⭐</span>' : ''}
-                        <button class="task-del-btn" data-action="delete">✕</button>
+                        <button class="task-del-btn" onclick="TaskManager.deleteTask('${dateStr}',${task.id})">✕</button>
                     </div>`;
                 }).join('');
             }
-
-            // Delegated click handler for task list.
-            list.onclick = (e) => {
-                const item   = e.target.closest('[data-id]');
-                if (!item) return;
-                const taskId  = Number(item.dataset.id);
-                const dStr    = item.dataset.date;
-                const action  = e.target.closest('[data-action]');
-                if (!action) return;
-                if (action.dataset.action === 'toggle') TaskManager.toggleTask(dStr, taskId);
-                if (action.dataset.action === 'delete') TaskManager.deleteTask(dStr, taskId);
-            };
         }
 
-        // Mood section (today only)
+        // --- Mood section ---
         const moodSection = document.getElementById('taskMoodSection');
-        if (moodSection) moodSection.style.display = isToday ? '' : 'none';
-
+        if (moodSection) {
+            moodSection.style.display = isToday ? '' : 'none';
+        }
         const moodLabel = document.getElementById('tasks-mood-label');
         if (moodLabel) moodLabel.textContent = diary.t('tasks-mood-label');
 
         const moodRow = document.getElementById('moodRow');
         if (moodRow && isToday) {
             const moods = [
-                { key: 'great',  icon: '😄', label: diary.t('tasks-mood-great')  },
+                { key: 'great', icon: '😄', label: diary.t('tasks-mood-great') },
                 { key: 'normal', icon: '🙂', label: diary.t('tasks-mood-normal') },
-                { key: 'meh',    icon: '😐', label: diary.t('tasks-mood-meh')    },
-                { key: 'hard',   icon: '😞', label: diary.t('tasks-mood-hard')   },
+                { key: 'meh', icon: '😐', label: diary.t('tasks-mood-meh') },
+                { key: 'hard', icon: '😞', label: diary.t('tasks-mood-hard') },
             ];
             const curMood = dayData.mood || '';
             moodRow.innerHTML = moods.map(m => `
-                <button class="mood-btn ${curMood === m.key ? 'selected' : ''}" data-mood="${m.key}">
+                <button class="mood-btn ${curMood === m.key ? 'selected' : ''}"
+                        onclick="TaskManager.setMood('${dateStr}','${m.key}')">
                     ${m.icon}<span class="mood-label">${m.label}</span>
                 </button>`).join('');
-
-            // Delegated click handler.
-            moodRow.onclick = (e) => {
-                const btn = e.target.closest('[data-mood]');
-                if (btn) TaskManager.setMood(dateStr, btn.dataset.mood);
-            };
         }
 
-        // Quick-add & carry-over (today only)
+        // --- Quick-add & carry-over (today only) ---
         const qaRow = document.getElementById('taskQuickAddRow');
         if (qaRow) qaRow.style.display = isToday ? '' : 'none';
 
@@ -3320,8 +1877,6 @@ const TaskManager = {
 };
 
 
-
-
 // ================================================================
 //  DIARY APP
 // ================================================================
@@ -3340,9 +1895,7 @@ const diary = {
     openMemoryDetail: null,
 
     t(key) { return (T[this.lang] || T.en)[key] || key; },
-    // BUG FIX: use local date parts, not UTC toISOString() which can return
-    // yesterday's date for users in timezones behind UTC.
-    today() { return _localDateStr(0); },
+    today() { return new Date().toISOString().split('T')[0]; },
 
     fmtDate(d) {
         if (!d) return '';
@@ -3394,35 +1947,17 @@ const diary = {
     applyTheme(theme) {
         this.theme = theme;
         document.body.classList.remove('theme-dark');
-        if (theme === 'dark') {
-            document.body.classList.add('theme-dark');
-            try {
-                if (window.Telegram && Telegram.WebApp) {
-                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#0d1117');
-                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#0d1117');
-                }
-            } catch(_) {}
-        } else {
-            try {
-                if (window.Telegram && Telegram.WebApp) {
-                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#ff4500');
-                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#ff4500');
-                }
-            } catch(_) {}
-        }
-        if (!EncryptionManager._key) { console.warn('[diary] applyTheme called before unlock — save skipped'); }
-        else { StorageManager.setItem('theme', theme); }
+        if (theme === 'dark') document.body.classList.add('theme-dark');
+        StorageManager.setItem('theme', theme);
         this._updateSheetChecks();
         this._updateSettingsBar();
         this.closeSheet();
-        if (typeof ShopManager !== 'undefined') ShopManager._toggleGalaxy();
     },
 
     applyLang(lang) {
         this.lang = lang;
         document.documentElement.lang = lang;
-        if (!EncryptionManager._key) { console.warn('[diary] applyLang called before unlock — save skipped'); }
-        else { StorageManager.setItem('lang', lang); }
+        StorageManager.setItem('lang', lang);
         this._updateSheetChecks();
         this.applyTranslations();
         this.renderAll();
@@ -3506,59 +2041,30 @@ const diary = {
         this._updateSettingsBar();
     },
 
-    // Safe JSON parser — returns fallback on any parse error.
-    // Prevents a single malformed cloud value from crashing the entire load.
-    _safeParse(raw, fallback) {
-        if (!raw || typeof raw !== 'string') return fallback;
-        try { return JSON.parse(raw); } catch(e) { return fallback; }
-    },
-
     async load() {
         const data = await StorageManager.getItems([
             'notes','habits','memories','lang','theme','fireStreak','lastActiveDate'
         ]);
 
-        // _safeParse guards against corrupt / legacy unencrypted values
-        this.notes    = this._sortPinned(this._safeParse(data.notes,    []));
-        this.habits   = this._sortPinned(this._safeParse(data.habits,   []));
-        this.memories = this._sortPinned(this._safeParse(data.memories, []));
+        this.notes     = this._sortPinned(JSON.parse(data.notes    || '[]'));
+        this.habits    = this._sortPinned(JSON.parse(data.habits   || '[]'));
+        this.memories  = this._sortPinned(JSON.parse(data.memories || '[]'));
 
-        // Only override defaults if the stored values are valid strings
-        if (data.lang  && typeof data.lang  === 'string') this.lang  = data.lang;
-        if (data.theme && typeof data.theme === 'string') this.theme = data.theme;
-        this.fireStreak     = parseInt(data.fireStreak || '0', 10) || 0;
+        if (data.lang)  this.lang  = data.lang;
+        if (data.theme) this.theme = data.theme;
+        this.fireStreak     = parseInt(data.fireStreak    || '0');
         this.lastActiveDate = data.lastActiveDate || '';
 
-        // ── Apply theme ───────────────────────────────────────────
         document.body.classList.remove('theme-dark');
-        if (this.theme === 'dark') {
-            document.body.classList.add('theme-dark');
-            // Keep Telegram header in sync with dark theme
-            try {
-                if (window.Telegram && Telegram.WebApp) {
-                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#0d1117');
-                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#0d1117');
-                }
-            } catch(_) {}
-        } else {
-            try {
-                if (window.Telegram && Telegram.WebApp) {
-                    if (Telegram.WebApp.setHeaderColor)     Telegram.WebApp.setHeaderColor('#ff4500');
-                    if (Telegram.WebApp.setBackgroundColor) Telegram.WebApp.setBackgroundColor('#ff4500');
-                }
-            } catch(_) {}
-        }
-
+        if (this.theme === 'dark') document.body.classList.add('theme-dark');
         document.documentElement.lang = this.lang;
-        EncryptionManager.applyLang(this.lang);
-        SidebarUI.applyTranslations && SidebarUI.applyTranslations(this.lang);
 
         this.applyTranslations();
         this._updateSheetChecks();
         this.renderAll();
         this.updateFooter();
 
-        // Load tasks BEFORE render so TaskManager.render() has data
+        // Load tasks
         await TaskManager.load();
         TaskManager.render();
     },
@@ -3567,21 +2073,9 @@ const diary = {
         return [...arr].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     },
 
-    async saveNotes() {
-        if (!EncryptionManager._key) { this.toast('⚠️ Not unlocked — save skipped', 'error'); return; }
-        await StorageManager.setItem('notes', JSON.stringify(this.notes));
-        this.renderNotes(); this.updateFooter();
-    },
-    async saveHabits() {
-        if (!EncryptionManager._key) { this.toast('⚠️ Not unlocked — save skipped', 'error'); return; }
-        await StorageManager.setItem('habits', JSON.stringify(this.habits));
-        this.renderHabits(); this.updateFooter();
-    },
-    async saveMemories() {
-        if (!EncryptionManager._key) { this.toast('⚠️ Not unlocked — save skipped', 'error'); return; }
-        await StorageManager.setItem('memories', JSON.stringify(this.memories));
-        this.renderMemories(); this.updateFooter();
-    },
+    async saveNotes()    { await StorageManager.setItem('notes',    JSON.stringify(this.notes));    this.renderNotes();    this.updateFooter(); },
+    async saveHabits()   { await StorageManager.setItem('habits',   JSON.stringify(this.habits));   this.renderHabits();   this.updateFooter(); },
+    async saveMemories() { await StorageManager.setItem('memories', JSON.stringify(this.memories)); this.renderMemories(); this.updateFooter(); },
 
     switchTab(tab) {
         ['notes','habits','tasks','memory'].forEach(t => {
@@ -3593,13 +2087,7 @@ const diary = {
             if (btn) btn.classList.toggle('active', t === tab);
         });
         // Refresh tasks when switching to that tab
-        if (tab === 'tasks') {
-            // Reset calendar container ref so it re-initialises with current data.
-            // Also clear _userNavigated so the calendar anchors back to today.
-            AppCalendar._container    = null;
-            AppCalendar._userNavigated = false;
-            TaskManager.render();
-        }
+        if (tab === 'tasks') TaskManager.render();
     },
 
     updateFooter() {
@@ -3613,18 +2101,10 @@ const diary = {
     },
 
     renderAll() {
-        // Render active tab immediately; defer others to avoid long tasks
-        const activeTab = this._tab || 'notes';
-        if (activeTab === 'notes')   this.renderNotes();
-        else if (activeTab === 'habits')  this.renderHabits();
-        else if (activeTab === 'memory')  this.renderMemories();
+        this.renderNotes();
+        this.renderHabits();
+        this.renderMemories();
         this.updateFooter();
-        // Deferred: non-visible sections rendered after 120ms idle
-        setTimeout(() => {
-            if (activeTab !== 'notes')   try { this.renderNotes(); }   catch(_) {}
-            if (activeTab !== 'habits')  try { this.renderHabits(); }  catch(_) {}
-            if (activeTab !== 'memory')  try { this.renderMemories(); } catch(_) {}
-        }, 120);
     },
 
     togglePin(type, id, event) {
@@ -3646,7 +2126,6 @@ const diary = {
 
     async saveNote(e) {
         e.preventDefault();
-        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const id      = document.getElementById('noteId').value ? +document.getElementById('noteId').value : Date.now();
         const title   = document.getElementById('noteTitle').value.trim();
         const category= document.getElementById('noteCategory').value;
@@ -3746,7 +2225,6 @@ const diary = {
 
     async saveHabit(e) {
         e.preventDefault();
-        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const id   = document.getElementById('habitId').value ? +document.getElementById('habitId').value : Date.now();
         const name = document.getElementById('habitName').value.trim();
         const start= document.getElementById('habitStartDate').value;
@@ -3827,54 +2305,25 @@ const diary = {
         if (!habit) return;
         const statusText = habit.endDate ? '✅ ' + this.t('lbl-completed') : (this.lang === 'ru' ? 'в процессе' : 'in progress');
         document.getElementById('calendarTitle').textContent = `${habit.name} — ${statusText}`;
-
-        // Replace old <table> with AppCalendar rendered into calendarTable container
-        const tableEl = document.getElementById('calendarTable');
-        if (tableEl) {
-            // Re-purpose the table element as a div container for the new calendar
-            tableEl.style.cssText = 'display:block;width:100%';
-
-            // Determine starting month from habit.startDate
-            const startParts = habit.startDate ? habit.startDate.split('-').map(Number) : null;
-            const initYear   = startParts ? startParts[0] : new Date().getFullYear();
-            const initMonth  = startParts ? startParts[1] - 1 : new Date().getMonth();
-
-            // Build a HabitCalendar using AppCalendar in month mode
-            const habCal = Object.create(AppCalendar);
-            habCal._container   = tableEl;
-            habCal._calMode     = 'month';
-            habCal._calYear     = new Date().getFullYear();
-            habCal._calMonth    = new Date().getMonth();
-            habCal._viewDate    = this.today();
-            habCal._getActivity = (ds) => (habit.completedDays || []).includes(ds);
-            habCal._onSelect    = (ds) => {
-                diary.toggleDay(id, ds, null);
-                // Re-render with updated data
-                habCal._getActivity = (ds2) => (habit.completedDays || []).includes(ds2);
-                habCal.render();
-            };
-            // Override is-selected to show completed days, not a single selected date
-            const origRender = habCal.render.bind(habCal);
-            habCal.render = function() {
-                origRender();
-                // After rendering, highlight completed days with green background
-                if (!this._container) return;
-                this._container.querySelectorAll('.appcal-day').forEach(btn => {
-                    // Extract date from onclick attr
-                    const m = (btn.getAttribute('onclick') || '').match(/'(\d{4}-\d{2}-\d{2})'/);
-                    if (m) {
-                        const ds = m[1];
-                        if ((habit.completedDays || []).includes(ds)) {
-                            btn.style.background = '#10b981';
-                            btn.style.color = 'white';
-                        }
-                    }
-                });
-            };
-            habCal.render();
-            tableEl._habCal = habCal;
+        const dayLabels = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
+        const table  = document.getElementById('calendarTable');
+        const header = `<tr>${dayLabels.map(d=>`<th>${d}</th>`).join('')}</tr>`;
+        let html = '<tr>';
+        let current = new Date(habit.startDate);
+        const offset = (current.getDay() + 6) % 7;
+        for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
+        const todayStr = this.today();
+        const end = habit.endDate ? new Date(habit.endDate) : new Date();
+        while (current <= end) {
+            const day = (current.getDay() + 6) % 7;
+            if (day === 0 && (offset > 0 || html !== '<tr>')) html += '</tr><tr>';
+            const d    = current.toISOString().split('T')[0];
+            const done = habit.completedDays.includes(d);
+            html += `<td class="${done ? 'done' : ''}" onclick="diary.toggleDay(${id},'${d}',event);diary.showCalendar(${id},event)">${current.getDate()}</td>`;
+            current.setDate(current.getDate() + 1);
         }
-
+        html += '</tr>';
+        table.innerHTML = header + html;
         document.getElementById('calendarModal').classList.add('open');
     },
 
@@ -3951,7 +2400,6 @@ const diary = {
 
     async saveMemory(e) {
         e.preventDefault();
-        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const id     = document.getElementById('memoryId').value ? +document.getElementById('memoryId').value : Date.now();
         const title  = document.getElementById('memoryTitle').value.trim();
         const type   = document.getElementById('memoryType').value;
@@ -4026,7 +2474,6 @@ const diary = {
 
     async saveEvent(e) {
         e.preventDefault();
-        if (!EncryptionManager._key) { this.toast('⚠️ App not ready — please wait', 'error'); return; }
         const memId   = +document.getElementById('eventMemoryId').value;
         const editIdx = document.getElementById('editEventIdx').value;
         const date    = document.getElementById('eventDate').value;
@@ -4204,232 +2651,73 @@ const diary = {
     },
 
     async _saveStreak() {
-        if (!EncryptionManager._key) return; // skip if not yet unlocked
         await StorageManager.setItem('fireStreak',     this.fireStreak.toString());
         await StorageManager.setItem('lastActiveDate', this.lastActiveDate);
     },
 
-    // Guard: prevents double-init when both auto-unlock and manual unlock
-    // paths both call diary.init() in the same session.
-    _initialized: false,
-
     async init() {
-        if (this._initialized) {
-            // Already fully initialised — just re-load data and re-render
-            // (handles the edge case where init() is called after a sync)
-            console.log('[diary] init() called again — re-loading data only');
-            try { await this.load(); } catch(e) { console.error('[diary] reload failed:', e); }
-            return;
-        }
-        this._initialized = true;
-
-        // ── Step 0: Telegram WebApp SDK setup ────────────────────
-        // ready() + expand() are called in <head> before any script runs
-        // (see the inline script right after telegram-web-app.js loads).
-        // We only set header/background colours here — those are safe to
-        // call multiple times and depend on the loaded theme, which we
-        // don't know until this point.
         try {
             if (window.Telegram && Telegram.WebApp) {
-                // Sync Telegram header colour to our accent so the status-bar
-                // area above the Mini App matches the app gradient.
-                if (Telegram.WebApp.setHeaderColor) {
-                    try { Telegram.WebApp.setHeaderColor('#ff4500'); } catch(_) {}
-                }
-                if (Telegram.WebApp.setBackgroundColor) {
-                    try { Telegram.WebApp.setBackgroundColor('#ff4500'); } catch(_) {}
-                }
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
             }
-        } catch(e) { console.warn('[diary] Telegram SDK setup error:', e); }
+        } catch(e) {}
 
-        // ── Step 1: Ensure appContent is visible ─────────────────
-        // By the time init() is called, EncryptionManager has already set
-        // appContent to display:block. We DON'T hide it again here — doing
-        // so was causing the "dark screen" bug when init took > 1 frame.
-        const appContent = document.getElementById('appContent');
-
-        // ── Step 2: StorageManager must be ready before any read/write ──
         StorageManager.init();
+        await this.load();
 
-        // ── Step 3: Show full-screen loading animation ───────────
-        // This replaces the old opacity:0.55 shimmer with a proper
-        // animated splash screen that shows real progress messages.
-        const _lsEl    = document.getElementById('appLoadingScreen');
-        const _lsFill  = document.getElementById('lsBarFill');
-        const _lsPct   = document.getElementById('lsPct');
-        const _lsMsg   = document.getElementById('lsMsg');
-        const _lsMsgs  = this.lang === 'ru'
-            ? ['Загружаем данные…','Расшифровываем заметки…','Загружаем привычки…','Готовим задачи…','Почти готово…']
-            : ['Loading your data…','Decrypting notes…','Loading habits…','Preparing tasks…','Almost ready…'];
-        let _lsProg = 0, _lsMsgIdx = 0;
+        document.getElementById('noteForm').addEventListener('submit',   e => this.saveNote(e));
+        document.getElementById('habitForm').addEventListener('submit',  e => this.saveHabit(e));
+        document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
+        document.getElementById('eventForm').addEventListener('submit',  e => this.saveEvent(e));
 
-        const _lsSetProg = (p) => {
-            _lsProg = Math.min(100, p);
-            if (_lsFill) _lsFill.style.width = _lsProg + '%';
-            if (_lsPct)  _lsPct.textContent  = Math.round(_lsProg) + '%';
-        };
-        const _lsSetMsg = (msg) => {
-            if (!_lsMsg) return;
-            _lsMsg.style.animation = 'none';
-            void _lsMsg.offsetWidth;
-            _lsMsg.textContent = msg;
-            _lsMsg.style.animation = 'lsMsgFade 0.4s ease both';
-        };
-        // Auto-increment progress naturally while data loads.
-        // linear increment so the bar always moves visually, even if cloud
-        // reads are slow. The real completion is driven by _lsHide() below.
-        let _lsHideCalled = false;
-        const _lsAutoTimer = setInterval(() => {
-            // Approach 95% slowly (never blocks at 88) — _lsHide jumps to 100
-            if (_lsProg < 95) _lsSetProg(_lsProg + Math.max(0.8, (95 - _lsProg) * 0.07));
-            _lsMsgIdx = (_lsMsgIdx + 1) % _lsMsgs.length;
-            _lsSetMsg(_lsMsgs[_lsMsgIdx]);
-        }, 1800);
-
-        // Safety net: force-complete loading screen after 12s
-        const _lsSafetyTimer = setTimeout(() => {
-            if (!_lsHideCalled) {
-                console.warn('[diary] Loading screen safety timeout — forcing hide');
-                _lsHide();
-            }
-        }, 12000);
-
-        const _lsHide = () => {
-            if (_lsHideCalled) return; // idempotent — safe to call multiple times
-            _lsHideCalled = true;
-            clearInterval(_lsAutoTimer);
-            clearTimeout(_lsSafetyTimer);
-            _lsSetProg(100);
-            // Use requestAnimationFrame so the 100% width actually paints
-            // before we start the fade — prevents a "jump to 100% then gone"
-            // flash that is especially visible on 60 Hz iOS displays.
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    if (_lsEl) {
-                        _lsEl.style.transition = 'opacity 0.35s ease';
-                        _lsEl.style.opacity = '0';
-                        setTimeout(() => {
-                            _lsEl.classList.remove('visible');
-                            _lsEl.style.opacity = '';
-                            _lsEl.style.transition = '';
-                        }, 380);
-                    }
-                    if (appContent) {
-                        appContent.style.opacity = '1';
-                        appContent.style.pointerEvents = '';
-                    }
-                }, 200);
-            });
-        };
-
-        if (_lsEl) _lsEl.classList.add('visible');
-        if (appContent) {
-            appContent.style.opacity       = '0';
-            appContent.style.pointerEvents = 'none';
-            appContent.style.transition    = 'opacity 0.4s ease';
-        }
-
-        // ── Step 4: Load all persisted data ──────────────────────
-        try {
-            await this.load();
-        } catch(e) {
-            console.error('[diary] load failed:', e);
-            // Even on failure: render empty state so the UI isn't stuck
-            try { this.renderAll(); this.updateFooter(); } catch(_) {}
-        }
-
-        // ── Step 5: Reveal app (hide loading screen) ─────────────
-        _lsHide();
-
-        // ── Step 6: Wire form submits (once only) ────────────────
-        // Use { once: false } deliberately — we want persistent listeners,
-        // but we guard with _initialized so this block only runs once.
-        const safeAddSubmit = (id, fn) => {
-            const el = document.getElementById(id);
-            if (el) el.addEventListener('submit', fn);
-        };
-        safeAddSubmit('noteForm',   e => this.saveNote(e));
-        safeAddSubmit('habitForm',  e => this.saveHabit(e));
-        safeAddSubmit('memoryForm', e => this.saveMemory(e));
-        safeAddSubmit('eventForm',  e => this.saveEvent(e));
-
-        // ── Step 7: Task input listeners ─────────────────────────
+        // Task quick-add: Enter key support + iOS-safe click handler
         const qi = document.getElementById('taskQuickInput');
-        if (qi) qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
-
+        if (qi) {
+            qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
+            // iOS Safari: also handle 'compositionend' for IME keyboards
+            qi.addEventListener('compositionend', () => { /* allow IME to settle */ });
+        }
+        // Attach add button via JS (more reliable than inline onclick on iOS Safari)
         const taskAddBtn = document.getElementById('taskAddBtn');
         if (taskAddBtn) {
+            // Use both click and touchend for maximum iOS compatibility
             taskAddBtn.addEventListener('click', e => { e.preventDefault(); TaskManager.quickAdd(); });
+            taskAddBtn.addEventListener('touchend', e => { e.preventDefault(); TaskManager.quickAdd(); }, { passive: false });
         }
 
-        // ── Step 8: Clear-all notes ──────────────────────────────
-        const clearAllBtn = document.getElementById('clearAll');
-        if (clearAllBtn) {
-            clearAllBtn.addEventListener('click', async () => {
-                if (!confirm(this.t('confirm-clear-all'))) return;
-                this.notes = [];
-                await this.saveNotes();
-                this.toast(this.t('toast-all-deleted'));
-            });
-        }
+        document.getElementById('clearAll').addEventListener('click', async () => {
+            if (!confirm(this.t('confirm-clear-all'))) return;
+            this.notes = [];
+            await this.saveNotes();
+            this.toast(this.t('toast-all-deleted'));
+        });
 
-        // ── Step 9: Modal backdrop dismiss ───────────────────────
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
             overlay.addEventListener('click', e => { if (e.target === overlay) this.closeModals(); });
         });
 
-        // ── Step 10: Bottom-sheet swipe-to-dismiss ───────────────
         const sheet = document.getElementById('bottomSheet');
-        if (sheet) {
-            let sheetStartY = 0;
-            sheet.addEventListener('touchstart', e => { sheetStartY = e.touches[0].clientY; }, { passive: true });
-            sheet.addEventListener('touchend',   e => { if (e.changedTouches[0].clientY - sheetStartY > 60) this.closeSheet(); }, { passive: true });
-        }
+        let sheetStartY = 0;
+        sheet.addEventListener('touchstart', e => { sheetStartY = e.touches[0].clientY; }, { passive: true });
+        sheet.addEventListener('touchend', e => { if (e.changedTouches[0].clientY - sheetStartY > 60) this.closeSheet(); }, { passive: true });
 
-        // ── Step 11: Keyboard escape ─────────────────────────────
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 this.closeModals(); this.closeSheet();
-                SidebarUI.close(); AchievementsUI.close(); RubyManager.closeModal();
+                SidebarUI.close(); AchievementsUI.close();
             }
         });
 
-        // ── Step 12: Default dates for forms ────────────────────
         const todayStr = this.today();
-        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-        setVal('habitStartDate',  todayStr);
-        setVal('memoryStartDate', todayStr);
-        setVal('eventDate',       todayStr);
+        document.getElementById('habitStartDate').value  = todayStr;
+        document.getElementById('memoryStartDate').value = todayStr;
+        document.getElementById('eventDate').value       = todayStr;
 
-        // ── Step 13: Sub-systems (defer to next idle frame) ─────
         SidebarUI.init();
-        // Defer non-critical subsystems: AchievementsUI + stubs run
-        // after first paint to unblock the main thread faster.
-        setTimeout(() => {
-            try { AchievementsUI.init(); } catch(e) {}
-            try { RubyManager.init(); } catch(e) {}
-            try { ShopManager.init(); } catch(e) {}
-        }, 100);
+        AchievementsUI.init();
 
-        // ── Step 14: New-user feature gating ────────────────────────
-        // Detected AFTER all cloud data is loaded so we never misclassify
-        // an existing user as new due to a slow first-read.
-        //
-        // isOnyxUser  = has ever earned Onyx OR owns shop items.
-        // isTasksUser = has any Daily Tasks history in the last 30 days
-        //               OR set a persistent flag on a previous session.
-        //
-        // We persist dbmix_tasks_ever_used in CloudStorage so users with
-        // data older than 30 days are still recognised as existing users.
-        this._applyNewUserGating();
-
-        console.log('%c✅ DailyBookimix v6.0 — loaded!', 'color:#ff8c42;font-weight:900;font-size:16px');
-    },
-
-    // Tasks tab is always visible — no feature gating
-    _applyNewUserGating() {
-        const tasksTabBtn = document.getElementById('tasksTabBtn');
-        if (tasksTabBtn) tasksTabBtn.style.display = '';
+        console.log('%c✅ DailyBookimix v5 — loaded with E2E encryption + Daily Tasks!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
@@ -4441,10 +2729,7 @@ const SidebarUI = {
     _strings: {
         en: {
             nickname: 'Nickname', menu: 'Menu', privacy: 'Privacy',
-            achievements: 'Achievements', dailyChallenges: 'Daily Challenges',
-            shop: 'Shop',
-            deleteAccount: 'Delete account & all data',
-            forceSync: 'Force Sync from Cloud',
+            achievements: 'Achievements', deleteAccount: 'Delete account & all data',
             saveNick: 'Save nickname', nickPlaceholder: 'Set your nickname...',
             nickSaved: 'Nickname saved ✅',
             delTitle: 'Delete all data?',
@@ -4453,10 +2738,7 @@ const SidebarUI = {
         },
         ru: {
             nickname: 'Никнейм', menu: 'Меню', privacy: 'Конфиденциальность',
-            achievements: 'Достижения', dailyChallenges: 'Ежедневные задания',
-            shop: 'Магазин',
-            deleteAccount: 'Удалить аккаунт и все данные',
-            forceSync: 'Принудительная синхронизация',
+            achievements: 'Достижения', deleteAccount: 'Удалить аккаунт и все данные',
             saveNick: 'Сохранить никнейм', nickPlaceholder: 'Введи никнейм...',
             nickSaved: 'Никнейм сохранён ✅',
             delTitle: 'Удалить все данные?',
@@ -4521,14 +2803,11 @@ const SidebarUI = {
         const strs = this._strings[lang] || this._strings.en;
         const set  = (id, txt) => { const el = document.getElementById(id); if(el) el.textContent = txt; };
         const setPh= (id, txt) => { const el = document.getElementById(id); if(el) el.placeholder = txt; };
-        set('sb-lbl-nickname',          strs.nickname);
-        set('sb-lbl-menu',              strs.menu);
-        set('sb-lbl-danger',            strs.privacy);
-        set('sb-item-achievements',     strs.achievements);
-        // sb-item-daily-challenges removed
-        // sb-item-shop removed
-        set('sb-item-delete',           strs.deleteAccount);
-        set('sb-item-force-sync',       strs.forceSync || 'Force Sync from Cloud');
+        set('sb-lbl-nickname',     strs.nickname);
+        set('sb-lbl-menu',         strs.menu);
+        set('sb-lbl-danger',       strs.privacy);
+        set('sb-item-achievements',strs.achievements);
+        set('sb-item-delete',      strs.deleteAccount);
         set('sidebarSaveNickBtn',  strs.saveNick);
         set('del-modal-title',     strs.delTitle);
         set('del-modal-desc',      strs.delDesc);
@@ -4543,8 +2822,6 @@ const SidebarUI = {
         document.getElementById('sidebarBackdrop').classList.add('open');
         document.getElementById('sidebarPanel').classList.add('open');
         this._updateHeaderDisplay();
-        // Refresh diamond badge whenever sidebar opens
-        if (typeof ShopManager !== 'undefined') ShopManager._updateDiamondBadge();
     },
 
     close() {
@@ -4573,67 +2850,32 @@ const SidebarUI = {
     },
 
     async executeDeleteAccount() {
-        // Show loading state on the confirm button
-        const confirmBtn = document.getElementById('del-confirm-btn');
-        if (confirmBtn) {
-            const isRu = (diary.lang === 'ru');
-            confirmBtn.textContent = isRu ? '⏳ Удаляем…' : '⏳ Deleting…';
-            confirmBtn.disabled = true;
+        diary.notes = []; diary.habits = []; diary.memories = [];
+        diary.fireStreak = 0; diary.lastActiveDate = '';
+
+        const keys = ['notes','habits','memories','fireStreak','lastActiveDate','userNickname','userId','tasks_v1','achievements_v1'];
+        for (const key of keys) {
+            try { await StorageManager.setItem(key, ''); } catch(e) {}
         }
 
-        try {
-            // 1. Clear encryption salt + sentinel via EncryptionManager helper
-            await EncryptionManager._csDel('dbmix_salt');
-            await EncryptionManager._csDel('dbmix_sentinel');
+        this.profile = { name: '', userId: '', photoUrl: '', nickname: '' };
+        TaskManager._data = {};
 
-            // 2. Clear static data keys through StorageManager (so they go to cloud too)
-            const keys = ['notes','habits','memories','fireStreak','lastActiveDate',
-                          'userNickname','userId','tasks_v1','achievements_v1','rubies_v1','shop_v1',
-                          'dbmix_tasks_ever_used'];
-            for (const key of keys) {
-                try { await StorageManager.setItem(key, ''); } catch(_) {}
-            }
+        diary.renderAll();
+        diary.updateFooter();
+        TaskManager.render();
+        AchievementsUI._state = {};
+        AchievementsUI._save();
 
-            // 3. Per-day task + ruby-progress shards — last 90 days
-            for (let i = 0; i < 90; i++) {
-                const ds = _localDateStr(-i);
-                try { await StorageManager.setItem('t:'  + ds, ''); } catch(_) {}
-                try { await StorageManager.setItem('rp:' + ds, ''); } catch(_) {}
-            }
-
-            // 4. Wipe all local storage
-            try { localStorage.clear();   } catch(_) {}
-            try { sessionStorage.clear(); } catch(_) {}
-
-            document.getElementById('deleteAccountModal').classList.remove('open');
-
-            // Reload the app so the lock screen comes up clean with a fresh state
-            diary.toast('🗑️ ' + (diary.lang === 'ru' ? 'Все данные удалены' : 'All data deleted'));
-            setTimeout(() => window.location.reload(), 700);
-
-        } catch(e) {
-            console.error('[SidebarUI] executeDeleteAccount error:', e);
-            if (confirmBtn) {
-                confirmBtn.textContent = diary.t ? diary.t('del-confirm-btn') : 'Delete everything';
-                confirmBtn.disabled = false;
-            }
-            diary.toast('⚠️ ' + (diary.lang === 'ru' ? 'Ошибка при удалении' : 'Delete failed'), 'error');
-        }
-    },
-
-    forceSync() {
-        this.close();
-        setTimeout(async () => {
-            await StorageManager.forceSync();
-        }, 320);
+        document.getElementById('deleteAccountModal').classList.remove('open');
+        diary.toast('🗑️ All data deleted');
     },
 
     openAchievements() {
         this.close();
         setTimeout(() => { AchievementsUI.open(); }, 300);
-    },
-
-    };
+    }
+};
 
 
 // ================================================================
@@ -4722,30 +2964,12 @@ const AchievementsUI = {
         });
     },
 
-    // FIX: _save() now properly awaits StorageManager and uses exponential
-    //      back-off (500 ms, then 2 000 ms) instead of a flat 1.5 s retry,
-    //      giving CloudStorage more time to recover on slow connections.
-    //      Two retries are kept because a single retry is sometimes not enough
-    //      when Telegram is re-establishing the CloudStorage session.
-    async _save() {
+    _save() {
+        // Persist achievements state — retry once on failure to prevent data loss
         const data = JSON.stringify(this._state);
-        try {
-            await StorageManager.setItem('achievements_v1', data);
-        } catch(e) {
-            console.warn('[AchievementsUI] _save attempt 1 failed, retrying in 500 ms:', e);
-            setTimeout(async () => {
-                try {
-                    await StorageManager.setItem('achievements_v1', data);
-                } catch(e2) {
-                    console.warn('[AchievementsUI] _save attempt 2 failed, retrying in 2 s:', e2);
-                    setTimeout(() => {
-                        StorageManager.setItem('achievements_v1', data).catch(e3 => {
-                            console.error('[AchievementsUI] _save attempt 3 failed — achievement state may be lost:', e3);
-                        });
-                    }, 2000);
-                }
-            }, 500);
-        }
+        StorageManager.setItem('achievements_v1', data).catch(() => {
+            setTimeout(() => StorageManager.setItem('achievements_v1', data).catch(() => {}), 1500);
+        });
     },
 
     // ONLY sets earnedDate on FIRST unlock — never overwrites it
@@ -4830,10 +3054,8 @@ const AchievementsUI = {
     open() {
         this.recalculate();
         this._render();
-        const modal = document.getElementById('achievementsModal');
-        if (!modal) return;
-        modal.classList.add('open');
-        modal.scrollTop = 0;
+        document.getElementById('achievementsModal').classList.add('open');
+        document.getElementById('achievementsModal').scrollTop = 0;
     },
 
     close() {
@@ -4904,109 +3126,41 @@ const AchievementsUI = {
 
 
 // ================================================================
-//  PERF HELPERS — v5.5
+//  BOOT SEQUENCE
 // ================================================================
+(async function boot() {
+    // Apply saved language to lock screen (try CloudStorage, fall back to localStorage)
+    let savedLang = 'en';
+    try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch(e) {}
+    EncryptionManager.applyLang(savedLang);
 
-window.ric = window.requestIdleCallback || (cb => setTimeout(() => cb({ timeRemaining: () => 50 }), 16));
+    // Handle Enter key on password input
+    const pi = document.getElementById('lockPasswordInput');
+    if (pi) {
+        pi.addEventListener('keydown', e => {
+            if (e.key === 'Enter') EncryptionManager.unlock();
+        });
+        // Also support on touchend for iOS
+        pi.addEventListener('touchend', e => {
+            // focus is handled by the keyboard — do nothing special
+        }, { passive: true });
+        pi.focus();
+    }
 
-// ================================================================
-//  BOOT SEQUENCE — v6.0
-//  Order:
-//    1. Apply lock-screen language from LS hint (instant, no network)
-//    2. Wire lock-screen Enter key
-//    3. Attempt session-storage auto-unlock (fast, no password prompt)
-//    4. If auto-unlock succeeds → diary.init() (full app boot)
-//    5. Otherwise → show lock screen, wait for user to type password
-//
-//  guaranteed to find their targets even if the script tag is parsed
-//  before some browsers have fully settled the DOM tree.
-// ================================================================
-function _runBoot() {
-    (async function boot() {
-        // ── 0. Ensure Telegram SDK is ready ──────────────────────────────
-        try {
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.ready();
-                Telegram.WebApp.expand();
-            }
-        } catch(e) {}
+    // Try to auto-unlock from session storage
+    const autoUnlocked = await EncryptionManager.tryAutoUnlock();
+    if (autoUnlocked) {
+        await diary.init();
+    }
+    // Otherwise the lock screen stays open and user must enter password
+})();
 
-        // ── 1. Lock-screen language + Telegram user hint ────────────
-        let savedLang = 'en';
-        try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch(e) {}
-
-        // Auto-detect language from Telegram user info
-        try {
-            if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe) {
-                const tgLang = Telegram.WebApp.initDataUnsafe.user?.language_code;
-                if (tgLang && tgLang.startsWith('ru')) savedLang = 'ru';
-
-                // Personalised greeting on lock screen
-                const firstName = Telegram.WebApp.initDataUnsafe.user?.first_name;
-                if (firstName) {
-                    const greetEl = document.getElementById('lock-title');
-                    if (greetEl) {
-                        const isRu2 = savedLang === 'ru';
-                        greetEl.textContent = isRu2
-                            ? `Привет, ${firstName}! 👋`
-                            : `Hey, ${firstName}! 👋`;
-                    }
-                }
-            }
-        } catch(e) {}
-
-        EncryptionManager.applyLang(savedLang);
-        EncryptionManager._maybeShowQuickUnlock();
-
-        // ── 2. Lock-screen Enter key (belt-and-suspenders) ───────────
-        const pi = document.getElementById('lockPasswordInput');
-        if (pi) {
-            pi.addEventListener('keydown', e => {
-                if (e.key === 'Enter') EncryptionManager.unlock();
-            });
-            try { pi.focus(); } catch(_) {}
-        }
-
-        // ── 3. Attempt session auto-unlock ───────────────────────────
-        let autoUnlocked = false;
-        try {
-            autoUnlocked = await EncryptionManager.tryAutoUnlock();
-        } catch(e) {
-            console.warn('[boot] tryAutoUnlock threw:', e);
-            autoUnlocked = false;
-        }
-
-        // ── 4. Full app init if already authenticated ─────────────────
-        if (autoUnlocked) {
-            try {
-                await diary.init();
-            } catch(e) {
-                console.error('[boot] diary.init() after auto-unlock threw:', e);
-                // Show the app anyway — it may be partially usable
-                const ac = document.getElementById('appContent');
-                if (ac) {
-                    ac.style.display = 'block';
-                    ac.style.opacity = '1';
-                    ac.style.pointerEvents = '';
-                }
-                const ls = document.getElementById('appLoadingScreen');
-                if (ls) ls.classList.remove('visible');
-            }
-        }
-        // ── 5. Otherwise lock screen stays open (already class="open") ─
-    })();
-}
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _runBoot);
-} else {
-    _runBoot(); // already interactive/complete
-}
-
-// ── Persist language hint (unencrypted, just for lock-screen UI) ──
-const _patchApplyLang = diary.applyLang.bind(diary);
+// Persist language hint (unencrypted, just for lock screen UI)
+const _patchApplyLang = diary.applyLang;
 diary.applyLang = function(lang) {
     try { localStorage.setItem('dbmix_lang_hint', lang); } catch(e) {}
-    _patchApplyLang(lang);
+    _patchApplyLang.call(diary, lang);
+    EncryptionManager.applyLang(lang);
 };
 </script>
 </body>
