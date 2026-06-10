@@ -1048,7 +1048,7 @@
     <div class="lock-box">
         <div class="lock-icon">🔐</div>
         <div class="lock-title" id="lock-title"></div>
-        <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.</div>
+        <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal.</div>
         <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64"
                onkeydown="if(event.key==='Enter'){EncryptionManager.unlock();}">
         <!-- Status area: shows loading states and error hints -->
@@ -1060,6 +1060,16 @@
         </div>
         <button class="lock-btn" id="lockUnlockBtn" onclick="EncryptionManager.unlock()">Unlock 🔓</button>
         <!-- Forgot password / Reset account — always visible on lock screen -->
+        <!-- Quick unlock toggle (only shown when Telegram ID is available) -->
+        <div id="lockQuickUnlockRow" style="display:none;margin-top:10px;text-align:center">
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+                          font-size:12px;font-weight:700;color:rgba(255,255,255,0.65)">
+                <input type="checkbox" id="lockQuickUnlockCheck"
+                       style="width:16px;height:16px;accent-color:white;cursor:pointer">
+                <span id="lockQuickUnlockLabel">Stay unlocked in Telegram</span>
+            </label>
+        </div>
+
         <button id="lockResetBtn" onclick="EncryptionManager.promptReset()"
                 style="margin-top:14px;width:100%;padding:13px;background:rgba(239,68,68,0.18);
                        color:#fca5a5;border:1.5px solid rgba(239,68,68,0.35);border-radius:14px;
@@ -1567,7 +1577,10 @@ const EncryptionManager = {
     _salt: null,       // Uint8Array for PBKDF2
     _unlocking: false, // re-entrancy guard
 
+    // Set _debug = true in browser console to enable verbose EM logging
+    _debug: false,
     _dbg(step, msg, data) {
+        if (!this._debug) return;
         if (data !== undefined) console.debug('[EM][' + step + '] ' + msg, data);
         else console.debug('[EM][' + step + '] ' + msg);
     },
@@ -1644,10 +1657,28 @@ const EncryptionManager = {
     async _csDel(key) { await this._csSet(key, ''); },
 
     // ── Key derivation ────────────────────────────────────────────
+    // Derives the AES-256-GCM encryption key from:
+    //   1. The user's password (primary secret)
+    //   2. The user's Telegram ID (if available) — adds entropy,
+    //      makes the key bound to this Telegram account, hardens
+    //      offline brute-force, and is identical across all devices
+    //      logged into the same Telegram account.
+    // The combined input is: password + ":" + telegramUserId (or "" if unavailable)
     async deriveKey(password, salt) {
         const enc = new TextEncoder();
+        let tgId = '';
+        try {
+            if (window.Telegram && Telegram.WebApp.initDataUnsafe) {
+                tgId = String(Telegram.WebApp.initDataUnsafe.user?.id || '');
+            }
+        } catch(_) {}
+
+        // Mix password with Telegram ID for account-bound key derivation
+        const combined = tgId ? `${password}:tg:${tgId}` : password;
+        this._dbg('KEY', `deriveKey: tgId=${tgId ? 'present' : 'absent'}`);
+
         const keyMaterial = await crypto.subtle.importKey(
-            'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
+            'raw', enc.encode(combined), { name: 'PBKDF2' }, false, ['deriveKey']
         );
         return await crypto.subtle.deriveKey(
             { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
@@ -1668,6 +1699,55 @@ const EncryptionManager = {
     },
     _b64decode(str) {
         return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)));
+    },
+
+    // ── Session token + key wrapping ───────────────────────────
+    // _deriveSessionToken: derives a 32-byte token from password+salt.
+    // Used only to derive a wrap key for the AES session key.
+    // The raw password never touches sessionStorage.
+    async _deriveSessionToken(password, salt) {
+        const enc = new TextEncoder();
+        const km = await crypto.subtle.importKey(
+            'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits']
+        );
+        const bits = await crypto.subtle.deriveBits(
+            { name: 'PBKDF2', salt, iterations: 50000, hash: 'SHA-256' },
+            km, 256
+        );
+        return this._b64encode(bits);
+    },
+
+    // _deriveWrapKey: given a base64 token and salt, derive an AES-KW key
+    // used to wrap/unwrap the main encryption key for sessionStorage.
+    async _deriveWrapKey(tokenB64, salt) {
+        const tokenBytes = this._b64decode(tokenB64);
+        const km = await crypto.subtle.importKey(
+            'raw', tokenBytes, { name: 'PBKDF2' }, false, ['deriveKey']
+        );
+        return await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations: 10000, hash: 'SHA-256' },
+            km,
+            { name: 'AES-GCM', length: 256 },
+            false, ['wrapKey', 'unwrapKey']
+        );
+    },
+
+    // _storeWrappedKey: wraps the current AES key and stores it in sessionStorage.
+    // Called once after successful unlock. Allows session resume without re-entering password.
+    async _storeWrappedKey(token, salt) {
+        if (!this._key) return;
+        try {
+            const wrapKey = await this._deriveWrapKey(token, salt);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const wrapped = await crypto.subtle.wrapKey('raw', this._key, wrapKey, { name: 'AES-GCM', iv });
+            const combined = new Uint8Array(iv.length + wrapped.byteLength);
+            combined.set(iv);
+            combined.set(new Uint8Array(wrapped), iv.length);
+            sessionStorage.setItem('dbmix_wk', this._b64encode(combined.buffer));
+            sessionStorage.setItem('dbmix_sk', this._b64encode(salt.buffer || salt));
+        } catch(e) {
+            this._dbg('ERROR', '_storeWrappedKey failed', e.message);
+        }
     },
 
     // ── AES-GCM encrypt / decrypt ─────────────────────────────────
@@ -1766,7 +1846,8 @@ const EncryptionManager = {
             if (sentinel) {
                 const dec = await this.decrypt(sentinel);
                 this._dbg('KEY', `sentinel decrypted="${dec}"`);
-                if (dec !== 'DAILYBOOKMIX_V5') {
+                const validSentinels = ['DAILYBOOKMIX_V6', 'DAILYBOOKMIX_V5'];
+                if (!validSentinels.includes(dec)) {
                     // Wrong password — the sentinel decoded to garbage
                     this._key = null;
                     btn.textContent = origText; btn.disabled = false;
@@ -1776,24 +1857,32 @@ const EncryptionManager = {
                     this._showLockError('wrong-password');
                     return;
                 }
-                // ✅ Password correct
+                // ✅ Password correct — migrate V5 sentinel to V6 silently
+                if (dec === 'DAILYBOOKMIX_V5') {
+                    try {
+                        const encV6 = await this.encrypt('DAILYBOOKMIX_V6');
+                        await this._csSet('dbmix_sentinel', encV6);
+                        try { localStorage.setItem('dbmix_sentinel', encV6); } catch(_) {}
+                        this._dbg('OK', 'Sentinel migrated V5→V6 ✅');
+                    } catch(_) {}
+                }
             } else if (isFirstTime) {
                 // New account: write sentinel for the first time
                 this._setLoading(true, isRu ? '⏳ Сохраняем ключ…' : '⏳ Saving key…');
-                const enc = await this.encrypt('DAILYBOOKMIX_V5');
+                const enc = await this.encrypt('DAILYBOOKMIX_V6');
                 await this._csSet('dbmix_sentinel', enc);
                 try { localStorage.setItem('dbmix_sentinel', enc); } catch(_) {}
-                this._dbg('OK', 'Sentinel written for new account ✅');
+                this._dbg('OK', 'Sentinel V6 written for new account ✅');
             } else {
                 // Salt exists but sentinel is missing — probably the first-setup
                 // was interrupted mid-write.  Recover by rewriting the sentinel
                 // instead of permanently locking the user out.
                 this._dbg('ERROR', 'Salt found but sentinel missing — attempting recovery');
                 try {
-                    const enc = await this.encrypt('DAILYBOOKMIX_V5');
+                    const enc = await this.encrypt('DAILYBOOKMIX_V6');
                     await this._csSet('dbmix_sentinel', enc);
                     try { localStorage.setItem('dbmix_sentinel', enc); } catch(_) {}
-                    this._dbg('OK', 'Sentinel recovered ✅');
+                    this._dbg('OK', 'Sentinel V6 recovered ✅');
                 } catch(e) {
                     // Recovery write failed — proceed optimistically; worst case data
                     // won't decrypt but the user isn't permanently locked out.
@@ -1802,9 +1891,19 @@ const EncryptionManager = {
             }
 
             // ── Step 4: Open app ──────────────────────────────────
-            try { sessionStorage.setItem('dbmix_pw', pw); } catch(_) {}
+            // Store session token + wrapped key for password-free session resume.
+            // The raw password never touches storage.
+            try {
+                const token = await this._deriveSessionToken(pw, this._salt);
+                sessionStorage.setItem('dbmix_tok', token);
+                sessionStorage.removeItem('dbmix_pw'); // clear any legacy value
+                await this._storeWrappedKey(token, this._salt);
+            } catch(_) {}
             this._setLoading(false);
             this._unlocking = false;
+
+            // Persist quick-unlock preference
+            this._isQuickUnlockEnabled(); // reads checkbox + saves to LS
 
             // Reveal the app shell BEFORE diary.init() so the gradient
             // background is painted before any async data loads begin.
@@ -1872,59 +1971,98 @@ const EncryptionManager = {
     // Shows a loading state on the lock screen while cloud reads are in
     // progress so the user sees "checking…" rather than a frozen lock screen.
     async tryAutoUnlock() {
-        let pw = null;
-        try { pw = sessionStorage.getItem('dbmix_pw'); } catch(_) {}
-        if (!pw) return false;
+        let token = null;
+        try {
+            token = sessionStorage.getItem('dbmix_tok');
+            // Legacy fallback: if old raw-password session exists, clear it (security hygiene)
+            if (!token && sessionStorage.getItem('dbmix_pw')) {
+                sessionStorage.removeItem('dbmix_pw');
+            }
+        } catch(_) {}
+        if (!token) return false;
         this._dbg('OK', 'tryAutoUnlock: session token found');
         // CloudStorage hangs don't leave the app frozen on the lock screen.
         // If the timeout fires we return false — user sees the password screen.
         const _autoUnlockWithTimeout = async () => {
-            // Show a subtle loading state on the lock screen so the user knows
-            // something is happening (don't focus the input — auto-unlock is silent)
             this._setLoading(true, '⏳ Resuming session…');
-
-            const hasCloud = !!(
-                window.Telegram && Telegram.WebApp.CloudStorage &&
-                Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-            );
             try {
+                // Attempt to unwrap the AES key stored in sessionStorage.
+                // The wrapped key was stored during the last successful unlock
+                // and can only be unwrapped using the same session token.
+                let wrappedKeyB64 = null;
+                try { wrappedKeyB64 = sessionStorage.getItem('dbmix_wk'); } catch(_) {}
+
                 let saltB64 = null;
-                if (hasCloud) saltB64 = await this._csGetWithRetry('dbmix_salt', 2);
-                if (!saltB64 && !hasCloud) {
-                    try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
-                }
+                try { saltB64 = sessionStorage.getItem('dbmix_sk'); } catch(_) {}
+
+                // Load salt from cloud/LS for token verification
                 if (!saltB64) {
-                    this._dbg('ERROR', 'tryAutoUnlock: no salt found');
+                    const hasCloud = !!(
+                        window.Telegram && Telegram.WebApp.CloudStorage &&
+                        Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+                    );
+                    if (hasCloud) saltB64 = await this._csGetWithRetry('dbmix_salt', 2);
+                    if (!saltB64) {
+                        try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(_) {}
+                    }
+                }
+
+                if (!saltB64 || !wrappedKeyB64) {
+                    this._dbg('ERROR', 'tryAutoUnlock: missing salt or wrapped key');
                     this._setLoading(false);
                     return false;
                 }
 
                 this._salt = this._b64decode(saltB64);
-                this._key  = await this.deriveKey(pw, this._salt);
 
+                // Derive a KWrap key from the session token + salt
+                const wrapKey = await this._deriveWrapKey(token, this._salt);
+
+                // Unwrap the stored AES-GCM key
+                try {
+                    const wrappedBytes = this._b64decode(wrappedKeyB64);
+                    const iv       = wrappedBytes.slice(0, 12);
+                    const wrapped  = wrappedBytes.slice(12);
+                    this._key = await crypto.subtle.unwrapKey(
+                        'raw', wrapped, wrapKey,
+                        { name: 'AES-GCM', iv }, 
+                        { name: 'AES-GCM', length: 256 },
+                        false, ['encrypt', 'decrypt']
+                    );
+                } catch(e) {
+                    this._dbg('ERROR', 'tryAutoUnlock: key unwrap failed — session expired', e.message);
+                    this._key = null;
+                    try { sessionStorage.clear(); } catch(_) {}
+                    this._setLoading(false);
+                    return false;
+                }
+
+                // ✅ Key restored — verify with sentinel for extra safety
+                const hasCloud2 = !!(
+                    window.Telegram && Telegram.WebApp.CloudStorage &&
+                    Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
+                );
                 let sentinel = null;
-                if (hasCloud) sentinel = await this._csGetWithRetry('dbmix_sentinel', 2);
-                if (!sentinel && !hasCloud) {
+                if (hasCloud2) sentinel = await this._csGetWithRetry('dbmix_sentinel', 1);
+                if (!sentinel) {
                     try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(_) {}
                 }
                 if (sentinel) {
                     const dec = await this.decrypt(sentinel);
-                    if (dec !== 'DAILYBOOKMIX_V5') {
-                        this._dbg('ERROR', 'tryAutoUnlock: sentinel mismatch — clearing stale session');
+                    if (dec !== 'DAILYBOOKMIX_V6') {
+                        this._dbg('ERROR', 'tryAutoUnlock: sentinel mismatch');
                         this._key = null;
-                        try { sessionStorage.removeItem('dbmix_pw'); } catch(_) {}
+                        try { sessionStorage.clear(); } catch(_) {}
                         this._setLoading(false);
                         return false;
                     }
                 }
 
-                // ✅ Session is valid — reveal the app
                 this._setLoading(false);
                 const lockEl = document.getElementById('encryptionLock');
                 const appEl  = document.getElementById('appContent');
                 if (lockEl) lockEl.classList.remove('open');
                 if (appEl)  appEl.style.display = 'block';
-
                 this._dbg('OK', 'tryAutoUnlock success ✅');
                 return true;
             } catch(e) {
@@ -1970,20 +2108,19 @@ const EncryptionManager = {
             // 2. Wipe all data keys (static + last 90 days of per-day shards)
             const staticKeys = ['notes','habits','memories','fireStreak','lastActiveDate',
                                 'userNickname','userId','tasks_v1','achievements_v1',
-                                'rubies_v1','shop_v1'];
+                                'rubies_v1','shop_v1','dbmix_tasks_ever_used'];
             for (const k of staticKeys) {
                 try { await this._csDel(k); } catch(_) {}
             }
             for (let i = 0; i < 90; i++) {
-                const d = new Date(); d.setDate(d.getDate() - i);
-                const ds = d.toISOString().split('T')[0];
+                const ds = _localDateStr(-i);
                 try { await this._csDel('t:'  + ds); } catch(_) {}
                 try { await this._csDel('rp:' + ds); } catch(_) {}
             }
 
-            // 3. Wipe local storage entirely
+            // 3. Wipe local + session storage entirely
             try { localStorage.clear();   } catch(_) {}
-            try { sessionStorage.clear(); } catch(_) {}
+            try { sessionStorage.clear(); } catch(_) {} // also clears dbmix_tok, dbmix_wk, dbmix_sk
 
             this._key = null; this._salt = null;
             this._dbg('RESET', 'Reset complete — reloading app');
@@ -2007,7 +2144,7 @@ const EncryptionManager = {
             en: {
                 title: '', placeholder: 'Enter password...',
                 desc:  'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
-                hint:  'First time? Choose any password — it will be used to encrypt all your data.',
+                hint:  'First time? Set any password — it encrypts your data and syncs across all your Telegram devices.',
                 btn:   'Unlock 🔓',
                 resetBtn: 'Forgot password? Reset account',
                 resetTitle: 'Reset Account?',
@@ -2017,7 +2154,7 @@ const EncryptionManager = {
             ru: {
                 title: '', placeholder: 'Введи пароль...',
                 desc:  'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
-                hint:  'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
+                hint:  'Первый раз? Введи любой пароль — он зашифрует данные и синхронизирует их на всех устройствах Telegram.',
                 btn:   'Разблокировать 🔓',
                 resetBtn: 'Забыл пароль? Сбросить аккаунт',
                 resetTitle: 'Сбросить аккаунт?',
@@ -2038,6 +2175,39 @@ const EncryptionManager = {
         set('lockResetCancel',  s.resetCancel);
         set('lockResetConfirm', s.resetConfirm);
         setPh('lockPasswordInput', s.placeholder);
+        // Quick unlock row label
+        const quLabel = document.getElementById('lockQuickUnlockLabel');
+        if (quLabel) quLabel.textContent = lang === 'ru'
+            ? 'Оставаться в системе в Telegram'
+            : 'Stay unlocked in Telegram';
+    },
+
+    // ── Show quick-unlock row if running inside Telegram ─────────
+    _maybeShowQuickUnlock() {
+        try {
+            if (!window.Telegram || !Telegram.WebApp.initDataUnsafe?.user?.id) return;
+            const row = document.getElementById('lockQuickUnlockRow');
+            if (row) {
+                row.style.display = '';
+                // Restore saved preference
+                try {
+                    const saved = localStorage.getItem('dbmix_quick_unlock');
+                    const cb = document.getElementById('lockQuickUnlockCheck');
+                    if (cb && saved === '1') cb.checked = true;
+                } catch(_) {}
+            }
+        } catch(e) {}
+    },
+
+    // ── Read quick-unlock preference ─────────────────────────────
+    _isQuickUnlockEnabled() {
+        try {
+            const cb = document.getElementById('lockQuickUnlockCheck');
+            const checked = cb && cb.checked;
+            if (checked) localStorage.setItem('dbmix_quick_unlock', '1');
+            else localStorage.removeItem('dbmix_quick_unlock');
+            return !!checked;
+        } catch(e) { return false; }
     }
 };
 
@@ -2069,7 +2239,7 @@ const StorageManager = {
                 Telegram.WebApp.isVersionAtLeast('6.9')
             );
         } catch(e) { this.supportsCloud = false; }
-        console.debug('[SM] init supportsCloud=' + this.supportsCloud);
+        if (window._dbgSM) console.debug('[SM] init supportsCloud=' + this.supportsCloud);
     },
 
     // ── Cloud primitives ─────────────────────────────────────────
@@ -2128,10 +2298,10 @@ const StorageManager = {
     // ── setItem ───────────────────────────────────────────────────
     // Encrypts the value, then writes to CloudStorage (with one retry)
     // and mirrors to localStorage for offline resilience.
+    // Empty/null values delete the key from both stores (no plaintext markers).
     async setItem(key, value) {
-        const toStore = (value === '' || value === null || value === undefined)
-            ? ''
-            : await EncryptionManager.encrypt(value);
+        const isEmpty = (value === '' || value === null || value === undefined);
+        const toStore = isEmpty ? '' : await EncryptionManager.encrypt(value);
 
         return this._enqueue(key, async () => {
             if (this.supportsCloud) {
@@ -2198,7 +2368,7 @@ const StorageManager = {
                 );
                 const result = {};
                 for (const [k, v] of decrypted) { if (v !== null) result[k] = v; }
-                console.debug('[SM] batch read ' + keys.length + ' keys → ' + Object.keys(result).length + ' hits');
+                if (window._dbgSM) console.debug('[SM] batch read ' + keys.length + ' keys → ' + Object.keys(result).length + ' hits');
                 return result;
             } catch(e) {
                 console.warn('[SM] batch read failed (' + e.message + '), falling back to sequential');
@@ -2220,15 +2390,22 @@ const StorageManager = {
             console.warn('[SM] forceSync called before unlock — ignoring');
             return;
         }
-        console.debug('[SM] forceSync() starting…');
+        console.log('[SM] forceSync() starting…');
+        const btn = document.querySelector('[onclick*="forceSync"]');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing…'; }
         try {
+            // Reset TaskManager and calendar state for a clean reload
             TaskManager._viewDate = null;
+            TaskManager._data     = {};
             AppCalendar._container = null;
+            AppCalendar._userNavigated = false;
             await diary.load();
             diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизировано' : 'Synced from cloud'));
         } catch(e) {
             console.error('[SM] forceSync failed', e);
             diary.toast('⚠️ Sync failed', 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '☁️ ' + (diary.lang === 'ru' ? 'Синхронизировать' : 'Force Sync'); }
         }
     }
 };
@@ -2298,6 +2475,7 @@ const T = {
         'confirm-clear-all': 'Delete ALL notes? This cannot be undone.',
         // Tasks
         'tasks-section-title': 'Daily Tasks',
+        'tasks-save-error': '❌ Failed to save — please try again',
         'tasks-quick-ph': 'Add a task...',
         'tasks-mood-label': 'Mood of the day',
         'tasks-empty': 'No tasks yet. Add one above ☝️',
@@ -2614,6 +2792,13 @@ const AppCalendar = {
 };
 
 
+// ── Shared local-date helper (avoids UTC toISOString() offset bug) ──
+function _localDateStr(daysOffset) {
+    const d = new Date();
+    if (daysOffset) d.setDate(d.getDate() + daysOffset);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 // ================================================================
 //  TASK MANAGER v6.0 — Per-day sharding (t:YYYY-MM-DD)
 //  Each day stored in its own CloudStorage key (~500 B each),
@@ -2624,33 +2809,13 @@ const TaskManager = {
     _viewDate:       null,
     _newTaskImp:     false,
 
-    // ── Save mutex — prevents concurrent writes ─────────────────────
-    _saveInProgress: false,
-    _savePending:    false,   // a newer save arrived while one was in flight
-
     // ── Debounce locks — prevent double-taps ─────────────────────
     _addLock:    false,       // prevents double quickAdd from touch+click
     _toggleLock: new Set(),   // IDs currently mid-toggle (prevents re-entry)
     _deleteLock: new Set(),   // IDs currently mid-delete
 
-    // BUG FIX: toISOString() returns UTC midnight, which is the PREVIOUS
-    // calendar day for any timezone behind UTC (e.g. Americas, Pacific).
-    // We must use local year/month/day instead.
-    today() {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${dd}`;
-    },
-
-    dateOf(daysAgo) {
-        const d = new Date(); d.setDate(d.getDate() - daysAgo);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${dd}`;
-    },
+    today()         { return _localDateStr(0);         },
+    dateOf(daysAgo) { return _localDateStr(-daysAgo);    },
 
     dayData(dateStr) {
         if (!this._data[dateStr]) this._data[dateStr] = { tasks: [], mood: '' };
@@ -2711,7 +2876,7 @@ const TaskManager = {
             day.tasks = day.tasks.filter(t => t.id !== newTask.id);
             input.value = text;
             this.render();
-            diary.toast('❌ Failed to save task — please try again', 'error');
+            diary.toast(diary.t('tasks-save-error') || '❌ Failed to save — please try again', 'error');
             console.error('[TaskManager] quickAdd save failed:', e);
         } finally {
             if (addBtn) addBtn.disabled = false;
@@ -2857,12 +3022,7 @@ const TaskManager = {
         let streak = 0;
         const today = this.today();
         for (let i = 0; ; i++) {
-            // Use local date parts to avoid UTC shift
-            const d  = new Date(); d.setDate(d.getDate() - i);
-            const y  = d.getFullYear();
-            const m  = String(d.getMonth() + 1).padStart(2, '0');
-            const dd = String(d.getDate()).padStart(2, '0');
-            const ds = `${y}-${m}-${dd}`;
+            const ds = _localDateStr(-i);
             if (ds > today) continue;
             const day = this._data[ds];
             if (!day || !day.tasks.some(t => t.completed)) break;
@@ -2910,7 +3070,9 @@ const TaskManager = {
     // Called by all mutating operations — saves only the affected day.
     // Rolls up concurrent same-day saves via StorageManager's per-key queue.
     async _save(dateStr) {
-        dateStr = dateStr || this._viewDate || this.today();
+        dateStr = (typeof dateStr === 'string' && dateStr) ? dateStr
+                : (this._viewDate || this.today());
+        if (!dateStr) throw new Error('[TaskManager] _save: no dateStr');
         try {
             await this._saveDay(dateStr);
         } catch(e) {
@@ -2932,14 +3094,7 @@ const TaskManager = {
         this._viewDate = null;
 
         const days = [];
-        for (let i = 0; i < 30; i++) {
-            const d = new Date(); d.setDate(d.getDate() - i);
-            // Use local date parts to avoid UTC midnight shift in negative-offset timezones.
-            const y  = d.getFullYear();
-            const m  = String(d.getMonth() + 1).padStart(2, '0');
-            const dd = String(d.getDate()).padStart(2, '0');
-            days.push(`${y}-${m}-${dd}`);
-        }
+        for (let i = 0; i < 30; i++) days.push(_localDateStr(-i));
 
         // Batch fetch all per-day keys in one call
         const keys    = days.map(d => 't:' + d);
@@ -3187,13 +3342,7 @@ const diary = {
     t(key) { return (T[this.lang] || T.en)[key] || key; },
     // BUG FIX: use local date parts, not UTC toISOString() which can return
     // yesterday's date for users in timezones behind UTC.
-    today() {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${dd}`;
-    },
+    today() { return _localDateStr(0); },
 
     fmtDate(d) {
         if (!d) return '';
@@ -4274,62 +4423,13 @@ const diary = {
         // data older than 30 days are still recognised as existing users.
         this._applyNewUserGating();
 
-        console.log('%c✅ DailyBookimix v5.5 — loaded (optimised build)!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v6.0 — loaded!', 'color:#ff8c42;font-weight:900;font-size:16px');
     },
 
-    // ── New-user gating ────────────────────────────────────────────
-    // Called once after all subsystems are initialised.
-    // Safe to call again (e.g. after Force Sync) — idempotent.
-    async _applyNewUserGating() {
-        // ── Determine Onyx user status ───────────────────────────
-        const isOnyxUser = (
-            RubyManager._loaded && (
-                RubyManager._total > 0 ||
-                Object.keys(RubyManager._progress).length > 0 ||
-                ShopManager._owned.length > 0
-            )
-        );
-
-        // ── Determine Tasks user status ──────────────────────────
-        // First check in-memory data from last 30 days
-        let isTasksUser = Object.keys(TaskManager._data).length > 0;
-
-        // If not found in memory, check the persistent flag in CloudStorage
-        // (covers users whose task history is older than 30 days)
-        if (!isTasksUser) {
-            try {
-                const flag = await StorageManager.getItem('dbmix_tasks_ever_used');
-                if (flag === '1') isTasksUser = true;
-            } catch(_) {}
-        }
-
-        // If this session proved the user has tasks, write the persistent flag
-        if (isTasksUser) {
-            try { StorageManager.setItem('dbmix_tasks_ever_used', '1'); } catch(_) {}
-        }
-
-        // ── Apply Onyx UI gating for new users ───────────────────
-        // Hide Onyx badge in header, Daily Challenges & Shop in sidebar.
-        // Existing owners keep everything.
-        
-        
-        // ── Apply Tasks UI gating for new users ──────────────────
-        // Hide the Tasks tab entirely. Do not delete any data.
+    // Tasks tab is always visible — no feature gating
+    _applyNewUserGating() {
         const tasksTabBtn = document.getElementById('tasksTabBtn');
-        if (tasksTabBtn) tasksTabBtn.style.display = isTasksUser ? '' : 'none';
-
-        // If the tasks tab is currently active and user has no history,
-        // silently switch to the Notes tab to avoid a blank screen.
-        if (!isTasksUser) {
-            const tasksSection = document.getElementById('tasksSection');
-            if (tasksSection && !tasksSection.classList.contains('hidden')) {
-                this.switchTab('notes');
-            }
-        }
-
-        console.log(
-            `[diary] gating — onyxUser:${isOnyxUser}, tasksUser:${isTasksUser}`
-        );
+        if (tasksTabBtn) tasksTabBtn.style.display = '';
     }
 };
 
@@ -4496,8 +4596,7 @@ const SidebarUI = {
 
             // 3. Per-day task + ruby-progress shards — last 90 days
             for (let i = 0; i < 90; i++) {
-                const d = new Date(); d.setDate(d.getDate() - i);
-                const ds = d.toISOString().split('T')[0];
+                const ds = _localDateStr(-i);
                 try { await StorageManager.setItem('t:'  + ds, ''); } catch(_) {}
                 try { await StorageManager.setItem('rp:' + ds, ''); } catch(_) {}
             }
@@ -4525,10 +4624,7 @@ const SidebarUI = {
     forceSync() {
         this.close();
         setTimeout(async () => {
-            diary.toast('☁️ ' + (diary.lang === 'ru' ? 'Синхронизация…' : 'Syncing…'));
             await StorageManager.forceSync();
-            // Re-evaluate new-user gating after fresh data arrives
-            try { await diary._applyNewUserGating(); } catch(_) {}
         }, 320);
     },
 
@@ -4835,10 +4931,32 @@ function _runBoot() {
             }
         } catch(e) {}
 
-        // ── 1. Lock-screen language ──────────────────────────────────
+        // ── 1. Lock-screen language + Telegram user hint ────────────
         let savedLang = 'en';
         try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch(e) {}
+
+        // Auto-detect language from Telegram user info
+        try {
+            if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe) {
+                const tgLang = Telegram.WebApp.initDataUnsafe.user?.language_code;
+                if (tgLang && tgLang.startsWith('ru')) savedLang = 'ru';
+
+                // Personalised greeting on lock screen
+                const firstName = Telegram.WebApp.initDataUnsafe.user?.first_name;
+                if (firstName) {
+                    const greetEl = document.getElementById('lock-title');
+                    if (greetEl) {
+                        const isRu2 = savedLang === 'ru';
+                        greetEl.textContent = isRu2
+                            ? `Привет, ${firstName}! 👋`
+                            : `Hey, ${firstName}! 👋`;
+                    }
+                }
+            }
+        } catch(e) {}
+
         EncryptionManager.applyLang(savedLang);
+        EncryptionManager._maybeShowQuickUnlock();
 
         // ── 2. Lock-screen Enter key (belt-and-suspenders) ───────────
         const pi = document.getElementById('lockPasswordInput');
