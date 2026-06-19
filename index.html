@@ -497,7 +497,37 @@
             transition: transform 0.15s, opacity 0.15s;
         }
         .lock-btn:active { transform: scale(0.97); opacity: 0.9; }
+        .lock-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .lock-hint { font-size: 12px; opacity: 0.65; text-align: center; margin-top: 10px; }
+        .lock-link { color: white; text-decoration: underline; font-weight: 800; cursor: pointer; }
+
+        /* v6: multiple lock-screen states share one .lock-box, only one visible at a time */
+        .lock-screen { display: none; }
+        .lock-screen.active { display: block; }
+        .recovery-code-display {
+            font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 18px;
+            letter-spacing: 0.06em; text-align: center; color: white;
+            background: rgba(255,255,255,0.18); border: 2px dashed rgba(255,255,255,0.4);
+            border-radius: 14px; padding: 16px 10px; word-break: break-all; user-select: all;
+        }
+        .recovery-confirm-row {
+            display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700;
+            margin: 16px 2px 4px; cursor: pointer; opacity: 0.92;
+        }
+        .recovery-confirm-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: white; flex-shrink: 0; }
+        .lock-input-code { font-family: 'Nunito', sans-serif; letter-spacing: 0.1em; font-size: 16px; }
+        .lock-inline-toast {
+            margin-top: 12px; font-size: 12px; font-weight: 700; text-align: center;
+            background: rgba(0,0,0,0.25); border-radius: 10px; padding: 8px 10px;
+            opacity: 0; transition: opacity 0.3s;
+        }
+
+        #recoveryModal {
+            display: none; position: fixed; inset: 0; z-index: 10003;
+            background: rgba(0,0,0,0.72); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        #recoveryModal.open { display: flex; }
 
         /* ── DAILY TASKS SECTION ── */
         /* Task quick-add row */
@@ -621,14 +651,67 @@
 
 <!-- ══════════════ ENCRYPTION LOCK SCREEN ══════════════ -->
 <div id="encryptionLock" class="open">
-    <div class="lock-box">
+
+    <div class="lock-box lock-screen active" id="lockScreenChecking">
+        <div class="lock-icon">🔐</div>
+        <div class="lock-title">DailyBookimix</div>
+        <div class="lock-desc" id="lockCheckingText">Unlocking…</div>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenWelcome">
+        <div class="lock-icon">🔐</div>
+        <div class="lock-title" id="welcomeTitle">Welcome to DailyBookimix</div>
+        <div class="lock-desc" id="welcomeDesc">Your journal is end-to-end encrypted. No password to remember — your key is kept safe on this device by Telegram.</div>
+        <button class="lock-btn" id="welcomeCreateBtn" onclick="EncryptionManager.createVault()">Create my secure vault 🔒</button>
+        <div class="lock-hint" id="welcomeHint">Takes one tap. You'll get a short recovery code for setting up new devices.</div>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenShowRecovery">
+        <div class="lock-icon">🗝️</div>
+        <div class="lock-title" id="recoveryShowTitle">Save your recovery code</div>
+        <div class="lock-desc" id="recoveryShowDesc">This is the only way to add a new device or recover your data if this device is ever lost. Write it down or save it somewhere safe — it is never shown again.</div>
+        <div class="recovery-code-display" id="recoveryCodeDisplay">XXXX-XXXX-XXXX-XXXX-XXXX</div>
+        <button class="lock-btn" style="background:rgba(255,255,255,0.22);color:white;margin-top:10px;box-shadow:none" id="recoveryCopyBtn" onclick="EncryptionManager.copyRecoveryCode()">📋 Copy code</button>
+        <label class="recovery-confirm-row">
+            <input type="checkbox" id="recoverySavedCheck" onchange="EncryptionManager.onRecoveryCheckChanged()">
+            <span id="recoverySavedLabel">I've saved this somewhere safe</span>
+        </label>
+        <button class="lock-btn" id="recoveryContinueBtn" disabled onclick="EncryptionManager.finishVaultCreation()">Continue</button>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenEnterRecovery">
+        <div class="lock-icon">📱</div>
+        <div class="lock-title" id="enterRecoveryTitle">New device detected</div>
+        <div class="lock-desc" id="enterRecoveryDesc">Enter the recovery code you saved when you first set up your vault.</div>
+        <input type="text" id="recoveryCodeInput" class="lock-input lock-input-code" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" maxlength="29" autocomplete="off" oninput="EncryptionManager.onRecoveryInputChange()">
+        <button class="lock-btn" id="enterRecoveryBtn" onclick="EncryptionManager.unlockWithRecoveryCode()">Unlock this device</button>
+        <div class="lock-hint" id="noRecoveryText">Don't have your code? <span class="lock-link" id="startFreshLink" onclick="EncryptionManager.confirmStartFresh()">Start fresh instead</span></div>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenMigrate">
+        <div class="lock-icon">⬆️</div>
+        <div class="lock-title" id="migrateTitle">One-time upgrade</div>
+        <div class="lock-desc" id="migrateDesc">Enter your existing password once to switch to instant unlock — you won't need to type it again after this.</div>
+        <input type="password" id="migratePasswordInput" class="lock-input" placeholder="Current password" autocomplete="current-password" maxlength="64">
+        <button class="lock-btn" id="migrateUnlockBtn" onclick="EncryptionManager.migrateFromV5()">Upgrade my account</button>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenError">
+        <div class="lock-icon">⚠️</div>
+        <div class="lock-title" id="errorTitle">Connection problem</div>
+        <div class="lock-desc" id="errorDesc">Couldn't reach secure storage. Your data is safe — please check your connection and try again.</div>
+        <button class="lock-btn" id="errorRetryBtn" onclick="EncryptionManager.retryBoot()">Retry</button>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenLegacyPassword">
         <div class="lock-icon">🔐</div>
         <div class="lock-title" id="lock-title">DailyBookimix</div>
         <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.</div>
         <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64">
-        <button class="lock-btn" id="lockUnlockBtn" onclick="EncryptionManager.unlock()">Unlock 🔓</button>
+        <button class="lock-btn" id="lockUnlockBtn" onclick="EncryptionManager.legacyUnlock()">Unlock 🔓</button>
         <div class="lock-hint" id="lock-hint">First time? Choose any password — it will be used to encrypt all your data.</div>
     </div>
+
 </div>
 
 <div id="appContent" style="display:none">
@@ -1003,6 +1086,11 @@
             <div class="sidebar-item-label" id="sb-item-achievements">Achievements</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
+        <div class="sidebar-item" onclick="SidebarUI.openRecoveryModal()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(79,70,229,0.15));border:1px solid rgba(99,102,241,0.3)">🔑</div>
+            <div class="sidebar-item-label" id="sb-item-recovery">Backup &amp; recovery</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
         <div class="sidebar-item danger" onclick="SidebarUI.confirmDeleteAccount()">
@@ -1010,6 +1098,19 @@
             <div class="sidebar-item-label" id="sb-item-delete">Delete account &amp; all data</div>
             <div class="sidebar-item-arrow" style="color:#ef4444">›</div>
         </div>
+    </div>
+</div>
+
+<div id="recoveryModal">
+    <div class="delete-modal-box">
+        <div class="delete-modal-icon" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.25)">🔑</div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="recoveryModalTitle">Backup &amp; recovery</h2>
+        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:18px" id="recoveryModalDesc">
+            Your recovery code is shown only once, when it's created, and never stored anywhere in readable form — not even here. If you've lost it, generate a new one below; the old code will stop working.
+        </p>
+        <div class="recovery-code-display" id="recoveryModalCode" style="color:var(--modal-text);background:rgba(99,102,241,0.08);border-color:rgba(99,102,241,0.3)">••••-••••-••••-••••-••••</div>
+        <button class="btn-ghost" style="width:100%;margin-top:14px" id="recoveryModalGenerateBtn" onclick="SidebarUI.generateNewRecoveryCode()">Generate new code</button>
+        <button class="btn-ghost" style="width:100%;margin-top:10px;color:var(--modal-text);border-color:rgba(0,0,0,0.1)" onclick="SidebarUI.closeRecoveryModal()" id="recoveryModalCloseBtn">Close</button>
     </div>
 </div>
 
@@ -1048,300 +1149,832 @@
 
 
 <script>
+// @ts-check
 // ================================================================
-//  ENCRYPTION MANAGER — AES-256-GCM via Web Crypto API
-//  All data is encrypted before saving. The password is stored
-//  only in sessionStorage (cleared on browser close).
+//  UTIL — small shared helpers used across the app.
+//  FIX: every date computation in v5 used `Date#toISOString()`, which
+//  is UTC, not the user's local date. Anyone not in UTC got tasks,
+//  mood, and streaks misfiled near midnight in their own timezone.
+//  Everything below uses the device's LOCAL calendar date instead.
 // ================================================================
-const EncryptionManager = {
-    _key: null,      // CryptoKey object (in-memory only)
-    _salt: null,     // Uint8Array for PBKDF2
-
-    // Derive AES-256-GCM key from a password + salt using PBKDF2
-    async deriveKey(password, salt) {
-        const enc = new TextEncoder();
-        const keyMaterial = await crypto.subtle.importKey(
-            'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
-        );
-        return await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
-            keyMaterial,
-            { name: 'AES-GCM', length: 256 },
-            false, ['encrypt', 'decrypt']
-        );
+const Util = {
+    /** Local YYYY-MM-DD for a given Date (defaults to now). Local, NOT UTC. */
+    localDateStr(d) {
+        d = d || new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    },
+    /** Add n local calendar days to a YYYY-MM-DD string, return YYYY-MM-DD. */
+    addDays(dateStr, n) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        dt.setDate(dt.getDate() + n);
+        return this.localDateStr(dt);
+    },
+    // FIX: `new Date('YYYY-MM-DD')` parses as UTC midnight, but Date#getDate()/
+    // getDay() read LOCAL time — for negative UTC-offset users that silently
+    // shifts every date back by one day (e.g. the habit calendar grid). Use
+    // this whenever a YYYY-MM-DD string needs to become a local-midnight Date.
+    parseLocalDate(dateStr) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
     },
 
-    // Encode Uint8Array → Base64 string
-    _b64encode(buf) {
+    escHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+
+    b64encode(buf) {
         return btoa(String.fromCharCode(...new Uint8Array(buf)));
     },
-    // Decode Base64 string → Uint8Array
-    _b64decode(str) {
+    b64decode(str) {
         return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)));
     },
 
-    // Encrypt a plaintext string → Base64-encoded "iv:ciphertext"
-    async encrypt(plaintext) {
-        if (!this._key) return plaintext; // fallback (should not happen)
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const enc = new TextEncoder();
-        const cipher = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv },
-            this._key,
-            enc.encode(plaintext)
-        );
-        // Format: base64(iv) + ':' + base64(ciphertext)
-        return this._b64encode(iv) + ':' + this._b64encode(cipher);
+    // ── Recovery code: Crockford base32 (excludes I, L, O, U — no ambiguous chars) ──
+    // 13 random bytes (104 bits) trimmed to 20 symbols (100 bits of entropy),
+    // grouped for readability: "XXXX-XXXX-XXXX-XXXX-XXXX".
+    _CROCKFORD: '0123456789ABCDEFGHJKMNPQRSTVWXYZ',
+    generateRecoveryCode() {
+        const bytes = crypto.getRandomValues(new Uint8Array(13));
+        let bits = '';
+        for (const b of bytes) bits += b.toString(2).padStart(8, '0');
+        let raw = '';
+        for (let i = 0; i + 5 <= bits.length && raw.length < 20; i += 5) {
+            raw += this._CROCKFORD[parseInt(bits.slice(i, i + 5), 2)];
+        }
+        return raw.match(/.{1,4}/g).join('-');
+    },
+    // Forgiving normalization so a mistyped O/I/L or stray spaces/case still work.
+    normalizeRecoveryCode(input) {
+        return String(input).toUpperCase().replace(/[^0-9A-Z]/g, '')
+            .replace(/O/g, '0').replace(/I/g, '1').replace(/L/g, '1');
+    },
+    formatRecoveryInput(input) {
+        const norm = this.normalizeRecoveryCode(input).slice(0, 20);
+        return norm.match(/.{1,4}/g)?.join('-') || norm;
     },
 
-    // Decrypt a "iv:ciphertext" string → plaintext
-    async decrypt(ciphertext) {
-        if (!this._key) return ciphertext;
+    // Best-effort gzip compression for large JSON payloads before encryption.
+    // Falls back to plain UTF-8 bytes when CompressionStream isn't available —
+    // correctness over savings; decompress() mirrors the same fallback.
+    async maybeCompress(str) {
+        const bytes = new TextEncoder().encode(str);
+        if (typeof CompressionStream === 'undefined') return { compressed: false, bytes };
         try {
-            const parts = ciphertext.split(':');
-            if (parts.length < 2) return ciphertext; // not encrypted
-            const iv     = this._b64decode(parts[0]);
-            const data   = this._b64decode(parts.slice(1).join(':'));
-            const plain  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this._key, data);
-            return new TextDecoder().decode(plain);
-        } catch (e) {
-            return ciphertext; // decryption failed — return as-is (migration safety)
-        }
+            const cs = new CompressionStream('gzip');
+            const writer = cs.writable.getWriter();
+            writer.write(bytes); writer.close();
+            const out = await new Response(cs.readable).arrayBuffer();
+            return { compressed: true, bytes: new Uint8Array(out) };
+        } catch (e) { return { compressed: false, bytes }; }
+    },
+    async maybeDecompress(bytes, compressed) {
+        if (!compressed) return new TextDecoder().decode(bytes);
+        const ds = new DecompressionStream('gzip');
+        const writer = ds.writable.getWriter();
+        writer.write(bytes); writer.close();
+        const out = await new Response(ds.readable).arrayBuffer();
+        return new TextDecoder().decode(out);
     },
 
-    // Called on unlock button click
-    async unlock() {
-        const pw = document.getElementById('lockPasswordInput').value;
-        if (!pw || pw.length < 1) {
-            this._showLockError();
-            return;
-        }
-        const btn = document.getElementById('lockUnlockBtn');
-        btn.textContent = '⏳';
-        btn.disabled = true;
-
-        try {
-            // CloudStorage is authoritative for this Telegram-only app.
-            // localStorage is only a resilience fallback.
-            const hasCloud = !!(
-                window.Telegram && Telegram.WebApp.CloudStorage &&
-                Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-            );
-            const csGet = key => new Promise(res => {
-                if (!hasCloud) return res(null);
-                try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
-                catch(e) { res(null); }
-            });
-            const csSet = (key, val) => new Promise(res => {
-                if (!hasCloud) return res();
-                try { Telegram.WebApp.CloudStorage.setItem(key, val, () => res()); }
-                catch(e) { res(); }
-            });
-
-            // --- Salt: CloudStorage first, localStorage fallback ---
-            let saltB64 = await csGet('dbmix_salt');
-            if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
-
-            if (!saltB64) {
-                // First time: generate and persist salt
-                this._salt = crypto.getRandomValues(new Uint8Array(16));
-                saltB64 = this._b64encode(this._salt);
-                await csSet('dbmix_salt', saltB64);
-                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
-            } else {
-                this._salt = this._b64decode(saltB64);
-                // Ensure salt is in both stores for resilience
-                await csSet('dbmix_salt', saltB64);
-                try { localStorage.setItem('dbmix_salt', saltB64); } catch(e) {}
-            }
-
-            this._key = await this.deriveKey(pw, this._salt);
-
-            // --- Sentinel: CloudStorage first, localStorage fallback ---
-            let sentinel = await csGet('dbmix_sentinel');
-            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
-
-            if (sentinel) {
-                const dec = await this.decrypt(sentinel);
-                if (dec !== 'DAILYBOOKMIX_V5') {
-                    this._key = null;
-                    btn.textContent = 'Unlock 🔓';
-                    btn.disabled = false;
-                    this._showLockError();
-                    return;
-                }
-            } else {
-                const enc = await this.encrypt('DAILYBOOKMIX_V5');
-                await csSet('dbmix_sentinel', enc);
-                try { localStorage.setItem('dbmix_sentinel', enc); } catch(e) {}
-            }
-
-            try { sessionStorage.setItem('dbmix_pw', pw); } catch(e) {}
-
-            document.getElementById('encryptionLock').classList.remove('open');
-            document.getElementById('appContent').style.display = 'block';
-
-            await diary.init();
-
-        } catch(e) {
-            console.error('Encryption error:', e);
-            btn.textContent = 'Unlock 🔓';
-            btn.disabled = false;
-            this._showLockError();
-        }
-    },
-
-    _showLockError() {
-        const input = document.getElementById('lockPasswordInput');
-        input.style.borderColor = '#f87171';
-        input.style.boxShadow   = '0 0 0 4px rgba(248,113,113,0.2)';
-        setTimeout(() => {
-            input.style.borderColor = '';
-            input.style.boxShadow   = '';
-        }, 1200);
-        input.focus();
-    },
-
-    // Try auto-unlock from session (if user didn't close the Telegram mini-app)
-    async tryAutoUnlock() {
-        let pw = null;
-        try { pw = sessionStorage.getItem('dbmix_pw'); } catch(e) {}
-        if (!pw) return false;
-
-        const hasCloud = !!(
-            window.Telegram && Telegram.WebApp.CloudStorage &&
-            Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-        );
-        const csGet = key => new Promise(res => {
-            if (!hasCloud) return res(null);
-            try { Telegram.WebApp.CloudStorage.getItem(key, (e, v) => res((v && v !== '') ? v : null)); }
-            catch(e) { res(null); }
-        });
-
-        let saltB64 = await csGet('dbmix_salt');
-        if (!saltB64) { try { saltB64 = localStorage.getItem('dbmix_salt'); } catch(e) {} }
-        if (!saltB64) return false;
-
-        try {
-            this._salt = this._b64decode(saltB64);
-            this._key  = await this.deriveKey(pw, this._salt);
-
-            let sentinel = await csGet('dbmix_sentinel');
-            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch(e) {} }
-
-            if (sentinel) {
-                const dec = await this.decrypt(sentinel);
-                if (dec !== 'DAILYBOOKMIX_V5') { this._key = null; return false; }
-            }
-
-            document.getElementById('encryptionLock').classList.remove('open');
-            document.getElementById('appContent').style.display = 'block';
-            return true;
-        } catch(e) {
-            this._key = null;
-            return false;
-        }
-    },
-
-    // Apply translations to the lock screen
-    applyLang(lang) {
-        const t = {
-            en: {
-                title:   'DailyBookimix',
-                desc:    'Enter your password to unlock your encrypted journal. Your data is protected with AES-256 encryption.',
-                hint:    'First time? Choose any password — it will be used to encrypt all your data.',
-                btn:     'Unlock 🔓',
-            },
-            ru: {
-                title:   'DailyBookimix',
-                desc:    'Введи пароль, чтобы разблокировать зашифрованный дневник. Данные защищены шифрованием AES-256.',
-                hint:    'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.',
-                btn:     'Разблокировать 🔓',
-            }
-        };
-        const s = t[lang] || t.en;
-        const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
-        set('lock-title', s.title);
-        set('lock-desc',  s.desc);
-        set('lock-hint',  s.hint);
-        set('lockUnlockBtn', s.btn);
-    }
+    sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 };
 
 
 // ================================================================
-//  STORAGE MANAGER — Telegram CloudStorage ONLY (this is a Telegram
-//  bot app; localStorage is not used for any app data).
-//  All values are encrypted with EncryptionManager.
-//  Includes retry logic so saves never silently fail.
+//  TGPlatform — thin wrappers around Telegram Mini App storage APIs.
+//
+//  Three storage tiers, each with a different job:
+//   - CloudStorage   (Bot API 6.9+) small, ~4KB/value, syncs across
+//                     every device signed into the same Telegram account.
+//                     Used as the cross-device sync transport.
+//   - DeviceStorage   (Bot API 9.0+) up to ~5MB/bot/user, persistent,
+//                     LOCAL only (no cross-device sync). Used as the
+//                     fast local cache + offline buffer.
+//   - SecureStorage   (Bot API 9.0+) OS Keychain/Keystore-backed,
+//                     10 slots/user, LOCAL only. Used to hold the
+//                     Master Key so unlock is instant on return visits.
+//
+//  NOTE FOR THE DEVELOPER: SecureStorage/DeviceStorage are newer APIs
+//  (Bot API 9.0, April 2025). The exact method names below follow the
+//  same shape as the long-stable CloudStorage API (setItem/getItem/
+//  removeItem/clear), which is how Telegram's own docs describe them,
+//  but you should diff this against your installed telegram-web-app.js
+//  /@types/telegram-web-app the first time you deploy — every call is
+//  wrapped in try/catch with graceful fallback, so a name mismatch
+//  degrades safely instead of breaking the app.
 // ================================================================
-const StorageManager = {
+const TGPlatform = {
     supportsCloud: false,
+    supportsSecure: false,
+    supportsDevice: false,
+    supportsBiometric: false,
 
     init() {
+        const wa = (window.Telegram && window.Telegram.WebApp) || null;
+        const at = (v) => { try { return !!(wa && wa.isVersionAtLeast && wa.isVersionAtLeast(v)); } catch (e) { return false; } };
+        try { this.supportsCloud     = !!(wa && wa.CloudStorage)     && at('6.9'); } catch (e) { this.supportsCloud = false; }
+        try { this.supportsSecure    = !!(wa && wa.SecureStorage)    && at('9.0'); } catch (e) { this.supportsSecure = false; }
+        try { this.supportsDevice    = !!(wa && wa.DeviceStorage)    && at('9.0'); } catch (e) { this.supportsDevice = false; }
+        try { this.supportsBiometric = !!(wa && wa.BiometricManager) && at('7.2'); } catch (e) { this.supportsBiometric = false; }
+    },
+
+    // ── Generic callback->Promise wrapper shared by all three storages.
+    // Returns a TRI-STATE result so callers can tell "key genuinely absent"
+    // apart from "the call failed" — conflating those two was the root
+    // cause of a real data-loss bug in v5 (see EncryptionManager below).
+    _wrapGet(api, key) {
+        return new Promise((resolve) => {
+            try {
+                api.getItem(key, (err, value) => {
+                    if (err) return resolve({ ok: false, error: err });
+                    const present = value !== null && value !== undefined && value !== '';
+                    resolve({ ok: true, value: present ? value : null });
+                });
+            } catch (e) { resolve({ ok: false, error: e }); }
+        });
+    },
+    _wrapSet(api, key, value) {
+        return new Promise((resolve) => {
+            try { api.setItem(key, value, (err) => resolve({ ok: !err, error: err || null })); }
+            catch (e) { resolve({ ok: false, error: e }); }
+        });
+    },
+    _wrapRemove(api, key) {
+        return new Promise((resolve) => {
+            try { api.removeItem(key, (err) => resolve({ ok: !err, error: err || null })); }
+            catch (e) { resolve({ ok: false, error: e }); }
+        });
+    },
+
+    cloudGet(key)        { return this._wrapGet(window.Telegram.WebApp.CloudStorage, key); },
+    cloudSet(key, value) { return this._wrapSet(window.Telegram.WebApp.CloudStorage, key, value); },
+    cloudRemove(key)     { return this._wrapRemove(window.Telegram.WebApp.CloudStorage, key); },
+
+    deviceGet(key)        { return this._wrapGet(window.Telegram.WebApp.DeviceStorage, key); },
+    deviceSet(key, value) { return this._wrapSet(window.Telegram.WebApp.DeviceStorage, key, value); },
+    deviceRemove(key)     { return this._wrapRemove(window.Telegram.WebApp.DeviceStorage, key); },
+
+    secureGet(key)        { return this._wrapGet(window.Telegram.WebApp.SecureStorage, key); },
+    secureSet(key, value) { return this._wrapSet(window.Telegram.WebApp.SecureStorage, key, value); },
+    secureRemove(key)     { return this._wrapRemove(window.Telegram.WebApp.SecureStorage, key); },
+    // restoreKey: lets the user explicitly re-grant access to a SecureStorage
+    // value that existed on this device before (e.g. after a fresh install).
+    secureRestore(key) {
+        return new Promise((resolve) => {
+            try {
+                const ss = window.Telegram.WebApp.SecureStorage;
+                if (typeof ss.restoreKey !== 'function') return resolve({ ok: false, error: 'unsupported' });
+                ss.restoreKey(key, (err, value) => {
+                    if (err) return resolve({ ok: false, error: err });
+                    resolve({ ok: true, value: value || null });
+                });
+            } catch (e) { resolve({ ok: false, error: e }); }
+        });
+    },
+
+    // ── Biometric gate (optional extra "App Lock" layer, not the primary
+    // key-retrieval mechanism — SecureStorage already handles that).
+    biometricAvailable() {
         try {
-            this.supportsCloud = !!(
-                window.Telegram && Telegram.WebApp.CloudStorage &&
-                Telegram.WebApp.isVersionAtLeast && Telegram.WebApp.isVersionAtLeast('6.9')
-            );
-        } catch(e) { this.supportsCloud = false; }
+            const bm = window.Telegram.WebApp.BiometricManager;
+            return !!(bm && bm.isInited && bm.isBiometricAvailable);
+        } catch (e) { return false; }
     },
-
-    // Raw CloudStorage set with Promise wrapper
-    _cloudSet(key, value) {
-        return new Promise((resolve, reject) => {
+    biometricInit() {
+        return new Promise((resolve) => {
             try {
-                Telegram.WebApp.CloudStorage.setItem(key, value, (err) => {
-                    if (err) reject(new Error(err));
-                    else resolve();
-                });
-            } catch(e) { reject(e); }
+                const bm = window.Telegram.WebApp.BiometricManager;
+                if (bm.isInited) return resolve(true);
+                bm.init(() => resolve(true));
+            } catch (e) { resolve(false); }
         });
     },
-
-    // Raw CloudStorage get with Promise wrapper
-    _cloudGet(key) {
-        return new Promise((resolve, reject) => {
+    biometricAuthenticate(reason) {
+        return new Promise((resolve) => {
             try {
-                Telegram.WebApp.CloudStorage.getItem(key, (err, value) => {
-                    if (err) reject(new Error(err));
-                    else resolve((value !== null && value !== undefined && value !== '') ? value : null);
-                });
-            } catch(e) { reject(e); }
+                window.Telegram.WebApp.BiometricManager.authenticate({ reason: reason || '' }, (success) => resolve(!!success));
+            } catch (e) { resolve(false); }
         });
     },
+};
 
-    // Save encrypted value — with retry on failure
+
+// @ts-check
+// ================================================================
+//  ENCRYPTION MANAGER v6 — Master-Key architecture.
+//
+//  WHAT CHANGED FROM v5 AND WHY:
+//   - v5 derived the encryption key from a password typed every
+//     session (cached only in sessionStorage, wiped on every close).
+//   - v6 generates one random 256-bit Master Key (MK) per account.
+//     MK is what actually encrypts your data — exactly as before,
+//     AES-256-GCM via Web Crypto. What changes is how MK is *held*:
+//       - Telegram's SecureStorage (OS Keychain/Keystore-backed)
+//         holds it on each device you've used before -> opening the
+//         app is instant, no typing, ever again.
+//       - A one-time Recovery Code (shown once at signup) wraps a
+//         copy of MK and that copy lives in Telegram CloudStorage,
+//         which already syncs across every device on the same
+//         Telegram account. Typing the code once on a NEW device is
+//         the only "password-like" moment in the entire flow.
+//   - Existing v5 users are migrated transparently: their old
+//     password derives the *same* key bytes it always did (PBKDF2 is
+//     deterministic), so that derived key is simply adopted as MK —
+//     zero re-encryption of existing notes/habits/tasks needed.
+// ================================================================
+const SENTINEL_NEW    = 'DBMIX_V6_OK';
+const SENTINEL_LEGACY = 'DAILYBOOKMIX_V5';
+
+const EncryptionManager = {
+    _key: null,              // CryptoKey actually used to encrypt/decrypt app data
+    _rawMK: null,             // base64 Master Key, kept in memory only for the lifetime of
+                               // this session so "generate a new recovery code" doesn't need
+                               // to ask the user to re-authenticate. Never persisted as-is.
+    _pendingMK: null,        // base64 MK generated during createVault(), not yet committed
+    _pendingRecoveryCode: null,
+
+    // ---------- low-level primitives (AES-256-GCM, same scheme as v5) ----------
+    // v5 used 200,000 PBKDF2 iterations; v6 raises new wraps to 600,000 (current
+    // OWASP guidance). Migration must derive with the ORIGINAL count to match
+    // already-encrypted v5 data -- changing it would silently produce a
+    // different key and make all existing notes/tasks undecryptable.
+    LEGACY_ITERATIONS: 200000,
+    CURRENT_ITERATIONS: 600000,
+    async _deriveFromSecret(secret, salt, extractable = false, iterations = this.CURRENT_ITERATIONS) {
+        const enc = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'PBKDF2' }, false, ['deriveKey']);
+        return crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+            keyMaterial,
+            { name: 'AES-GCM', length: 256 },
+            extractable, ['encrypt', 'decrypt']
+        );
+    },
+    async _importMK(mkB64) {
+        return crypto.subtle.importKey('raw', Util.b64decode(mkB64), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    },
+    async _encryptWithKey(key, plaintext) {
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const enc = new TextEncoder();
+        const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+        return Util.b64encode(iv.buffer) + ':' + Util.b64encode(cipher);
+    },
+    async _decryptWithKey(key, payload) {
+        const parts = payload.split(':');
+        const iv = Util.b64decode(parts[0]);
+        const data = Util.b64decode(parts.slice(1).join(':'));
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+        return new TextDecoder().decode(plain);
+    },
+    // Public encrypt/decrypt used by StorageManager for ALL app data — operate
+    // on `this._key`, whichever unlock path produced it.
+    async encrypt(plaintext) {
+        if (!this._key) return plaintext;
+        return this._encryptWithKey(this._key, plaintext);
+    },
+    async decrypt(ciphertext) {
+        if (!this._key) return ciphertext;
+        try {
+            if (typeof ciphertext !== 'string' || !ciphertext.includes(':')) return ciphertext; // not encrypted
+            return await this._decryptWithKey(this._key, ciphertext);
+        } catch (e) { return ciphertext; }
+    },
+
+    // ---------- boot: figure out which screen to show, or unlock instantly ----------
+    async boot() {
+        TGPlatform.init();
+        this._showScreen('lockScreenChecking');
+
+        // Tier 1: returning user on a device that's unlocked before.
+        if (TGPlatform.supportsSecure) {
+            let r = await TGPlatform.secureGet('mk');
+            if (!r.ok) {
+                const restored = await TGPlatform.secureRestore('mk');
+                if (restored.ok && restored.value) r = restored;
+            }
+            if (r.ok && r.value) {
+                if (await this._finishUnlockWithMK(r.value)) return;
+                // fall through if sentinel mismatch / corrupted — treat as if absent
+            }
+        }
+
+        // Tier 2: no local MK. Maybe this Telegram account already has a v6
+        // vault set up on another device (CloudStorage syncs per-account).
+        if (TGPlatform.supportsCloud) {
+            const rec = await TGPlatform.cloudGet('enc_mk_recovery');
+            if (rec.ok && rec.value) { this._showScreen('lockScreenEnterRecovery'); return; }
+            if (!rec.ok) { this._showBlockingError(); return; } // ambiguous -- never guess
+
+            // Tier 3: is this an existing v5 (password-based) user upgrading?
+            const legacy = await this._checkLegacyV5();
+            if (legacy.state === 'error') { this._showBlockingError(); return; }
+            if (legacy.state === 'found') { this._showScreen('lockScreenMigrate'); return; }
+        }
+
+        // Tier 4: platform fallback — no SecureStorage, no CloudStorage at all
+        // (very old Telegram client, or running outside Telegram for testing).
+        if (!TGPlatform.supportsSecure && !TGPlatform.supportsCloud) {
+            let cachedPw = null;
+            try { cachedPw = localStorage.getItem('dbmix_pw'); } catch (e) {}
+            if (cachedPw && await this._legacyTryUnlock(cachedPw)) return;
+            this._showScreen('lockScreenLegacyPassword');
+            return;
+        }
+
+        // Tier 5: confirmed brand-new account — nothing anywhere.
+        this._showScreen('lockScreenWelcome');
+    },
+
+    async _checkLegacyV5() {
+        if (TGPlatform.supportsCloud) {
+            const r = await TGPlatform.cloudGet('dbmix_salt');
+            if (r.ok) {
+                if (r.value) return { state: 'found', saltB64: r.value };
+                // confirmed absent in cloud — still check local before declaring "none"
+            } else {
+                return { state: 'error' };
+            }
+        }
+        try {
+            const local = localStorage.getItem('dbmix_salt');
+            if (local) return { state: 'found', saltB64: local };
+        } catch (e) {}
+        return { state: 'absent' };
+    },
+
+    async _finishUnlockWithMK(mkB64) {
+        try {
+            this._key = await this._importMK(mkB64);
+            const ok = await this._verifySentinelOrCreate();
+            if (!ok) { this._key = null; return false; }
+            this._rawMK = mkB64;
+            await this._enterApp();
+            return true;
+        } catch (e) { this._key = null; return false; }
+    },
+
+    // Tri-state sentinel check: cloud wins when reachable, device cache as
+    // fallback. Only fabricates a fresh sentinel when absence is CONFIRMED on
+    // every reachable layer — this is the fix for the v5 bug where a single
+    // transient CloudStorage error silently created a brand-new identity and
+    // permanently orphaned the user's existing encrypted data.
+    async _verifySentinelOrCreate() {
+        let sentinel = null, ambiguous = false;
+        if (TGPlatform.supportsCloud) {
+            const r = await TGPlatform.cloudGet('dbmix_sentinel');
+            if (r.ok) sentinel = r.value; else ambiguous = true;
+        }
+        if (!sentinel && TGPlatform.supportsDevice) {
+            const r2 = await TGPlatform.deviceGet('dbmix_sentinel');
+            if (r2.ok && r2.value) sentinel = r2.value;
+        }
+        if (sentinel) {
+            const dec = await this.decrypt(sentinel);
+            return dec === SENTINEL_NEW || dec === SENTINEL_LEGACY;
+        }
+        if (ambiguous) return false; // do NOT fabricate a new identity on uncertainty
+        const enc = await this.encrypt(SENTINEL_NEW);
+        if (TGPlatform.supportsCloud) await TGPlatform.cloudSet('dbmix_sentinel', enc);
+        if (TGPlatform.supportsDevice) await TGPlatform.deviceSet('dbmix_sentinel', enc);
+        return true;
+    },
+
+    async _enterApp() {
+        document.getElementById('encryptionLock').classList.remove('open');
+        document.getElementById('appContent').style.display = 'block';
+        await diary.init();
+    },
+
+    // ---------- Tier 5: brand-new vault ----------
+    async createVault() {
+        const btn = document.getElementById('welcomeCreateBtn');
+        if (btn) { btn.disabled = true; btn.dataset.orig = btn.textContent; btn.textContent = '⏳'; }
+        try {
+            const mkB64 = Util.b64encode(crypto.getRandomValues(new Uint8Array(32)).buffer);
+            this._pendingMK = mkB64;
+            this._key = await this._importMK(mkB64);
+
+            const code = Util.generateRecoveryCode();
+            this._pendingRecoveryCode = code;
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const wrapKey = await this._deriveFromSecret(Util.normalizeRecoveryCode(code), salt);
+            const wrapped = await this._encryptWithKey(wrapKey, mkB64);
+
+            if (TGPlatform.supportsCloud) {
+                await TGPlatform.cloudSet('recovery_salt', Util.b64encode(salt.buffer));
+                await TGPlatform.cloudSet('enc_mk_recovery', wrapped);
+            }
+
+            const disp = document.getElementById('recoveryCodeDisplay');
+            if (disp) disp.textContent = code;
+            const check = document.getElementById('recoverySavedCheck');
+            if (check) check.checked = false;
+            this.onRecoveryCheckChanged();
+            this._showScreen('lockScreenShowRecovery');
+        } catch (e) {
+            console.error('[EncryptionManager] createVault failed:', e);
+            if (btn) { btn.disabled = false; btn.textContent = btn.dataset.orig || 'Create my secure vault 🔒'; }
+            this._showToast('lockScreenWelcome', '❌ Could not create your vault — check your connection and try again.');
+        }
+    },
+
+    onRecoveryCheckChanged() {
+        const check = document.getElementById('recoverySavedCheck');
+        const btn = document.getElementById('recoveryContinueBtn');
+        if (btn) btn.disabled = !(check && check.checked);
+    },
+
+    async copyRecoveryCode() {
+        const code = (document.getElementById('recoveryCodeDisplay') || {}).textContent || '';
+        const btn = document.getElementById('recoveryCopyBtn');
+        const orig = btn ? btn.textContent : '';
+        try {
+            await navigator.clipboard.writeText(code);
+            if (btn) { btn.textContent = '✅ Copied'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+        } catch (e) {
+            if (btn) { btn.textContent = '⚠️ Select & copy manually'; setTimeout(() => { btn.textContent = orig; }, 2000); }
+        }
+    },
+
+    async finishVaultCreation() {
+        const btn = document.getElementById('recoveryContinueBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        try {
+            if (TGPlatform.supportsSecure) await TGPlatform.secureSet('mk', this._pendingMK);
+            const enc = await this.encrypt(SENTINEL_NEW);
+            if (TGPlatform.supportsCloud) await TGPlatform.cloudSet('dbmix_sentinel', enc);
+            if (TGPlatform.supportsDevice) await TGPlatform.deviceSet('dbmix_sentinel', enc);
+            this._rawMK = this._pendingMK;
+            this._pendingMK = null; this._pendingRecoveryCode = null;
+            await this._enterApp();
+        } catch (e) {
+            console.error('[EncryptionManager] finishVaultCreation failed:', e);
+            if (btn) { btn.disabled = false; btn.textContent = 'Continue'; }
+            this._showToast('lockScreenShowRecovery', '❌ Something went wrong finishing setup — try again.');
+        }
+    },
+
+    // ---------- Tier 2: new device, same account — enter recovery code ----------
+    async unlockWithRecoveryCode() {
+        const input = document.getElementById('recoveryCodeInput');
+        const btn = document.getElementById('enterRecoveryBtn');
+        const code = Util.normalizeRecoveryCode(input ? input.value : '');
+        if (code.length < 16) { this._flashInputError(input); return; }
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        try {
+            const saltRes = await TGPlatform.cloudGet('recovery_salt');
+            const wrappedRes = await TGPlatform.cloudGet('enc_mk_recovery');
+            if (!saltRes.ok || !wrappedRes.ok || !saltRes.value || !wrappedRes.value) {
+                throw new Error('recovery data unavailable');
+            }
+            const salt = Util.b64decode(saltRes.value);
+            const wrapKey = await this._deriveFromSecret(code, salt);
+            const mkB64 = await this._decryptWithKey(wrapKey, wrappedRes.value); // throws on wrong code
+            this._key = await this._importMK(mkB64);
+            const sentinelOk = await this._verifySentinelOrCreate();
+            if (!sentinelOk) throw new Error('sentinel mismatch after recovery unlock');
+            this._rawMK = mkB64;
+            if (TGPlatform.supportsSecure) await TGPlatform.secureSet('mk', mkB64); // instant next time
+            await this._enterApp();
+        } catch (e) {
+            this._key = null;
+            if (btn) { btn.disabled = false; btn.textContent = 'Unlock this device'; }
+            this._flashInputError(input);
+        }
+    },
+
+    confirmStartFresh() {
+        const lang = (typeof diary !== 'undefined' && diary.lang) || 'en';
+        const msg = lang === 'ru'
+            ? 'Без кода восстановления старые данные нельзя расшифровать. Начать с чистого листа удалит доступ к ним навсегда. Продолжить?'
+            : 'Without the recovery code, your old data can never be decrypted again. Starting fresh permanently gives up access to it. Continue?';
+        if (!confirm(msg)) return;
+        this._wipeIdentityAndRestart();
+    },
+
+    async _wipeIdentityAndRestart() {
+        if (TGPlatform.supportsCloud) {
+            for (const k of ['enc_mk_recovery', 'recovery_salt', 'dbmix_sentinel', 'dbmix_salt']) {
+                await TGPlatform.cloudRemove(k);
+            }
+        }
+        if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceRemove('dbmix_sentinel'); } catch (e) {} }
+        try { localStorage.removeItem('dbmix_salt'); localStorage.removeItem('dbmix_sentinel'); } catch (e) {}
+        this._showScreen('lockScreenWelcome');
+    },
+
+    // ---------- Tier 3: migrate an existing v5 (password) user to v6 ----------
+    async migrateFromV5() {
+        const input = document.getElementById('migratePasswordInput');
+        const btn = document.getElementById('migrateUnlockBtn');
+        const pw = input ? input.value : '';
+        if (!pw) { this._flashInputError(input); return; }
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        try {
+            const legacy = await this._checkLegacyV5();
+            if (legacy.state !== 'found') throw new Error('legacy salt vanished');
+            const salt = Util.b64decode(legacy.saltB64);
+
+            // Derive EXTRACTABLE this time, and with the ORIGINAL v5 iteration
+            // count (200,000) -- same bytes as the original key (PBKDF2 is
+            // deterministic), so all existing encrypted data keeps decrypting
+            // correctly under it with zero re-encryption.
+            const derivedKey = await this._deriveFromSecret(pw, salt, true, this.LEGACY_ITERATIONS);
+
+            // Verify against the legacy sentinel before trusting the password.
+            this._key = derivedKey;
+            let sentinel = null;
+            if (TGPlatform.supportsCloud) {
+                const r = await TGPlatform.cloudGet('dbmix_sentinel');
+                if (r.ok) sentinel = r.value;
+            }
+            if (!sentinel) { try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch (e) {} }
+            if (sentinel) {
+                const dec = await this.decrypt(sentinel);
+                if (dec !== SENTINEL_LEGACY && dec !== SENTINEL_NEW) throw new Error('wrong password');
+            }
+
+            // Adopt this key's raw bytes as the new Master Key going forward.
+            const rawMK = await crypto.subtle.exportKey('raw', derivedKey);
+            const mkB64 = Util.b64encode(rawMK);
+            this._key = await this._importMK(mkB64); // re-import non-extractable for normal use
+
+            // Set up the v6 recovery path + device fast-unlock, same as a new vault.
+            const code = Util.generateRecoveryCode();
+            this._pendingRecoveryCode = code;
+            const newSalt = crypto.getRandomValues(new Uint8Array(16));
+            const wrapKey = await this._deriveFromSecret(Util.normalizeRecoveryCode(code), newSalt);
+            const wrapped = await this._encryptWithKey(wrapKey, mkB64);
+            if (TGPlatform.supportsCloud) {
+                await TGPlatform.cloudSet('recovery_salt', Util.b64encode(newSalt.buffer));
+                await TGPlatform.cloudSet('enc_mk_recovery', wrapped);
+            }
+            if (TGPlatform.supportsSecure) await TGPlatform.secureSet('mk', mkB64);
+            const enc = await this.encrypt(SENTINEL_NEW);
+            if (TGPlatform.supportsCloud) await TGPlatform.cloudSet('dbmix_sentinel', enc);
+            if (TGPlatform.supportsDevice) await TGPlatform.deviceSet('dbmix_sentinel', enc);
+
+            this._pendingMK = mkB64; // shown on the post-migration recovery-code screen
+            const disp = document.getElementById('recoveryCodeDisplay');
+            if (disp) disp.textContent = code;
+            const check = document.getElementById('recoverySavedCheck');
+            if (check) check.checked = false;
+            this.onRecoveryCheckChanged();
+            this._showScreen('lockScreenShowRecovery');
+        } catch (e) {
+            this._key = null;
+            if (btn) { btn.disabled = false; btn.textContent = 'Upgrade my account'; }
+            this._flashInputError(input);
+        }
+    },
+
+    // ---------- Tier 4: legacy fallback (no Telegram storage APIs at all) ----------
+    async legacyUnlock() {
+        const input = document.getElementById('lockPasswordInput');
+        const btn = document.getElementById('lockUnlockBtn');
+        const pw = input ? input.value : '';
+        if (!pw) { this._flashInputError(input); return; }
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        try {
+            let saltB64 = null;
+            try { saltB64 = localStorage.getItem('dbmix_salt'); } catch (e) {}
+            let salt;
+            if (saltB64) { salt = Util.b64decode(saltB64); }
+            else {
+                salt = crypto.getRandomValues(new Uint8Array(16));
+                try { localStorage.setItem('dbmix_salt', Util.b64encode(salt.buffer)); } catch (e) {}
+            }
+            this._key = await this._deriveFromSecret(pw, salt);
+
+            let sentinel = null;
+            try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch (e) {}
+            if (sentinel) {
+                const dec = await this.decrypt(sentinel);
+                if (dec !== SENTINEL_NEW && dec !== SENTINEL_LEGACY) throw new Error('wrong password');
+            } else {
+                const enc = await this.encrypt(SENTINEL_NEW);
+                try { localStorage.setItem('dbmix_sentinel', enc); } catch (e) {}
+            }
+            try { localStorage.setItem('dbmix_pw', pw); } catch (e) {}
+            await this._enterApp();
+        } catch (e) {
+            this._key = null;
+            if (btn) { btn.disabled = false; btn.textContent = 'Unlock 🔓'; }
+            this._flashInputError(input);
+        }
+    },
+
+    async _legacyTryUnlock(pw) {
+        try {
+            let saltB64 = null;
+            try { saltB64 = localStorage.getItem('dbmix_salt'); } catch (e) {}
+            if (!saltB64) return false;
+            const salt = Util.b64decode(saltB64);
+            this._key = await this._deriveFromSecret(pw, salt);
+            let sentinel = null;
+            try { sentinel = localStorage.getItem('dbmix_sentinel'); } catch (e) {}
+            if (sentinel) {
+                const dec = await this.decrypt(sentinel);
+                if (dec !== SENTINEL_NEW && dec !== SENTINEL_LEGACY) { this._key = null; return false; }
+            }
+            await this._enterApp();
+            return true;
+        } catch (e) { this._key = null; return false; }
+    },
+
+    // ---------- optional: rotate the recovery code without full re-auth ----------
+    // Uses the raw MK already held in memory from this session's unlock (see
+    // _rawMK above) — the user does not need to re-enter anything to do this.
+    async regenerateRecoveryCode() {
+        if (!this._rawMK || !TGPlatform.supportsCloud) return null;
+        try {
+            const code = Util.generateRecoveryCode();
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const wrapKey = await this._deriveFromSecret(Util.normalizeRecoveryCode(code), salt);
+            const wrapped = await this._encryptWithKey(wrapKey, this._rawMK);
+            await TGPlatform.cloudSet('recovery_salt', Util.b64encode(salt.buffer));
+            await TGPlatform.cloudSet('enc_mk_recovery', wrapped);
+            return code;
+        } catch (e) {
+            console.error('[EncryptionManager] regenerateRecoveryCode failed:', e);
+            return null;
+        }
+    },
+
+    // ---------- shared screen-state helpers ----------
+    _showScreen(id) {
+        document.querySelectorAll('#encryptionLock .lock-screen').forEach(el => el.classList.remove('active'));
+        const el = document.getElementById(id);
+        if (el) el.classList.add('active');
+    },
+    _showBlockingError() {
+        this._showScreen('lockScreenError');
+    },
+    retryBoot() { this.boot(); },
+    _showToast(screenId, msg) {
+        const host = document.getElementById(screenId);
+        if (!host) return;
+        let t = host.querySelector('.lock-inline-toast');
+        if (!t) { t = document.createElement('div'); t.className = 'lock-inline-toast'; host.appendChild(t); }
+        t.textContent = msg;
+        t.style.opacity = '1';
+        setTimeout(() => { t.style.opacity = '0'; }, 3000);
+    },
+    _flashInputError(input) {
+        if (!input) return;
+        input.style.borderColor = '#f87171';
+        input.style.boxShadow = '0 0 0 4px rgba(248,113,113,0.2)';
+        setTimeout(() => { input.style.borderColor = ''; input.style.boxShadow = ''; }, 1200);
+        input.focus();
+    },
+    onRecoveryInputChange() {
+        const input = document.getElementById('recoveryCodeInput');
+        if (!input) return;
+        const pos = input.selectionStart;
+        const before = input.value.length;
+        input.value = Util.formatRecoveryInput(input.value);
+        const delta = input.value.length - before;
+        try { input.setSelectionRange(pos + delta, pos + delta); } catch (e) {}
+    },
+
+    // ---------- translations for the lock screen (independent of main T dict,
+    // mirrors the original applyLang pattern, extended with the new screens) ----------
+    applyLang(lang) {
+        const t = {
+            en: {
+                welcomeTitle: 'Welcome to DailyBookimix', welcomeDesc: 'Your journal is end-to-end encrypted. No password to remember — your key is kept safe on this device by Telegram.',
+                welcomeBtn: 'Create my secure vault 🔒', welcomeHint: 'Takes one tap. You\u2019ll get a short recovery code for setting up new devices.',
+                checking: 'Unlocking…',
+                recTitle: 'Save your recovery code', recDesc: 'This is the only way to add a new device or recover your data if this device is ever lost. Write it down or save it somewhere safe — it is never shown again.',
+                copyBtn: '📋 Copy code', savedLabel: 'I\u2019ve saved this somewhere safe', continueBtn: 'Continue',
+                enterRecTitle: 'New device detected', enterRecDesc: 'Enter the recovery code you saved when you first set up your vault.',
+                enterRecPh: 'XXXX-XXXX-XXXX-XXXX-XXXX', enterRecBtn: 'Unlock this device', noRecText: 'Don\u2019t have your code?', startFreshLink: 'Start fresh instead',
+                migrateTitle: 'One-time upgrade', migrateDesc: 'Enter your existing password once to switch to instant unlock — you won\u2019t need to type it again after this.',
+                migratePh: 'Current password', migrateBtn: 'Upgrade my account',
+                errorTitle: 'Connection problem', errorDesc: 'Couldn\u2019t reach secure storage. Your data is safe — please check your connection and try again.', retryBtn: 'Retry',
+                legacyTitle: 'DailyBookimix', legacyDesc: 'Enter your password to unlock your encrypted journal.', legacyHint: 'First time? Choose any password — it will be used to encrypt all your data.', legacyBtn: 'Unlock 🔓',
+            },
+            ru: {
+                welcomeTitle: 'Добро пожаловать в DailyBookimix', welcomeDesc: 'Дневник зашифрован сквозным шифрованием. Пароль не нужен — ключ безопасно хранится на этом устройстве через Telegram.',
+                welcomeBtn: 'Создать защищённое хранилище 🔒', welcomeHint: 'Один тап. Ты получишь короткий код восстановления для новых устройств.',
+                checking: 'Разблокировка…',
+                recTitle: 'Сохрани код восстановления', recDesc: 'Это единственный способ добавить новое устройство или восстановить данные, если это устройство будет утеряно. Запиши его — он больше не будет показан.',
+                copyBtn: '📋 Скопировать', savedLabel: 'Я сохранил его в надёжном месте', continueBtn: 'Продолжить',
+                enterRecTitle: 'Обнаружено новое устройство', enterRecDesc: 'Введи код восстановления, который ты сохранил при создании хранилища.',
+                enterRecPh: 'XXXX-XXXX-XXXX-XXXX-XXXX', enterRecBtn: 'Разблокировать устройство', noRecText: 'Нет кода?', startFreshLink: 'Начать с чистого листа',
+                migrateTitle: 'Разовое обновление', migrateDesc: 'Введи текущий пароль один раз, чтобы перейти на мгновенную разблокировку — больше вводить его не понадобится.',
+                migratePh: 'Текущий пароль', migrateBtn: 'Обновить аккаунт',
+                errorTitle: 'Проблема соединения', errorDesc: 'Не удалось подключиться к защищённому хранилищу. Данные в безопасности — проверь соединение и попробуй снова.', retryBtn: 'Повторить',
+                legacyTitle: 'DailyBookimix', legacyDesc: 'Введи пароль, чтобы разблокировать зашифрованный дневник.', legacyHint: 'Первый раз? Выбери любой пароль — он будет использоваться для шифрования.', legacyBtn: 'Разблокировать 🔓',
+            }
+        };
+        const s = t[lang] || t.en;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        const setPh = (id, v) => { const el = document.getElementById(id); if (el) el.placeholder = v; };
+        set('welcomeTitle', s.welcomeTitle); set('welcomeDesc', s.welcomeDesc);
+        set('welcomeCreateBtn', s.welcomeBtn); set('welcomeHint', s.welcomeHint);
+        set('lockCheckingText', s.checking);
+        set('recoveryShowTitle', s.recTitle); set('recoveryShowDesc', s.recDesc);
+        set('recoveryCopyBtn', s.copyBtn); set('recoverySavedLabel', s.savedLabel); set('recoveryContinueBtn', s.continueBtn);
+        set('enterRecoveryTitle', s.enterRecTitle); set('enterRecoveryDesc', s.enterRecDesc);
+        setPh('recoveryCodeInput', s.enterRecPh); set('enterRecoveryBtn', s.enterRecBtn);
+        set('noRecoveryText', s.noRecText); set('startFreshLink', s.startFreshLink);
+        set('migrateTitle', s.migrateTitle); set('migrateDesc', s.migrateDesc);
+        setPh('migratePasswordInput', s.migratePh); set('migrateUnlockBtn', s.migrateBtn);
+        set('errorTitle', s.errorTitle); set('errorDesc', s.errorDesc); set('errorRetryBtn', s.retryBtn);
+        set('lock-title', s.legacyTitle); set('lock-desc', s.legacyDesc); set('lock-hint', s.legacyHint); set('lockUnlockBtn', s.legacyBtn);
+    }
+};
+
+
+// @ts-check
+// ================================================================
+//  STORAGE MANAGER v6
+//
+//  WHAT CHANGED FROM v5 AND WHY:
+//   - v5 stored each whole collection (all notes, all habits, every
+//     day of tasks ever) as ONE JSON blob under one CloudStorage key.
+//     CloudStorage caps each value at a few KB, so that blob grows
+//     until every future save silently fails — the root cause of the
+//     "Daily Tasks won't save" reports.
+//   - v6 shards collections into one small key per item (or per day,
+//     for tasks — see TaskManager) plus a tiny index, so no single
+//     value can ever approach the cap regardless of account age.
+//   - v5's getItem swallowed network errors into "key doesn't exist",
+//     which could silently fabricate a brand-new encryption identity
+//     on a transient failure (see EncryptionManager). v6 only ever
+//     treats an EXPLICIT cloud value as authoritative; any error or
+//     "confirmed absent" response falls back to the local cache
+//     instead of assuming emptiness — so offline writes never get
+//     discarded by a slow sync, and identity never gets fabricated.
+//   - Local storage is written first, synchronously in the save
+//     path, before any network round trip — so a save always
+//     survives a page refresh / lost connection on its own device,
+//     with cross-device sync layered on top as a best-effort push.
+// ================================================================
+const StorageManager = {
+    _snapshots: {}, // category -> Map(id -> last-written JSON), used to diff saveCollection()
+
+    init() { TGPlatform.init(); },
+
+    _localGetRaw(key) {
+        try { return localStorage.getItem('dbmix_' + key) || null; } catch (e) { return null; }
+    },
+    _localSetRaw(key, value) {
+        try { localStorage.setItem('dbmix_' + key, value); } catch (e) {}
+    },
+    _localRemoveRaw(key) {
+        try { localStorage.removeItem('dbmix_' + key); } catch (e) {}
+    },
+
+    async _mirrorLocal(key, value) {
+        if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceSet(key, value); } catch (e) {} }
+        else this._localSetRaw(key, value);
+    },
+
+    /** Save one value. Writes the local cache first (durable immediately,
+     *  survives offline/refresh on this device), then best-effort syncs
+     *  to CloudStorage with retries for cross-device propagation. */
     async setItem(key, value) {
         const encrypted = await EncryptionManager.encrypt(value);
-        if (this.supportsCloud) {
-            // Try up to 3 times with backoff
+        await this._mirrorLocal(key, encrypted);
+        if (TGPlatform.supportsCloud) {
             for (let attempt = 0; attempt < 3; attempt++) {
-                try {
-                    await this._cloudSet(key, encrypted);
-                    return; // success
-                } catch(e) {
-                    if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-                }
+                const r = await TGPlatform.cloudSet(key, encrypted);
+                if (r.ok) return;
+                if (attempt < 2) await Util.sleep(500 * (attempt + 1));
             }
-            console.warn('[StorageManager] setItem failed after 3 attempts for key:', key);
-        } else {
-            // Fallback: not in Telegram context (dev/preview)
-            try { localStorage.setItem('dbmix_' + key, encrypted); } catch(e) {}
+            console.warn('[StorageManager] cloud sync failed after retries for key:', key, '(kept locally; will retry on next write)');
         }
     },
 
-    // Read and decrypt value
+    /** Read one value. An EXPLICIT cloud value wins (cross-device freshest).
+     *  Anything else — cloud error, cloud "confirmed absent", or no cloud
+     *  support at all — falls back to the local cache rather than assuming
+     *  emptiness. This is the fix for the v5 data-loss/identity-reset bug. */
     async getItem(key) {
-        let raw = null;
-        if (this.supportsCloud) {
-            try { raw = await this._cloudGet(key); }
-            catch(e) { raw = null; }
-        } else {
-            raw = localStorage.getItem('dbmix_' + key) || null;
+        if (TGPlatform.supportsCloud) {
+            const r = await TGPlatform.cloudGet(key);
+            if (r.ok && r.value !== null) {
+                this._mirrorLocal(key, r.value); // best-effort, don't block the read on it
+                return EncryptionManager.decrypt(r.value);
+            }
         }
+        let raw = null;
+        if (TGPlatform.supportsDevice) { const dr = await TGPlatform.deviceGet(key); raw = dr.ok ? dr.value : null; }
+        else { raw = this._localGetRaw(key); }
         if (!raw) return null;
-        return await EncryptionManager.decrypt(raw);
+        return EncryptionManager.decrypt(raw);
+    },
+
+    async removeItem(key) {
+        if (TGPlatform.supportsCloud) { try { await TGPlatform.cloudRemove(key); } catch (e) {} }
+        if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceRemove(key); } catch (e) {} }
+        this._localRemoveRaw(key);
     },
 
     async getItems(keys) {
@@ -1351,8 +1984,80 @@ const StorageManager = {
             if (v !== null) result[k] = v;
         }));
         return result;
-    }
+    },
+
+    // ── Sharded collection helper: one key per item + a small index of ids.
+    // Used for notes / habits / memories. Diffs against the last-saved
+    // snapshot so editing one item only writes that one shard + the index,
+    // never the whole collection — this is what actually fixes the "every
+    // save re-uploads everything" problem, independent of item count.
+    _snap(category) {
+        if (!this._snapshots[category]) this._snapshots[category] = new Map();
+        return this._snapshots[category];
+    },
+
+    async saveCollection(category, items) {
+        const snap = this._snap(category);
+        const currentIds = new Set();
+        const writes = [];
+        for (const item of items) {
+            const id = String(item.id);
+            currentIds.add(id);
+            const json = JSON.stringify(item);
+            if (snap.get(id) !== json) {
+                writes.push(this.setItem(`${category}_${id}`, json));
+                snap.set(id, json);
+            }
+        }
+        for (const id of Array.from(snap.keys())) {
+            if (!currentIds.has(id)) {
+                writes.push(this.removeItem(`${category}_${id}`));
+                snap.delete(id);
+            }
+        }
+        writes.push(this.setItem(`${category}_index`, JSON.stringify(items.map(i => i.id))));
+        await Promise.all(writes);
+    },
+
+    /** Loads a sharded collection. On first run after upgrading from v5,
+     *  transparently migrates the old monolithic blob (stored under the
+     *  bare category key) into shards, then deletes the old blob. */
+    async loadCollection(category) {
+        const indexRaw = await this.getItem(`${category}_index`);
+        if (indexRaw === null) {
+            const legacyRaw = await this.getItem(category);
+            if (legacyRaw) {
+                let legacyItems = [];
+                try { legacyItems = JSON.parse(legacyRaw); } catch (e) { legacyItems = []; }
+                await this.saveCollection(category, legacyItems);
+                await this.removeItem(category);
+                return legacyItems;
+            }
+            return [];
+        }
+        let ids = [];
+        try { ids = JSON.parse(indexRaw); } catch (e) { ids = []; }
+        const raws = await Promise.all(ids.map(id => this.getItem(`${category}_${id}`)));
+        const items = raws.map(r => {
+            if (!r) return null;
+            try { return JSON.parse(r); } catch (e) { return null; }
+        }).filter(Boolean);
+        const snap = this._snap(category);
+        items.forEach(item => snap.set(String(item.id), JSON.stringify(item)));
+        return items;
+    },
+
+    /** Fully erase a sharded collection (used by "delete account"). */
+    async wipeCollection(category) {
+        const snap = this._snap(category);
+        const ids = Array.from(snap.keys());
+        await Promise.all(ids.map(id => this.removeItem(`${category}_${id}`)));
+        await this.removeItem(`${category}_index`);
+        await this.removeItem(category); // in case a never-migrated legacy blob still exists
+        snap.clear();
+    },
 };
+
 
 
 // ================================================================
@@ -1517,82 +2222,203 @@ const T = {
     }
 };
 
-
+// @ts-check
 // ================================================================
-//  TASK MANAGER — Daily Tasks feature
-//  Data structure per day:  { tasks: [...], mood: 'great'|'normal'|'meh'|'hard'|'' }
-//  Task object: { id, text, important, completed, completedAt, createdAt }
+//  TASK MANAGER v6 — Daily Tasks
+//
+//  WHAT CHANGED FROM v5 AND WHY (this tab had the worst bugs):
+//   1. v5 stored EVERY day you'd ever used the app in one ever-
+//      growing object, serialized whole and re-uploaded on every
+//      single checkbox tap. Once that blob crossed CloudStorage's
+//      per-value cap, every future save started silently failing —
+//      "I check a task and it un-checks itself a moment later" was
+//      this bug. v6 stores one small shard per DAY (`task_day_X`),
+//      so a single save only ever touches the day that changed.
+//   2. v5 computed "today" with `toISOString()`, which is UTC — so
+//      for anyone not in UTC, tasks/streaks/mood got filed under the
+//      wrong calendar day for hours around their local midnight.
+//      v6 uses `Util.localDateStr()` everywhere.
+//   3. v5 never pruned old days, so storage grew forever. v6 keeps a
+//      rolling window of raw day-shards (`_retentionDays`) and tracks
+//      lifetime achievement stats in a small separate aggregate
+//      (`task_stats`) that's updated incrementally on every change —
+//      so pruning old days never loses streaks/totals/achievements.
+//   4. The 30-day archive scroller used to require every day to be
+//      loaded into memory. It now reads from a tiny per-day summary
+//      index (`task_index`, just {done,total} per date) so opening
+//      the app only ever fetches *today's* shard, not 30 of them.
 // ================================================================
 const TaskManager = {
-    // In-memory store: { 'YYYY-MM-DD': { tasks: [...], mood: '' } }
-    _data: {},
-    _viewDate: null,       // which date we're viewing (null = today)
-    _newTaskImp: false,    // whether the "new task" flag is important
+    _data: {},          // cache of LOADED day objects: { 'YYYY-MM-DD': {tasks, mood, countedActive, countedPerfect} }
+    _summary: {},        // lightweight {done,total} per date, drives the archive scroller without loading full days
+    _stats: {
+        totalCompletedAllTime: 0, totalTasksAddedAllTime: 0, maxCompletedInSingleDay: 0,
+        activeDaysCount: 0, hadPerfectDay: false, currentStreak: 0, longestStreak: 0, lastStreakDate: ''
+    },
+    _viewDate: null,
+    _newTaskImp: false,
+    _retentionDays: 120, // raw day-shards older than this get pruned; lifetime stats are unaffected
 
-    today() { return new Date().toISOString().split('T')[0]; },
+    today() { return Util.localDateStr(); },
+    dateOf(daysAgo) { return Util.addDays(this.today(), -daysAgo); },
 
-    // Format YYYY-MM-DD
-    dateOf(daysAgo) {
-        const d = new Date(); d.setDate(d.getDate() - daysAgo);
-        return d.toISOString().split('T')[0];
+    // ---------- loading / migration ----------
+    async load() {
+        const [summaryRaw, statsRaw] = await Promise.all([
+            StorageManager.getItem('task_index'),
+            StorageManager.getItem('task_stats'),
+        ]);
+        try { this._summary = summaryRaw ? JSON.parse(summaryRaw) : {}; } catch (e) { this._summary = {}; }
+        try { this._stats = statsRaw ? JSON.parse(statsRaw) : this._stats; } catch (e) {}
+
+        if (summaryRaw === null) await this._migrateFromLegacyBlob();
+
+        await this._loadDay(this.today());
+        this._prune().catch(() => {}); // best-effort, never blocks the UI
     },
 
-    // Get or create day record
+    async _migrateFromLegacyBlob() {
+        const raw = await StorageManager.getItem('tasks_v1');
+        if (!raw) return;
+        let legacy = {};
+        try { legacy = JSON.parse(raw); } catch (e) { return; }
+        const dates = Object.keys(legacy).sort();
+        for (const ds of dates) {
+            const day = legacy[ds] || { tasks: [], mood: '' };
+            day.countedActive = false; day.countedPerfect = false;
+            this._data[ds] = day;
+            this._recomputeSummaryFor(ds);
+            this._bumpAchievementFlags(ds);
+            await StorageManager.setItem('task_day_' + ds, JSON.stringify(day));
+        }
+        await StorageManager.setItem('task_index', JSON.stringify(this._summary));
+        await StorageManager.setItem('task_stats', JSON.stringify(this._stats));
+        await StorageManager.removeItem('tasks_v1');
+    },
+
+    async _loadDay(dateStr) {
+        if (this._data[dateStr]) return this._data[dateStr];
+        const raw = await StorageManager.getItem('task_day_' + dateStr);
+        let day;
+        try { day = raw ? JSON.parse(raw) : null; } catch (e) { day = null; }
+        if (!day) day = { tasks: [], mood: '', countedActive: false, countedPerfect: false };
+        this._data[dateStr] = day;
+        return day;
+    },
+
+    // Synchronous accessor — safe for already-loaded days (today is always
+    // loaded by load(); any other day is loaded by viewDate() before render()).
     dayData(dateStr) {
-        if (!this._data[dateStr]) this._data[dateStr] = { tasks: [], mood: '' };
+        if (!this._data[dateStr]) this._data[dateStr] = { tasks: [], mood: '', countedActive: false, countedPerfect: false };
         return this._data[dateStr];
     },
 
-    // Toggle important flag for new task
+    async _prune() {
+        const cutoff = Util.addDays(this.today(), -this._retentionDays);
+        const stale = Object.keys(this._summary).filter(d => d < cutoff);
+        if (!stale.length) return;
+        await Promise.all(stale.map(d => StorageManager.removeItem('task_day_' + d)));
+        stale.forEach(d => { delete this._summary[d]; delete this._data[d]; });
+        await StorageManager.setItem('task_index', JSON.stringify(this._summary));
+    },
+
+    async wipeAll() {
+        const dates = Object.keys(this._summary);
+        await Promise.all(dates.map(d => StorageManager.removeItem('task_day_' + d)));
+        await StorageManager.removeItem('task_index');
+        await StorageManager.removeItem('task_stats');
+        await StorageManager.removeItem('tasks_v1');
+        this._data = {}; this._summary = {};
+        this._stats = { totalCompletedAllTime: 0, totalTasksAddedAllTime: 0, maxCompletedInSingleDay: 0, activeDaysCount: 0, hadPerfectDay: false, currentStreak: 0, longestStreak: 0, lastStreakDate: '' };
+    },
+
+    // ---------- incremental summary / lifetime-stats bookkeeping ----------
+    _recomputeSummaryFor(dateStr) {
+        const day = this._data[dateStr];
+        const done = day.tasks.filter(t => t.completed).length;
+        this._summary[dateStr] = { done, total: day.tasks.length };
+    },
+    _bumpAchievementFlags(dateStr) {
+        const day = this._data[dateStr];
+        const { done, total } = this._summary[dateStr];
+        if (done > 0 && !day.countedActive) { day.countedActive = true; this._stats.activeDaysCount += 1; }
+        if (total >= 3 && done === total && !day.countedPerfect) { day.countedPerfect = true; this._stats.hadPerfectDay = true; }
+        this._stats.maxCompletedInSingleDay = Math.max(this._stats.maxCompletedInSingleDay, done);
+        this._updateStreak(dateStr, done > 0);
+    },
+    _updateStreak(dateStr, hasCompletion) {
+        if (!hasCompletion || this._stats.lastStreakDate === dateStr) return;
+        if (this._stats.lastStreakDate && Util.addDays(this._stats.lastStreakDate, 1) === dateStr) {
+            this._stats.currentStreak += 1;
+        } else {
+            this._stats.currentStreak = 1;
+        }
+        this._stats.lastStreakDate = dateStr;
+        this._stats.longestStreak = Math.max(this._stats.longestStreak, this._stats.currentStreak);
+    },
+    _snapshotFor(dateStr) {
+        return {
+            day: JSON.parse(JSON.stringify(this._data[dateStr] || { tasks: [], mood: '', countedActive: false, countedPerfect: false })),
+            summary: this._summary[dateStr] ? { ...this._summary[dateStr] } : null,
+            stats: { ...this._stats },
+        };
+    },
+    _restoreSnapshot(dateStr, snap) {
+        this._data[dateStr] = snap.day;
+        if (snap.summary) this._summary[dateStr] = snap.summary; else delete this._summary[dateStr];
+        this._stats = snap.stats;
+    },
+    async _persistDay(dateStr) {
+        await Promise.all([
+            StorageManager.setItem('task_day_' + dateStr, JSON.stringify(this._data[dateStr])),
+            StorageManager.setItem('task_index', JSON.stringify(this._summary)),
+            StorageManager.setItem('task_stats', JSON.stringify(this._stats)),
+        ]);
+    },
+
+    // ---------- UI actions (same behavior as v5, new persistence underneath) ----------
     toggleNewImp() {
         this._newTaskImp = !this._newTaskImp;
         const btn = document.getElementById('taskImpToggle');
         if (btn) btn.classList.toggle('active', this._newTaskImp);
     },
 
-    // Quick-add a task from the input field
     async quickAdd() {
         const input = document.getElementById('taskQuickInput');
         if (!input) return;
         const text = input.value.trim();
         if (!text) return;
 
-        // Disable button during save to prevent double-tap on iOS
         const addBtn = document.getElementById('taskAddBtn');
         if (addBtn) addBtn.disabled = true;
 
         const dateStr = this._viewDate || this.today();
+        const snap = this._snapshotFor(dateStr);
         const day = this.dayData(dateStr);
 
         const newTask = {
-            id:          Date.now(),
-            text:        text,
-            important:   this._newTaskImp,
-            completed:   false,
-            completedAt: null,
-            createdAt:   new Date().toISOString()
+            id: Date.now(), text, important: this._newTaskImp, completed: false,
+            completedAt: null, createdAt: new Date().toISOString()
         };
-
         day.tasks.unshift(newTask);
         this._sortTasks(day);
+        this._stats.totalTasksAddedAllTime += 1;
+        this._recomputeSummaryFor(dateStr);
+        this._bumpAchievementFlags(dateStr);
 
-        // Clear UI immediately for responsiveness
         input.value = '';
         this._newTaskImp = false;
         const impBtn = document.getElementById('taskImpToggle');
         if (impBtn) impBtn.classList.remove('active');
 
-        // Render optimistically
         this.render();
 
-        // Save to CloudStorage — if it fails, roll back and show error
         try {
-            await this._save();
+            await this._persistDay(dateStr);
             diary.toast(diary.t('tasks-toast-added'));
             AchievementsUI.recalculate();
-        } catch(e) {
-            // Save failed: remove the task we added and restore input
-            day.tasks = day.tasks.filter(t => t.id !== newTask.id);
+        } catch (e) {
+            this._restoreSnapshot(dateStr, snap);
             input.value = text;
             this.render();
             diary.toast('❌ Failed to save task — please try again', 'error');
@@ -1602,58 +2428,52 @@ const TaskManager = {
         }
     },
 
-    // Handle Enter key in quick input
     onInputKeydown(e) {
         if (e.key === 'Enter') { e.preventDefault(); this.quickAdd(); }
     },
 
-    // Toggle task completion
     async toggleTask(dateStr, taskId) {
         const day = this.dayData(dateStr);
         const task = day.tasks.find(t => t.id === taskId);
         if (!task) return;
+        const snap = this._snapshotFor(dateStr);
 
-        // Apply change
-        const prevCompleted   = task.completed;
-        const prevCompletedAt = task.completedAt;
-        task.completed   = !task.completed;
+        task.completed = !task.completed;
         task.completedAt = task.completed ? new Date().toISOString() : null;
-
+        this._stats.totalCompletedAllTime = Math.max(0, this._stats.totalCompletedAllTime + (task.completed ? 1 : -1));
         this._sortTasks(day);
+        this._recomputeSummaryFor(dateStr);
+        this._bumpAchievementFlags(dateStr);
         this.render();
 
         try {
-            await this._save();
+            await this._persistDay(dateStr);
             AchievementsUI.recalculate();
-        } catch(e) {
-            // Rollback
-            task.completed   = prevCompleted;
-            task.completedAt = prevCompletedAt;
-            this._sortTasks(day);
+        } catch (e) {
+            this._restoreSnapshot(dateStr, snap);
             this.render();
             diary.toast('❌ Failed to save — please try again', 'error');
         }
     },
 
-    // Delete a task
     async deleteTask(dateStr, taskId) {
         const day = this.dayData(dateStr);
         const removed = day.tasks.find(t => t.id === taskId);
+        const snap = this._snapshotFor(dateStr);
         day.tasks = day.tasks.filter(t => t.id !== taskId);
+        if (removed && removed.completed) this._stats.totalCompletedAllTime = Math.max(0, this._stats.totalCompletedAllTime - 1);
+        this._recomputeSummaryFor(dateStr);
         this.render();
         try {
-            await this._save();
+            await this._persistDay(dateStr);
             diary.toast(diary.t('tasks-toast-deleted'));
-        } catch(e) {
-            // Rollback
-            if (removed) day.tasks.push(removed);
-            this._sortTasks(day);
+        } catch (e) {
+            this._restoreSnapshot(dateStr, snap);
             this.render();
             diary.toast('❌ Failed to delete — please try again', 'error');
         }
     },
 
-    // Sort: important+incomplete → normal+incomplete → completed (by completedAt desc)
     _sortTasks(day) {
         day.tasks.sort((a, b) => {
             if (a.completed !== b.completed) return a.completed ? 1 : -1;
@@ -1662,30 +2482,29 @@ const TaskManager = {
         });
     },
 
-    // Set mood for a day
     async setMood(dateStr, mood) {
         const day = this.dayData(dateStr);
         const prevMood = day.mood;
-        day.mood = (day.mood === mood) ? '' : mood; // toggle
+        day.mood = (day.mood === mood) ? '' : mood;
         this.render();
         try {
-            await this._save();
-        } catch(e) {
+            await this._persistDay(dateStr);
+        } catch (e) {
             day.mood = prevMood;
             this.render();
             diary.toast('❌ Failed to save mood', 'error');
         }
     },
 
-    // Carry over incomplete tasks to tomorrow
     async carryOver() {
         const todayStr = this.today();
         const day = this.dayData(todayStr);
         const incomplete = day.tasks.filter(t => !t.completed);
         if (!incomplete.length) return;
 
-        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        const tomorrowStr = Util.addDays(todayStr, 1);
+        await this._loadDay(tomorrowStr);
+        const snap = this._snapshotFor(tomorrowStr);
         const nextDay = this.dayData(tomorrowStr);
 
         const existingIds = new Set(nextDay.tasks.map(t => t.id));
@@ -1698,114 +2517,75 @@ const TaskManager = {
             }
         });
         this._sortTasks(nextDay);
+        this._stats.totalTasksAddedAllTime += added.length;
+        this._recomputeSummaryFor(tomorrowStr);
 
         try {
-            await this._save();
+            await this._persistDay(tomorrowStr);
             diary.toast(diary.t('tasks-toast-carried'));
-        } catch(e) {
-            // Rollback: remove the tasks we added to tomorrow
-            nextDay.tasks = nextDay.tasks.filter(t => !added.includes(t.id));
+        } catch (e) {
+            this._restoreSnapshot(tomorrowStr, snap);
             diary.toast('❌ Failed to carry over tasks', 'error');
         }
     },
 
-    // Count consecutive days where at least 1 task was completed
-    completionStreak() {
-        let streak = 0;
-        const today = this.today();
-        for (let i = 0; ; i++) {
-            const d = new Date(); d.setDate(d.getDate() - i);
-            const ds = d.toISOString().split('T')[0];
-            if (ds > today) continue; // skip future
-            const day = this._data[ds];
-            if (!day || !day.tasks.some(t => t.completed)) break;
-            streak++;
-        }
-        return streak;
-    },
-
-    // Count total completed tasks across all days
-    totalCompleted() {
-        return Object.values(this._data).reduce(
-            (s, d) => s + (d.tasks || []).filter(t => t.completed).length, 0
-        );
-    },
-
-    // Count today's completed tasks
+    // ---------- stats surface used by the footer + AchievementsUI ----------
+    completionStreak() { return this._stats.currentStreak; },
+    totalCompleted() { return this._stats.totalCompletedAllTime; },
     todayCompleted() {
         const day = this._data[this.today()];
         return day ? day.tasks.filter(t => t.completed).length : 0;
     },
+    totalTasks() { return this._stats.totalTasksAddedAllTime; },
+    getStats() { return { ...this._stats }; },
 
-    // Total tasks count (for footer)
-    totalTasks() {
-        return Object.values(this._data).reduce((s, d) => s + (d.tasks || []).length, 0);
-    },
-
-    async _save() {
-        // StorageManager.setItem already retries internally.
-        // We await it here so callers can catch failures.
-        await StorageManager.setItem('tasks_v1', JSON.stringify(this._data));
-    },
-
-    async load() {
-        const raw = await StorageManager.getItem('tasks_v1');
-        try { this._data = raw ? JSON.parse(raw) : {}; }
-        catch(e) { this._data = {}; }
-    },
-
-    // Render the entire tasks section
+    // ---------- rendering (same markup/behavior as v5) ----------
     render() {
-        const lang    = diary.lang || 'en';
+        const lang = diary.lang || 'en';
         const dateStr = this._viewDate || this.today();
-        const today   = this.today();
+        const today = this.today();
         const isToday = (dateStr === today);
 
-        // Placeholder update
         const inp = document.getElementById('taskQuickInput');
         if (inp) inp.placeholder = diary.t('tasks-quick-ph');
 
-        // --- Archive day selector (last 30 days) ---
         const archiveScroll = document.getElementById('taskArchiveScroll');
         if (archiveScroll) {
             let html = '';
             for (let i = 0; i < 30; i++) {
-                const d   = new Date(); d.setDate(d.getDate() - i);
-                const ds  = d.toISOString().split('T')[0];
-                const day = this._data[ds];
-                const cnt = day ? day.tasks.filter(t => t.completed).length : 0;
-                const tot = day ? day.tasks.length : 0;
+                const ds = Util.addDays(today, -i);
+                const sum = this._summary[ds];
+                const cnt = sum ? sum.done : 0;
+                const tot = sum ? sum.total : 0;
                 let label;
                 if (i === 0) label = diary.t('tasks-today');
                 else if (i === 1) label = diary.t('tasks-yesterday');
                 else {
-                    label = d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
+                    const [y, m, d] = ds.split('-').map(Number);
+                    const dObj = new Date(y, m - 1, d);
+                    label = dObj.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
                 }
                 const active = (ds === dateStr) ? 'active' : '';
-                const badge  = tot > 0 ? `<br><span style="font-size:10px;opacity:0.75">${cnt}/${tot}</span>` : '';
+                const badge = tot > 0 ? `<br><span style="font-size:10px;opacity:0.75">${cnt}/${tot}</span>` : '';
                 html += `<div class="task-archive-day ${active}" onclick="TaskManager.viewDate('${ds}')">${label}${badge}</div>`;
             }
             archiveScroll.innerHTML = html;
         }
 
-        // --- Stats bar ---
         const statsBar = document.getElementById('taskStatsBar');
         if (statsBar) {
-            const dayData = this._data[dateStr];
-            const done  = dayData ? dayData.tasks.filter(t => t.completed).length : 0;
-            const total = dayData ? dayData.tasks.length : 0;
+            const sum = this._summary[dateStr] || { done: 0, total: 0 };
             const streak = this.completionStreak();
             statsBar.innerHTML = `
-                <div class="task-stat-chip">✅ <b>${done}</b> ${diary.t('tasks-stat-done')}</div>
-                <div class="task-stat-chip">📋 <b>${total}</b> ${diary.t('tasks-stat-total')}</div>
+                <div class="task-stat-chip">✅ <b>${sum.done}</b> ${diary.t('tasks-stat-done')}</div>
+                <div class="task-stat-chip">📋 <b>${sum.total}</b> ${diary.t('tasks-stat-total')}</div>
                 <div class="task-stat-chip">🔥 <b>${streak}</b> ${diary.t('tasks-stat-streak-days')} ${diary.t('tasks-stat-streak')}</div>
             `;
         }
 
-        // --- Task list ---
-        const list    = document.getElementById('tasksList');
+        const list = document.getElementById('tasksList');
         const dayData = this.dayData(dateStr);
-        const tasks   = dayData.tasks;
+        const tasks = dayData.tasks;
 
         if (list) {
             if (!tasks.length) {
@@ -1827,11 +2607,8 @@ const TaskManager = {
             }
         }
 
-        // --- Mood section ---
         const moodSection = document.getElementById('taskMoodSection');
-        if (moodSection) {
-            moodSection.style.display = isToday ? '' : 'none';
-        }
+        if (moodSection) moodSection.style.display = isToday ? '' : 'none';
         const moodLabel = document.getElementById('tasks-mood-label');
         if (moodLabel) moodLabel.textContent = diary.t('tasks-mood-label');
 
@@ -1851,7 +2628,6 @@ const TaskManager = {
                 </button>`).join('');
         }
 
-        // --- Quick-add & carry-over (today only) ---
         const qaRow = document.getElementById('taskQuickAddRow');
         if (qaRow) qaRow.style.display = isToday ? '' : 'none';
 
@@ -1866,15 +2642,17 @@ const TaskManager = {
         }
     },
 
-    viewDate(dateStr) {
+    async viewDate(dateStr) {
+        await this._loadDay(dateStr);
         this._viewDate = dateStr;
         this.render();
     },
 
     _escHtml(str) {
-        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 };
+
 
 
 // ================================================================
@@ -1895,7 +2673,7 @@ const diary = {
     openMemoryDetail: null,
 
     t(key) { return (T[this.lang] || T.en)[key] || key; },
-    today() { return new Date().toISOString().split('T')[0]; },
+    today() { return Util.localDateStr(); }, // FIX: was toISOString() (UTC) — see Util comment
 
     fmtDate(d) {
         if (!d) return '';
@@ -2043,12 +2821,20 @@ const diary = {
 
     async load() {
         const data = await StorageManager.getItems([
-            'notes','habits','memories','lang','theme','fireStreak','lastActiveDate'
+            'lang','theme','fireStreak','lastActiveDate'
         ]);
 
-        this.notes     = this._sortPinned(JSON.parse(data.notes    || '[]'));
-        this.habits    = this._sortPinned(JSON.parse(data.habits   || '[]'));
-        this.memories  = this._sortPinned(JSON.parse(data.memories || '[]'));
+        // v6: notes/habits/memories are now sharded (one key per item) instead
+        // of one ever-growing blob. loadCollection() transparently migrates
+        // any existing v5 blob the first time it's called.
+        const [notesArr, habitsArr, memoriesArr] = await Promise.all([
+            StorageManager.loadCollection('notes'),
+            StorageManager.loadCollection('habits'),
+            StorageManager.loadCollection('memories'),
+        ]);
+        this.notes     = this._sortPinned(notesArr);
+        this.habits    = this._sortPinned(habitsArr);
+        this.memories  = this._sortPinned(memoriesArr);
 
         if (data.lang)  this.lang  = data.lang;
         if (data.theme) this.theme = data.theme;
@@ -2073,9 +2859,9 @@ const diary = {
         return [...arr].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     },
 
-    async saveNotes()    { await StorageManager.setItem('notes',    JSON.stringify(this.notes));    this.renderNotes();    this.updateFooter(); },
-    async saveHabits()   { await StorageManager.setItem('habits',   JSON.stringify(this.habits));   this.renderHabits();   this.updateFooter(); },
-    async saveMemories() { await StorageManager.setItem('memories', JSON.stringify(this.memories)); this.renderMemories(); this.updateFooter(); },
+    async saveNotes()    { await StorageManager.saveCollection('notes',    this.notes);    this.renderNotes();    this.updateFooter(); },
+    async saveHabits()   { await StorageManager.saveCollection('habits',   this.habits);   this.renderHabits();   this.updateFooter(); },
+    async saveMemories() { await StorageManager.saveCollection('memories', this.memories); this.renderMemories(); this.updateFooter(); },
 
     switchTab(tab) {
         ['notes','habits','tasks','memory'].forEach(t => {
@@ -2309,15 +3095,15 @@ const diary = {
         const table  = document.getElementById('calendarTable');
         const header = `<tr>${dayLabels.map(d=>`<th>${d}</th>`).join('')}</tr>`;
         let html = '<tr>';
-        let current = new Date(habit.startDate);
+        let current = Util.parseLocalDate(habit.startDate);
         const offset = (current.getDay() + 6) % 7;
         for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
         const todayStr = this.today();
-        const end = habit.endDate ? new Date(habit.endDate) : new Date();
+        const end = habit.endDate ? Util.parseLocalDate(habit.endDate) : new Date();
         while (current <= end) {
             const day = (current.getDay() + 6) % 7;
             if (day === 0 && (offset > 0 || html !== '<tr>')) html += '</tr><tr>';
-            const d    = current.toISOString().split('T')[0];
+            const d    = Util.localDateStr(current);
             const done = habit.completedDays.includes(d);
             html += `<td class="${done ? 'done' : ''}" onclick="diary.toggleDay(${id},'${d}',event);diary.showCalendar(${id},event)">${current.getDate()}</td>`;
             current.setDate(current.getDate() + 1);
@@ -2633,12 +3419,11 @@ const diary = {
     updateStreak() {
         const todayStr = this.today();
         if (this.lastActiveDate === todayStr) return;
-        const yest = new Date(); yest.setDate(yest.getDate() - 1);
-        const yestStr = yest.toISOString().split('T')[0];
+        const yestStr = Util.addDays(todayStr, -1);
         const old = this.fireStreak;
         this.fireStreak     = (this.lastActiveDate === yestStr) ? this.fireStreak + 1 : 1;
         this.lastActiveDate = todayStr;
-        this._saveStreak();
+        this._saveStreak().catch(e => console.warn('[diary] streak save failed:', e));
         if (this.fireStreak > old) {
             const hdr = document.getElementById('fireStreakHeader');
             const emj = document.getElementById('fireEmoji');
@@ -2717,7 +3502,7 @@ const diary = {
         SidebarUI.init();
         AchievementsUI.init();
 
-        console.log('%c✅ DailyBookimix v5 — loaded with E2E encryption + Daily Tasks!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v6 — Master-Key auth + sharded storage + Daily Tasks fixes!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
@@ -2850,30 +3635,84 @@ const SidebarUI = {
     },
 
     async executeDeleteAccount() {
-        diary.notes = []; diary.habits = []; diary.memories = [];
-        diary.fireStreak = 0; diary.lastActiveDate = '';
+        const btn = document.getElementById('del-confirm-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        try {
+            diary.notes = []; diary.habits = []; diary.memories = [];
+            diary.fireStreak = 0; diary.lastActiveDate = '';
 
-        const keys = ['notes','habits','memories','fireStreak','lastActiveDate','userNickname','userId','tasks_v1','achievements_v1'];
-        for (const key of keys) {
-            try { await StorageManager.setItem(key, ''); } catch(e) {}
+            // FIX: v5 wrote '' over each key instead of actually removing it,
+            // which left every shard sitting in CloudStorage forever, slowly
+            // eating the 1024-key-per-account budget. Properly remove
+            // everything instead — including every sharded notes/habits/
+            // memories/tasks key, not just the legacy monolithic ones.
+            await Promise.all([
+                StorageManager.wipeCollection('notes'),
+                StorageManager.wipeCollection('habits'),
+                StorageManager.wipeCollection('memories'),
+                TaskManager.wipeAll(),
+            ]);
+            for (const key of ['fireStreak', 'lastActiveDate', 'userNickname', 'userId', 'achievements_v1']) {
+                await StorageManager.removeItem(key);
+            }
+            // NOTE: deliberately NOT touching dbmix_sentinel / enc_mk_recovery /
+            // recovery_salt / SecureStorage mk — "delete account" erases your
+            // DATA, not your encryption identity. Your existing recovery code
+            // keeps working against this now-empty vault.
+
+            this.profile.nickname = '';
+            this._updateHeaderDisplay();
+
+            diary.renderAll();
+            diary.updateFooter();
+            TaskManager.render();
+            AchievementsUI._state = {};
+            AchievementsUI._save();
+
+            document.getElementById('deleteAccountModal').classList.remove('open');
+            diary.toast('🗑️ All data deleted');
+        } catch (e) {
+            console.error('[SidebarUI] executeDeleteAccount failed:', e);
+            diary.toast('❌ Something went wrong — some data may not have been fully removed', 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = (this._strings[diary.lang] || this._strings.en).delConfirm; }
         }
-
-        this.profile = { name: '', userId: '', photoUrl: '', nickname: '' };
-        TaskManager._data = {};
-
-        diary.renderAll();
-        diary.updateFooter();
-        TaskManager.render();
-        AchievementsUI._state = {};
-        AchievementsUI._save();
-
-        document.getElementById('deleteAccountModal').classList.remove('open');
-        diary.toast('🗑️ All data deleted');
     },
 
     openAchievements() {
         this.close();
         setTimeout(() => { AchievementsUI.open(); }, 300);
+    },
+
+    // ---------- Backup & Recovery: regenerate a fresh recovery code on demand ----------
+    openRecoveryModal() {
+        this.close();
+        setTimeout(() => {
+            const disp = document.getElementById('recoveryModalCode');
+            if (disp) disp.textContent = '••••-••••-••••-••••-••••';
+            document.getElementById('recoveryModal').classList.add('open');
+        }, 300);
+    },
+    closeRecoveryModal() {
+        document.getElementById('recoveryModal').classList.remove('open');
+    },
+    async generateNewRecoveryCode() {
+        const lang = diary.lang || 'en';
+        const msg = lang === 'ru'
+            ? 'Это заменит твой текущий код восстановления — старый перестанет работать на новых устройствах. Продолжить?'
+            : 'This replaces your current recovery code — the old one will stop working for setting up new devices. Continue?';
+        if (!confirm(msg)) return;
+        const btn = document.getElementById('recoveryModalGenerateBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        const code = await EncryptionManager.regenerateRecoveryCode();
+        if (btn) { btn.disabled = false; btn.textContent = lang === 'ru' ? 'Создать новый код' : 'Generate new code'; }
+        const disp = document.getElementById('recoveryModalCode');
+        if (code) {
+            if (disp) disp.textContent = code;
+            diary.toast(lang === 'ru' ? '✅ Новый код создан — сохрани его' : '✅ New code created — save it now');
+        } else {
+            diary.toast('❌ Could not generate a new code — check your connection and try again', 'error');
+        }
     }
 };
 
@@ -2998,19 +3837,29 @@ const AchievementsUI = {
         if ((diary.fireStreak || 0) >= 30    && this._unlock('streak_30'))    changed = true;
 
         // 6. 5 tasks completed in a single day
-        const maxInDay = Math.max(0, ...Object.values(TaskManager._data || {}).map(d =>
-            (d.tasks || []).filter(t => t.completed).length
-        ));
+        // (FIX: previously scanned TaskManager._data directly, which only ever
+        // held whatever days happened to be loaded. Now backed by a prune-safe
+        // lifetime aggregate that's updated incrementally on every change.)
+        const taskStats = TaskManager.getStats ? TaskManager.getStats() : {};
+        const maxInDay = taskStats.maxCompletedInSingleDay || 0;
         if (maxInDay >= 5 && this._unlock('tasks_5_day')) changed = true;
 
-        // 7. 14 distinct active days (habits + tasks)
-        const allDays = new Set();
-        (diary.habits || []).forEach(h => (h.completedDays || []).forEach(d => allDays.add(d)));
-        Object.keys(TaskManager._data || {}).forEach(d => {
-            const day = TaskManager._data[d];
-            if (day && day.tasks && day.tasks.some(t => t.completed)) allDays.add(d);
+        // 7. 14 distinct active days (habits + tasks).
+        // Habit completedDays are never pruned, so that side stays exact.
+        // Old task days DO get pruned for storage efficiency, so the exact
+        // union is only guaranteed within the still-retained summary window;
+        // outside that window we fall back to the lifetime task-active-days
+        // counter (ignores overlap with habit days, so it's a slightly looser
+        // bound — in practice this only matters for very sparse usage spread
+        // past the retention window, since 14 active days is a low bar).
+        const habitDaySet = new Set();
+        (diary.habits || []).forEach(h => (h.completedDays || []).forEach(d => habitDaySet.add(d)));
+        const unionWithinWindow = new Set(habitDaySet);
+        Object.keys(TaskManager._summary || {}).forEach(d => {
+            if (TaskManager._summary[d].done > 0) unionWithinWindow.add(d);
         });
-        if (allDays.size >= 14 && this._unlock('days_14')) changed = true;
+        const days14 = unionWithinWindow.size >= 14 || habitDaySet.size >= 14 || (taskStats.activeDaysCount || 0) >= 14;
+        if (days14 && this._unlock('days_14')) changed = true;
 
         // 8. Profile nickname set
         if (SidebarUI.profile && SidebarUI.profile.nickname && SidebarUI.profile.nickname.length > 0) {
@@ -3025,10 +3874,8 @@ const AchievementsUI = {
 
         // ── NEW TASK ACHIEVEMENTS ──
 
-        // 11. First task ever added (any day has at least 1 task)
-        const totalTasks = Object.values(TaskManager._data || {}).reduce(
-            (s, d) => s + (d.tasks || []).length, 0
-        );
+        // 11. First task ever added (lifetime counter, survives pruning)
+        const totalTasks = TaskManager.totalTasks ? TaskManager.totalTasks() : 0;
         if (totalTasks >= 1 && this._unlock('first_task')) changed = true;
 
         // 12. 3-day task completion streak
@@ -3036,10 +3883,7 @@ const AchievementsUI = {
             this._unlock('tasks_3_streak')) changed = true;
 
         // 13. All tasks completed in a single day (at least 3 tasks)
-        const hadPerfectDay = Object.values(TaskManager._data || {}).some(d => {
-            const tasks = d.tasks || [];
-            return tasks.length >= 3 && tasks.every(t => t.completed);
-        });
+        const hadPerfectDay = !!taskStats.hadPerfectDay;
         if (hadPerfectDay && this._unlock('tasks_all_day')) changed = true;
 
         if (changed) {
@@ -3129,30 +3973,25 @@ const AchievementsUI = {
 //  BOOT SEQUENCE
 // ================================================================
 (async function boot() {
-    // Apply saved language to lock screen (try CloudStorage, fall back to localStorage)
+    // Apply saved language to the lock screen before we even know which
+    // tier we'll land on (the language preference itself isn't sensitive,
+    // so this one hint is intentionally kept outside the encrypted vault).
     let savedLang = 'en';
-    try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch(e) {}
+    try { savedLang = localStorage.getItem('dbmix_lang_hint') || 'en'; } catch (e) {}
     EncryptionManager.applyLang(savedLang);
 
-    // Handle Enter key on password input
-    const pi = document.getElementById('lockPasswordInput');
-    if (pi) {
-        pi.addEventListener('keydown', e => {
-            if (e.key === 'Enter') EncryptionManager.unlock();
-        });
-        // Also support on touchend for iOS
-        pi.addEventListener('touchend', e => {
-            // focus is handled by the keyboard — do nothing special
-        }, { passive: true });
-        pi.focus();
-    }
+    // Enter-key support across every lock-screen text input.
+    const enterHandlers = {
+        lockPasswordInput: () => EncryptionManager.legacyUnlock(),
+        migratePasswordInput: () => EncryptionManager.migrateFromV5(),
+        recoveryCodeInput: () => EncryptionManager.unlockWithRecoveryCode(),
+    };
+    Object.keys(enterHandlers).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); enterHandlers[id](); } });
+    });
 
-    // Try to auto-unlock from session storage
-    const autoUnlocked = await EncryptionManager.tryAutoUnlock();
-    if (autoUnlocked) {
-        await diary.init();
-    }
-    // Otherwise the lock screen stays open and user must enter password
+    await EncryptionManager.boot(); // figures out which tier to show, or unlocks instantly and calls diary.init()
 })();
 
 // Persist language hint (unencrypted, just for lock screen UI)
