@@ -1,18 +1,10 @@
 <!DOCTYPE html>
-<!-- ============================================================
-     DailyBookimix v5 — ENHANCED EDITION
-     Changes from v4:
-       1. FIX: Achievements earned date persists permanently (never resets)
-       2. NEW: Full Daily Tasks system (replaces simple Tasks category)
-          - Quick add, Important/Normal, strikethrough on complete
-          - Archive (last 30 days), Carry-over, Mood of day
-          - Daily streak + completion stats
-       3. NEW: AES-256-GCM end-to-end encryption via Web Crypto API
-          - All data encrypted before saving to localStorage/CloudStorage
-          - Password prompt on first launch, stored in sessionStorage only
-          - Telegram (including CloudStorage) cannot read plaintext data
-     All original functionality 100% preserved.
-============================================================ -->
+<!--
+    DailyBookimix — personal journal, habit tracker, and daily task manager.
+    Single-file client app for Telegram Mini Apps. All user data is
+    encrypted on-device (AES-256-GCM) before it ever touches Telegram's
+    CloudStorage, so the data is unreadable to anyone but the user.
+-->
 <html lang="ru" class="h-full">
 <head>
     <meta charset="UTF-8">
@@ -1363,28 +1355,25 @@ const TGPlatform = {
 };
 
 
-// @ts-check
 // ================================================================
-//  ENCRYPTION MANAGER v6 — Master-Key architecture.
+//  ENCRYPTION MANAGER — Master-Key architecture.
 //
-//  WHAT CHANGED FROM v5 AND WHY:
-//   - v5 derived the encryption key from a password typed every
-//     session (cached only in sessionStorage, wiped on every close).
-//   - v6 generates one random 256-bit Master Key (MK) per account.
-//     MK is what actually encrypts your data — exactly as before,
-//     AES-256-GCM via Web Crypto. What changes is how MK is *held*:
-//       - Telegram's SecureStorage (OS Keychain/Keystore-backed)
-//         holds it on each device you've used before -> opening the
-//         app is instant, no typing, ever again.
-//       - A one-time Recovery Code (shown once at signup) wraps a
-//         copy of MK and that copy lives in Telegram CloudStorage,
-//         which already syncs across every device on the same
-//         Telegram account. Typing the code once on a NEW device is
-//         the only "password-like" moment in the entire flow.
-//   - Existing v5 users are migrated transparently: their old
-//     password derives the *same* key bytes it always did (PBKDF2 is
-//     deterministic), so that derived key is simply adopted as MK —
-//     zero re-encryption of existing notes/habits/tasks needed.
+//  A random 256-bit Master Key (MK) is generated once per account and
+//  used for all AES-256-GCM encryption/decryption via Web Crypto. The
+//  MK itself is never typed or transmitted in the clear; it's held in
+//  two places:
+//    - Telegram's SecureStorage (OS Keychain/Keystore-backed) on each
+//      device the user has unlocked before, so re-opening the app is
+//      instant with no typing required.
+//    - A one-time Recovery Code, shown once at signup, wraps a copy of
+//      the MK that lives in Telegram CloudStorage (synced across every
+//      device on the account). Entering that code on a new device is
+//      the only password-like step in the entire flow.
+//
+//  Legacy (password-based) accounts are migrated transparently: their
+//  password derives the same key bytes it always did (PBKDF2 is
+//  deterministic), so the derived key is simply adopted as the MK with
+//  no re-encryption of existing data needed.
 // ================================================================
 const SENTINEL_NEW    = 'DBMIX_V6_OK';
 const SENTINEL_LEGACY = 'DAILYBOOKMIX_V5';
@@ -1446,12 +1435,21 @@ const EncryptionManager = {
 
     // ---------- boot: figure out which screen to show, or unlock instantly ----------
     async boot() {
+        // Tell Telegram's bridge we're alive before touching any storage API.
+        // On a fresh install the bridge can still be wiring itself up when this
+        // script runs; calling a storage method before ready() fires can return
+        // a transient bridge error that looks identical to a real failure. That
+        // false error used to send brand-new users straight to the blocking
+        // "connection problem" screen on their very first launch.
+        try { if (window.Telegram && Telegram.WebApp) Telegram.WebApp.ready(); } catch (e) {}
+
         TGPlatform.init();
         this._showScreen('lockScreenChecking');
 
         // Tier 1: returning user on a device that's unlocked before.
         if (TGPlatform.supportsSecure) {
             let r = await TGPlatform.secureGet('mk');
+            if (!r.ok) r = await this._withRetry(() => TGPlatform.secureGet('mk'));
             if (!r.ok) {
                 const restored = await TGPlatform.secureRestore('mk');
                 if (restored.ok && restored.value) r = restored;
@@ -1465,9 +1463,10 @@ const EncryptionManager = {
         // Tier 2: no local MK. Maybe this Telegram account already has a v6
         // vault set up on another device (CloudStorage syncs per-account).
         if (TGPlatform.supportsCloud) {
-            const rec = await TGPlatform.cloudGet('enc_mk_recovery');
+            let rec = await TGPlatform.cloudGet('enc_mk_recovery');
+            if (!rec.ok) rec = await this._withRetry(() => TGPlatform.cloudGet('enc_mk_recovery'));
             if (rec.ok && rec.value) { this._showScreen('lockScreenEnterRecovery'); return; }
-            if (!rec.ok) { this._showBlockingError(); return; } // ambiguous -- never guess
+            if (!rec.ok) { this._showBlockingError(); return; } // confirmed, repeated failure -- never guess
 
             // Tier 3: is this an existing v5 (password-based) user upgrading?
             const legacy = await this._checkLegacyV5();
@@ -1489,9 +1488,18 @@ const EncryptionManager = {
         this._showScreen('lockScreenWelcome');
     },
 
+    // A single storage error is treated as transient, not fatal: we wait a
+    // beat (the bridge may still be initializing) and try once more before
+    // ever showing the user a blocking error screen.
+    async _withRetry(fn, delayMs = 350) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        try { return await fn(); } catch (e) { return { ok: false, error: e }; }
+    },
+
     async _checkLegacyV5() {
         if (TGPlatform.supportsCloud) {
-            const r = await TGPlatform.cloudGet('dbmix_salt');
+            let r = await TGPlatform.cloudGet('dbmix_salt');
+            if (!r.ok) r = await this._withRetry(() => TGPlatform.cloudGet('dbmix_salt'));
             if (r.ok) {
                 if (r.value) return { state: 'found', saltB64: r.value };
                 // confirmed absent in cloud — still check local before declaring "none"
@@ -3501,8 +3509,6 @@ const diary = {
 
         SidebarUI.init();
         AchievementsUI.init();
-
-        console.log('%c✅ DailyBookimix v6 — Master-Key auth + sharded storage + Daily Tasks fixes!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
