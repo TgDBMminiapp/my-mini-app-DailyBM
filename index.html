@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     DailyBookimix v7.7 — AUTH REDESIGN + POLISH EDITION
+     ============================================================
+
+     WHY THIS VERSION EXISTS
+     v7.6's authentication system had grown into five separate lock-
+     screen tiers (Welcome → Show Recovery → Enter Recovery → Migrate
+     v5 → Legacy Password → Error). That complexity directly caused two
+     real bugs:
+       • A brand-new Telegram account could be asked for a password or
+         recovery code that never existed, because a single slow or
+         ambiguous CloudStorage read on cold start was treated the same
+         as "we truly cannot tell if this account is new."
+       • A device that had just unlocked successfully with a recovery
+         code could be asked for that same code again on its very next
+         launch, because the Master Key was written to only one storage
+         tier (SecureStorage) and that write's success was never
+         verified.
+
+     WHAT CHANGED (v7 → v7.7)
+     1. AUTHENTICATION REDESIGNED FROM SCRATCH (see the big comment
+        above `const EncryptionManager` further down for the full
+        architecture write-up). In short:
+          - Returning device with a locally-stored Master Key → instant,
+            silent unlock. No screen, no typing, ever.
+          - Confirmed brand-new account (nothing local, nothing in
+            CloudStorage, no legacy password vault) → the vault is
+            created SILENTLY and the app unlocks immediately; a
+            dismissible one-time "save your recovery code" notice is
+            shown on top of the already-unlocked app, not as a gate.
+          - Genuinely new device on an account that already has a vault
+            → the ONLY real credential prompt left: enter the recovery
+            code once.
+          - Existing password-only (legacy) accounts keep working via a
+            one-time, transparent upgrade to the instant-unlock scheme.
+          - Every ambiguous/flaky network condition is retried with
+            backoff before any decision is made, and if Telegram's
+            cloud/secure storage is genuinely unreachable the app
+            degrades to a local-only vault instead of blocking the
+            person behind a credential screen — it reconciles with the
+            cloud automatically once connectivity returns.
+          - The Master Key is now written to and verified against every
+            available local storage tier (SecureStorage, DeviceStorage,
+            localStorage), instead of a single unchecked write, so a
+            partial failure can no longer strand a device on the
+            recovery screen forever.
+          - Recovery code can be re-viewed any time from Sidebar →
+            Backup & recovery.
+        Crypto itself is unchanged and still sound: one random 256-bit
+        Master Key per account, AES-256-GCM via Web Crypto, the Master
+        Key never leaves the device in plaintext, and CloudStorage only
+        ever stores encrypted blobs + a recovery-code-wrapped copy of
+        the key. Telegram cannot read plaintext notes, tasks, habits,
+        or memories at any point.
+     2. LANGUAGE SWITCHING pass: verified every visible surface (tabs,
+        buttons, placeholders, toasts, empty states, modals, sidebar,
+        achievements, lock screens, mood labels, archive labels) reads
+        from a translation table and updates on `diary.applyLang()`
+        instead of holding a hard-coded string.
+     3. LIGHT THEME contrast pass: card borders, input borders, and
+        text contrast were strengthened in the `:root` (orange) theme
+        variables so content reads clearly without weakening the dark
+        theme.
+     4. Added extra micro-interactions (task-complete checkmark pop,
+        achievement-unlock burst) alongside the existing button-press,
+        card, tab, toast, streak, and modal animations, all built from
+        CSS transforms/opacity and gated behind `prefers-reduced-motion`.
+     5. General bug pass while rewriting (see inline `FIX:` comments).
+
+     All functionality from v7.6 is preserved: Notes, Habits, Daily
+     Tasks (quick-add, important flag, mood, 30-day archive, carry-
+     over, streaks), Memory/Archive (books, movies, series, games,
+     relationships), the 13-achievement system, sidebar (nickname,
+     achievements, recovery code, delete all data), theme + language
+     switchers, fire streak, and full end-to-end encryption.
+============================================================ -->
+<html lang="ru" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DailyBookimix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#ff4500">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="font-sans">
+
+<!-- ══════════════ ENCRYPTION LOCK SCREEN (v7 — see AUTH ARCHITECTURE comment) ══════════════
+     v7 shows a real, interactive screen ONLY in the two cases that genuinely require
+     one: (1) a one-time "here is your recovery code" notice right after silent vault
+     creation, and (2) entering that code on a genuinely new device. Every other case
+     — brand-new account, returning device, offline/degraded storage — resolves itself
+     with no typing and (ideally) no visible screen at all. -->
+<div id="encryptionLock" class="open">
+
+    <div class="lock-box lock-screen active" id="lockScreenChecking">
+        <div class="lock-icon">🔐</div>
+        <div class="lock-title">DailyBookimix</div>
+        <div class="lock-desc" id="lockCheckingText">Unlocking…</div>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenShowRecovery">
+        <div class="lock-icon">🗝️</div>
+        <div class="lock-title" id="recoveryShowTitle">Save your recovery code</div>
+        <div class="lock-desc" id="recoveryShowDesc">Your journal is already unlocked and end-to-end encrypted — no password needed on this device. Save this code once, just in case you ever set up a new device or reinstall.</div>
+        <div class="recovery-code-display" id="recoveryCodeDisplay">XXXX-XXXX-XXXX-XXXX-XXXX</div>
+        <button class="lock-btn" style="background:rgba(255,255,255,0.22);color:white;margin-top:10px;box-shadow:none" id="recoveryCopyBtn" onclick="EncryptionManager.copyRecoveryCode()">📋 Copy code</button>
+        <label class="recovery-confirm-row">
+            <input type="checkbox" id="recoverySavedCheck" onchange="EncryptionManager.onRecoveryCheckChanged()">
+            <span id="recoverySavedLabel">I've saved this somewhere safe</span>
+        </label>
+        <button class="lock-btn" id="recoveryContinueBtn" disabled onclick="EncryptionManager.finishVaultCreation()">Continue</button>
+        <div class="lock-hint" id="recoverySkipHint">You can always view this again later from the sidebar.</div>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenEnterRecovery">
+        <div class="lock-icon">📱</div>
+        <div class="lock-title" id="enterRecoveryTitle">New device detected</div>
+        <div class="lock-desc" id="enterRecoveryDesc">This Telegram account already has an encrypted vault. Enter the recovery code you saved when you first set it up to unlock it here too.</div>
+        <input type="text" id="recoveryCodeInput" class="lock-input lock-input-code" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" maxlength="29" autocomplete="off" oninput="EncryptionManager.onRecoveryInputChange()">
+        <button class="lock-btn" id="enterRecoveryBtn" onclick="EncryptionManager.unlockWithRecoveryCode()">Unlock this device</button>
+        <div class="lock-hint" id="noRecoveryText">Don't have your code? <span class="lock-link" id="startFreshLink" onclick="EncryptionManager.confirmStartFresh()">Start fresh instead</span></div>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenMigrate">
+        <div class="lock-icon">⬆️</div>
+        <div class="lock-title" id="migrateTitle">One-time upgrade</div>
+        <div class="lock-desc" id="migrateDesc">We found an older password-protected journal on this account. Enter that password once to switch to instant unlock — you won't need to type it again after this.</div>
+        <input type="password" id="migratePasswordInput" class="lock-input" placeholder="Current password" autocomplete="current-password" maxlength="64">
+        <button class="lock-btn" id="migrateUnlockBtn" onclick="EncryptionManager.migrateFromV5()">Upgrade my account</button>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenError">
+        <div class="lock-icon">⚠️</div>
+        <div class="lock-title" id="errorTitle">Connection problem</div>
+        <div class="lock-desc" id="errorDesc">Couldn't reach Telegram's secure storage. Your data is safe on your account — you can retry, or keep working locally until the connection is back.</div>
+        <button class="lock-btn" id="errorRetryBtn" onclick="EncryptionManager.retryBoot()">Retry</button>
+        <div class="lock-hint" id="errorOfflineHint">Still stuck? <span class="lock-link" id="errorOfflineLink" onclick="EncryptionManager.continueOffline()">Continue offline</span></div>
+    </div>
+
+    <div class="lock-box lock-screen" id="lockScreenLegacyPassword">
+        <div class="lock-icon">🔐</div>
+        <div class="lock-title" id="lock-title">DailyBookimix</div>
+        <div class="lock-desc" id="lock-desc">Enter your password to unlock your encrypted journal.</div>
+        <input type="password" id="lockPasswordInput" class="lock-input" placeholder="Enter password..." autocomplete="current-password" maxlength="64">
+        <button class="lock-btn" id="lockUnlockBtn" onclick="EncryptionManager.legacyUnlock()">Unlock 🔓</button>
+        <div class="lock-hint" id="lock-hint">This browser has an existing encrypted journal — enter its password.</div>
+    </div>
+
+</div>
+
+<div id="appContent" style="display:none">
+<div class="max-w-[480px] mx-auto min-h-screen px-4 pt-4 pb-24 flex flex-col gap-4">
+
+    <!-- ══════════════ HEADER ══════════════ -->
+    <header class="app-header px-4 py-3 flex items-center gap-3">
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="SidebarUI.open()" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
+            <h1 class="app-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">DailyBookimix</h1>
+            <div id="streakBadge" class="streak-badge flex-shrink-0">
+                <span id="fireEmoji" class="text-xl">🔥</span>
+                <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ══════════════ TAB BAR ══════════════ -->
+    <div class="glass rounded-[20px] p-1.5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+        <div class="tab-bar">
+            <button id="notesTab"   class="tab-btn active" onclick="diary.switchTab('notes')">
+                <span class="tab-icon">📝</span><span id="tab-notes">Notes</span>
+            </button>
+            <button id="habitsTab"  class="tab-btn" onclick="diary.switchTab('habits')">
+                <span class="tab-icon">🔥</span><span id="tab-habits">Habits</span>
+            </button>
+            <button id="tasksTabBtn" class="tab-btn" onclick="diary.switchTab('tasks')">
+                <span class="tab-icon">✅</span><span id="tab-tasks">Tasks</span>
+            </button>
+            <button id="memoryTab"  class="tab-btn" onclick="diary.switchTab('memory')">
+                <span class="tab-icon">📦</span><span id="tab-memory">Archive</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ══════════════ SETTINGS BAR ══════════════ -->
+    <div class="settings-bar">
+        <button class="settings-btn" onclick="diary.openSheet('lang')">
+            <span class="text-xl">🌐</span><span id="lang-btn-label">Language</span>
+        </button>
+        <button class="settings-btn" onclick="diary.openSheet('theme')">
+            <span id="theme-icon" class="text-xl">☀️</span><span id="theme-btn-label">Theme</span>
+        </button>
+    </div>
+
+    <!-- ══════════════ SECTIONS ══════════════ -->
+
+    <!-- ── NOTES SECTION ── -->
+    <div id="notesSection" class="flex flex-col gap-4">
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header">
+                <span id="noteFormIcon">✍️</span><span id="noteFormTitle">New note</span>
+            </div>
+            <form id="noteForm" class="flex flex-col gap-3">
+                <input type="hidden" id="noteId">
+                <div>
+                    <label class="fi-label" id="lbl-note-title">Title</label>
+                    <input id="noteTitle" type="text" class="fi" required>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-note-cat">Category</label>
+                    <select id="noteCategory" class="fi"></select>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-note-content">Content</label>
+                    <textarea id="noteContent" class="fi" rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn-primary" id="save-note-btn">
+                    <span id="save-note-btn-txt">Save note</span><span>💾</span>
+                </button>
+            </form>
+        </div>
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="flex items-center justify-between mb-4">
+                <div class="section-header" style="margin-bottom:0">
+                    <span>📖</span><span id="my-notes-title">My notes</span>
+                </div>
+                <button id="clearAll" class="btn-ghost btn-danger" style="padding:8px 14px;font-size:13px">
+                    <span id="clear-all-txt">Clear all</span>
+                </button>
+            </div>
+            <div class="search-wrap mb-3">
+                <span class="search-icon">🔍</span>
+                <input id="notesSearch" type="text" class="fi" oninput="diary.renderNotes()">
+            </div>
+            <select id="filterCategory" class="fi mb-4" onchange="diary.renderNotes()"></select>
+            <div id="notesList" class="scrollable"></div>
+        </div>
+    </div>
+
+    <!-- ── HABITS SECTION ── -->
+    <div id="habitsSection" class="hidden flex flex-col gap-4">
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header"><span>🔥</span><span id="habitFormTitle">New habit</span></div>
+            <form id="habitForm" class="flex flex-col gap-3">
+                <input type="hidden" id="habitId">
+                <div>
+                    <label class="fi-label" id="lbl-habit-name">Habit name</label>
+                    <input id="habitName" type="text" class="fi" required>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="fi-label" id="lbl-start-date">Start date</label>
+                        <input id="habitStartDate" type="date" class="fi" required>
+                    </div>
+                    <div>
+                        <label class="fi-label" id="lbl-end-date">End date</label>
+                        <input id="habitEndDate" type="date" class="fi">
+                    </div>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-goal-days">Goal (days)</label>
+                    <input id="habitGoal" type="number" value="30" min="1" class="fi" required>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-habit-desc">Description</label>
+                    <textarea id="habitDescription" class="fi" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" id="start-habit-btn">
+                    <span id="start-habit-btn-txt">Start tracking</span><span>🔥</span>
+                </button>
+            </form>
+        </div>
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header"><span>📊</span><span id="my-habits-title">My habits</span></div>
+            <div class="search-wrap mb-4">
+                <span class="search-icon">🔍</span>
+                <input id="habitsSearch" type="text" class="fi" oninput="diary.renderHabits()">
+            </div>
+            <div id="habitsList" class="scrollable"></div>
+        </div>
+    </div>
+
+    <!-- ── DAILY TASKS SECTION ── -->
+    <div id="tasksSection" class="hidden flex flex-col gap-4">
+
+        <!-- Stats bar -->
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header"><span>✅</span><span id="tasks-section-title">Daily Tasks</span></div>
+
+            <!-- Quick add -->
+            <div class="task-quick-add mb-4" id="taskQuickAddRow">
+                <input type="text" id="taskQuickInput" class="task-quick-input" maxlength="200">
+                <button type="button" id="taskImpToggle" class="task-imp-toggle" title="Mark as important" onclick="TaskManager.toggleNewImp()">⭐</button>
+                <button type="button" class="task-add-btn" id="taskAddBtn">＋</button>
+            </div>
+
+            <!-- Stats bar -->
+            <div class="task-stats-bar" id="taskStatsBar"></div>
+
+            <!-- Archive day selector -->
+            <div class="task-archive-scroll" id="taskArchiveScroll"></div>
+
+            <!-- Task list -->
+            <div id="tasksList"></div>
+
+            <!-- Mood row (today only) -->
+            <div id="taskMoodSection" style="margin-top:14px">
+                <div style="font-size:12px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px" id="tasks-mood-label">Mood of the day</div>
+                <div class="mood-row" id="moodRow"></div>
+            </div>
+
+            <!-- Carry-over button (today only, shown when incomplete tasks exist) -->
+            <div id="taskCarryoverSection" style="margin-top:12px;display:none">
+                <button class="carryover-btn" onclick="TaskManager.carryOver()" id="carryover-btn">
+                    <span>⏭️</span><span id="carryover-btn-txt">Carry over unfinished to tomorrow</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── MEMORY / ARCHIVE SECTION ── -->
+    <div id="memorySection" class="hidden flex flex-col gap-4">
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header"><span>✨</span><span id="memoryFormTitle">New memory</span></div>
+            <form id="memoryForm" class="flex flex-col gap-3">
+                <input type="hidden" id="memoryId">
+                <div>
+                    <label class="fi-label" id="lbl-mem-title">Title</label>
+                    <input id="memoryTitle" type="text" class="fi" required>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-mem-type">Type</label>
+                    <select id="memoryType" class="fi" onchange="diary.onMemoryTypeChange()"></select>
+                </div>
+                <div id="relationsFields" class="hidden">
+                    <label class="fi-label" id="lbl-partner-name">Partner name</label>
+                    <input id="partnerName" type="text" class="fi">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="fi-label" id="lbl-mem-start">Start date</label>
+                        <input id="memoryStartDate" type="date" class="fi" required>
+                    </div>
+                    <div id="endDateField">
+                        <label class="fi-label" id="lbl-mem-end">End date</label>
+                        <input id="memoryEndDate" type="date" class="fi">
+                    </div>
+                </div>
+                <div>
+                    <label class="fi-label" id="lbl-mem-notes">Notes</label>
+                    <textarea id="memoryNotes" class="fi" rows="4"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" id="save-memory-btn">
+                    <span id="save-memory-btn-txt">Save memory</span><span>💾</span>
+                </button>
+            </form>
+        </div>
+        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+            <div class="section-header"><span>🗃️</span><span id="my-memories-title">Archive</span></div>
+            <div class="search-wrap mb-4">
+                <span class="search-icon">🔍</span>
+                <input id="memoriesSearch" type="text" class="fi" oninput="diary.renderMemories()">
+            </div>
+            <div id="memoriesList" class="scrollable"></div>
+        </div>
+    </div>
+
+    <!-- ══════════════ FOOTER STATS ══════════════ -->
+    <footer class="glass rounded-[20px] px-5 py-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-center"
+            style="background:var(--footer-bg);border:1px solid var(--glass-border)">
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            📝 <span id="stat-notes-lbl">Notes</span>: <span id="notesCount" style="color:var(--text-primary)">0</span>
+        </div>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            🔥 <span id="stat-habits-lbl">Habits</span>: <span id="habitsCount" style="color:var(--text-primary)">0</span>
+            <span style="font-size:11px;opacity:.7">(<span id="activeHabitsCount">0</span>)</span>
+        </div>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            ✅ <span id="stat-tasks-lbl">Tasks</span>: <span id="tasksCount" style="color:var(--text-primary)">0</span>
+        </div>
+        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
+            📦 <span id="stat-mem-lbl">Memories</span>: <span id="memoriesCount" style="color:var(--text-primary)">0</span>
+        </div>
+    </footer>
+
+</div><!-- end .max-w -->
+</div><!-- end #appContent -->
+
+
+<!-- ══════════════ SETTINGS BOTTOM SHEET ══════════════ -->
+<div id="sheetOverlay" class="sheet-overlay" onclick="diary.closeSheet()"></div>
+<div id="bottomSheet" class="bottom-sheet">
+    <div class="sheet-handle"></div>
+    <div id="sheetThemeSection">
+        <div class="sheet-title" id="sheet-theme-title">Choose Theme</div>
+        <div class="sheet-option" id="sheetOptOrange" onclick="diary.applyTheme('orange')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#ff4500,#ff8c42)">🌅</div>
+            <div>
+                <div class="sheet-option-label" id="sheet-theme-orange">Classic Orange</div>
+                <div class="sheet-option-sub" id="sheet-theme-orange-sub">Warm & energetic</div>
+            </div>
+            <div class="sheet-check">✓</div>
+        </div>
+        <div class="sheet-option" id="sheetOptDark" onclick="diary.applyTheme('dark')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#0d1117,#1f2937)">🌙</div>
+            <div>
+                <div class="sheet-option-label" id="sheet-theme-dark">Midnight Dark</div>
+                <div class="sheet-option-sub" id="sheet-theme-dark-sub">Easy on the eyes</div>
+            </div>
+            <div class="sheet-check">✓</div>
+        </div>
+    </div>
+    <div id="sheetLangSection">
+        <div class="sheet-title" id="sheet-lang-title">Choose Language</div>
+        <div class="sheet-option" id="sheetOptEn" onclick="diary.applyLang('en')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);font-size:26px">🇬🇧</div>
+            <div><div class="sheet-option-label">English</div><div class="sheet-option-sub">English</div></div>
+            <div class="sheet-check">✓</div>
+        </div>
+        <div class="sheet-option" id="sheetOptRu" onclick="diary.applyLang('ru')">
+            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#dc2626,#1d4ed8);font-size:26px">🇷🇺</div>
+            <div><div class="sheet-option-label">Русский</div><div class="sheet-option-sub">Russian</div></div>
+            <div class="sheet-check">✓</div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════ MODALS ══════════════ -->
+<div id="calendarModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="calendarTitle"></span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <table id="calendarTable"></table>
+        <p id="calendar-hint" class="text-center text-xs mt-4" style="color:#9ca3af">Tap a day to toggle</p>
+    </div>
+</div>
+
+<div id="endHabitModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="end-habit-title">End habit</span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <p id="endHabitName" class="mb-4 font-semibold" style="color:var(--modal-text)"></p>
+        <input id="endHabitDate" type="date" class="fi mb-6">
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-1">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" onclick="diary.confirmEndHabit()" id="confirm-end-habit-btn">End</button>
+        </div>
+    </div>
+</div>
+
+<div id="eventModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="add-event-title">Add event</span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <form id="eventForm" class="flex flex-col gap-3">
+            <input type="hidden" id="eventMemoryId">
+            <input type="hidden" id="editEventIdx" value="">
+            <div>
+                <label class="fi-label" id="lbl-event-date">Date</label>
+                <input id="eventDate" type="date" class="fi" required>
+            </div>
+            <div>
+                <label class="fi-label" id="lbl-event-desc">What happened?</label>
+                <textarea id="eventDesc" class="fi" rows="4" required></textarea>
+            </div>
+            <div class="flex gap-3">
+                <button type="button" class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-2">Cancel</button>
+                <button type="submit" class="btn-primary flex-1" id="save-event-btn">
+                    <span id="save-event-btn-txt">Save</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="endRelationsModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="end-relations-title">💔 We broke up</span>
+            <button class="modal-close" onclick="diary.closeModals()">×</button>
+        </div>
+        <div class="mb-4" style="color:var(--modal-text);font-size:14px;font-weight:600" id="end-relations-hint">
+            Choose the date you parted ways.
+        </div>
+        <input id="endRelationsDate" type="date" class="fi mb-6">
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-3">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" onclick="diary.confirmEndRelations()" id="confirm-breakup-btn">Confirm</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════ SIDEBAR ══════════════ -->
+<div id="sidebarBackdrop" onclick="SidebarUI.close()"></div>
+<div id="sidebarPanel">
+    <div class="sidebar-hero">
+        <div class="sidebar-avatar" id="sidebarAvatar">👤</div>
+        <div class="sidebar-username" id="sidebarUsername">User</div>
+        <div class="sidebar-userid" id="sidebarUserid">ID: —</div>
+    </div>
+    <div class="sidebar-body">
+        <div class="sidebar-section-label" id="sb-lbl-nickname">Nickname</div>
+        <div class="sidebar-nickname-area">
+            <input type="text" class="fi" id="sidebarNickInput" placeholder="Set your nickname...">
+            <button class="sidebar-save-nick-btn" id="sidebarSaveNickBtn" onclick="SidebarUI.saveNickname()">Save nickname</button>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section-label" id="sb-lbl-menu">Menu</div>
+        <div class="sidebar-item" onclick="SidebarUI.openAchievements()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(251,191,36,0.2),rgba(245,158,11,0.15));border:1px solid rgba(251,191,36,0.3)">🏆</div>
+            <div class="sidebar-item-label" id="sb-item-achievements">Achievements</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
+        <div class="sidebar-item" onclick="SidebarUI.openRecoveryModal()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(79,70,229,0.15));border:1px solid rgba(99,102,241,0.3)">🔑</div>
+            <div class="sidebar-item-label" id="sb-item-recovery">Backup &amp; recovery</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
+        <div class="sidebar-item danger" onclick="SidebarUI.confirmDeleteAccount()">
+            <div class="sidebar-item-icon" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2)">🗑️</div>
+            <div class="sidebar-item-label" id="sb-item-delete">Delete account &amp; all data</div>
+            <div class="sidebar-item-arrow" style="color:#ef4444">›</div>
+        </div>
+    </div>
+</div>
+
+<div id="recoveryModal">
+    <div class="delete-modal-box">
+        <div class="delete-modal-icon" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.25)">🔑</div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="recoveryModalTitle">Backup &amp; recovery</h2>
+        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:18px" id="recoveryModalDesc">
+            Your recovery code is shown only once, when it's created, and never stored anywhere in readable form — not even here. If you've lost it, generate a new one below; the old code will stop working.
+        </p>
+        <div class="recovery-code-display" id="recoveryModalCode" style="color:var(--modal-text);background:rgba(99,102,241,0.08);border-color:rgba(99,102,241,0.3)">••••-••••-••••-••••-••••</div>
+        <button class="btn-ghost" style="width:100%;margin-top:14px" id="recoveryModalGenerateBtn" onclick="SidebarUI.generateNewRecoveryCode()">Generate new code</button>
+        <button class="btn-ghost" style="width:100%;margin-top:10px;color:var(--modal-text);border-color:rgba(0,0,0,0.1)" onclick="SidebarUI.closeRecoveryModal()" id="recoveryModalCloseBtn">Close</button>
+    </div>
+</div>
+
+
+<!-- ══════════════ ACHIEVEMENTS MODAL ══════════════ -->
+<div id="achievementsModal">
+    <div class="ach-container">
+        <div class="ach-header">
+            <button class="ach-close-btn" onclick="AchievementsUI.close()">×</button>
+            <div class="ach-header-title" id="ach-modal-title">Achievements</div>
+        </div>
+        <div class="ach-progress-card">
+            <div class="ach-progress-label" id="ach-progress-label">Unlocked achievements</div>
+            <div class="ach-progress-count"><span id="ach-unlocked-count">0</span><span id="ach-total-count" style="font-size:18px;opacity:0.6"> / 13</span></div>
+            <div class="ach-prog-track"><div class="ach-prog-fill" id="ach-prog-fill" style="width:0%"></div></div>
+        </div>
+        <div class="ach-grid" id="achGrid"></div>
+    </div>
+</div>
+
+
+<!-- ══════════════ DELETE ACCOUNT MODAL ══════════════ -->
+<div id="deleteAccountModal">
+    <div class="delete-modal-box">
+        <div class="delete-modal-icon">⚠️</div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="del-modal-title">Delete all data?</h2>
+        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:24px" id="del-modal-desc">
+            This will permanently erase all your notes, habits, memories, and profile data.
+        </p>
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" onclick="SidebarUI.cancelDeleteAccount()" id="del-cancel-btn" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" onclick="SidebarUI.executeDeleteAccount()" id="del-confirm-btn">Delete everything</button>
+        </div>
+    </div>
+</div>
+
+
+<script src="js/util.js"></script>
+<script src="js/tg-platform.js"></script>
+<script src="js/encryption.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/translations.js"></script>
+<script src="js/task-manager.js"></script>
+<script src="js/diary.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/achievements.js"></script>
+<script src="js/boot.js"></script>
+</body>
+</html>
