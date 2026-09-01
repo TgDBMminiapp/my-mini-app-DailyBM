@@ -126,7 +126,11 @@
         <div class="lock-desc" id="enterRecoveryDesc">This Telegram account already has an encrypted vault. Enter the recovery code you saved when you first set it up to unlock it here too.</div>
         <input type="text" id="recoveryCodeInput" class="lock-input lock-input-code" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" maxlength="29" autocomplete="off" oninput="EncryptionManager.onRecoveryInputChange()">
         <button class="lock-btn" id="enterRecoveryBtn" onclick="EncryptionManager.unlockWithRecoveryCode()">Unlock this device</button>
-        <div class="lock-hint" id="noRecoveryText">Don't have your code? <span class="lock-link" id="startFreshLink" onclick="EncryptionManager.confirmStartFresh()">Start fresh instead</span></div>
+        <div class="lock-fresh-block">
+            <div class="lock-hint" id="noRecoveryText">Forgot your recovery code?</div>
+            <button type="button" class="lock-btn lock-btn-fresh" id="startFreshBtn" onclick="EncryptionManager.confirmStartFresh()">I don’t have my code — start fresh</button>
+            <div class="lock-hint" id="startFreshHint">This permanently erases the old vault. You will get a new empty journal.</div>
+        </div>
     </div>
 
     <div class="lock-box lock-screen" id="lockScreenMigrate">
@@ -164,14 +168,18 @@
         <button class="hamburger-btn" id="hamburgerBtn" onclick="SidebarUI.open()" aria-label="Menu">
             <span></span><span></span><span></span>
         </button>
-        <div class="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-            <h1 class="app-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">DailyBookimix</h1>
-            <div id="streakBadge" class="streak-badge flex-shrink-0">
+        <div class="header-streak-cluster">
+            <button type="button" id="streakBadge" class="streak-badge flex-shrink-0" onclick="diary.toggleStreakPanel(event)" aria-label="Streak">
                 <span id="fireEmoji" class="text-xl">🔥</span>
                 <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
-            </div>
+            </button>
+            <div id="streakMiniHeat" class="streak-mini-heat" aria-hidden="true"></div>
         </div>
     </header>
+    <div id="streakPanel" class="streak-panel">
+        <div class="streak-panel-title" id="streak-panel-title">Fire streak</div>
+        <div id="streakHeatmap"></div>
+    </div>
 
     <!-- ══════════════ TAB BAR ══════════════ -->
     <div class="glass rounded-[20px] p-1.5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
@@ -306,8 +314,8 @@
             <!-- Stats bar -->
             <div class="task-stats-bar" id="taskStatsBar"></div>
 
-            <!-- Archive day selector -->
-            <div class="task-archive-scroll" id="taskArchiveScroll"></div>
+            <!-- Monthly calendar -->
+            <div class="task-month-cal" id="taskMonthCal"></div>
 
             <!-- Task list -->
             <div id="tasksList"></div>
@@ -438,10 +446,11 @@
 <!-- ══════════════ MODALS ══════════════ -->
 <div id="calendarModal" class="modal-overlay">
     <div class="modal-box">
-        <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center justify-between mb-4">
             <span class="modal-title" id="calendarTitle"></span>
             <button class="modal-close" onclick="diary.closeModals()">×</button>
         </div>
+        <div class="month-cal-nav" id="habitCalNav"></div>
         <table id="calendarTable"></table>
         <p id="calendar-hint" class="text-center text-xs mt-4" style="color:#9ca3af">Tap a day to toggle</p>
     </div>
@@ -580,11 +589,27 @@
         <div class="delete-modal-icon">⚠️</div>
         <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="del-modal-title">Delete all data?</h2>
         <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:24px" id="del-modal-desc">
-            This will permanently erase all your notes, habits, memories, and profile data.
+            This will permanently erase all your notes, habits, tasks, memories, and profile data. This action cannot be undone.
         </p>
         <div class="flex gap-3">
             <button class="btn-ghost flex-1" onclick="SidebarUI.cancelDeleteAccount()" id="del-cancel-btn" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
             <button class="btn-ghost btn-danger flex-1" onclick="SidebarUI.executeDeleteAccount()" id="del-confirm-btn">Delete everything</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════ START FRESH (forgotten recovery code) ══════════════ -->
+<div id="startFreshModal">
+    <div class="delete-modal-box">
+        <div class="delete-modal-icon">⚠️</div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="start-fresh-title">Start over with a blank journal?</h2>
+        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:24px" id="start-fresh-desc">
+            Without the recovery code, old notes, habits, tasks, and memories can never be decrypted. Starting fresh deletes all local and cloud data for this Telegram account forever. This cannot be undone.
+        </p>
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" onclick="EncryptionManager.cancelStartFresh()" id="start-fresh-cancel" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Go back</button>
+            <button class="btn-ghost btn-danger flex-1" onclick="EncryptionManager.executeStartFresh()" id="start-fresh-confirm">Delete everything and start fresh</button>
         </div>
     </div>
 </div>
