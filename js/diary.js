@@ -112,6 +112,10 @@ const diary = {
             'stat-notes-lbl','stat-habits-lbl','stat-mem-lbl','stat-tasks-lbl',
             'cancel-btn-1','cancel-btn-2','cancel-btn-3',
             'tasks-section-title',
+            'enterRecoveryTitle','enterRecoveryDesc','enterRecoveryBtn','noRecoveryText','startFreshBtn','startFreshHint',
+            'start-fresh-title','start-fresh-desc','start-fresh-cancel','start-fresh-confirm',
+            'del-modal-title','del-modal-desc','del-cancel-btn','del-confirm-btn',
+            'streak-panel-title',
         ];
         ids.forEach(id => {
             const el = document.getElementById(id);
@@ -146,6 +150,7 @@ const diary = {
         ph('memoriesSearch',   'memoriesSearch-ph');
         ph('eventDesc',        'eventDesc-ph');
         ph('taskQuickInput',   'tasks-quick-ph');
+        ph('recoveryCodeInput','recoveryCodeInput-ph');
 
         const nc = document.getElementById('noteCategory');
         if (nc) nc.innerHTML = ['personal','work','ideas']
@@ -160,6 +165,8 @@ const diary = {
             .map(v => `<option value="${v}">${this.t('type-'+v)}</option>`).join('');
 
         this._updateSettingsBar();
+        this._renderStreakHeatmap();
+        EncryptionManager.applyLang(this.lang);
     },
 
     async load() {
@@ -215,8 +222,9 @@ const diary = {
             );
             if (btn) btn.classList.toggle('active', t === tab);
         });
-        // Refresh tasks when switching to that tab
         if (tab === 'tasks') TaskManager.render();
+        if (tab === 'habits') this._startHabitCountdowns();
+        else this._stopHabitCountdowns();
     },
 
     updateFooter() {
@@ -226,6 +234,7 @@ const diary = {
         document.getElementById('memoriesCount').textContent = this.memories.length;
         document.getElementById('tasksCount').textContent   = TaskManager.totalTasks();
         document.getElementById('fireStreakHeader').textContent  = this.fireStreak;
+        this._renderStreakHeatmap();
         if (typeof AchievementsUI !== 'undefined') AchievementsUI.recalculate();
     },
 
@@ -428,32 +437,86 @@ const diary = {
         this.closeModals();
     },
 
+    _habitCalId: null,
+    _habitCalCursor: null,
+    _habitCountdownTimer: null,
+
     showCalendar(id, e) {
         if (e) e.stopPropagation();
         const habit = this.habits.find(h => h.id === id);
         if (!habit) return;
+        const keepMonth = this._habitCalId === id && this._habitCalCursor;
+        this._habitCalId = id;
+        if (!keepMonth) {
+            const anchor = habit.endDate || this.today();
+            const d = Util.parseLocalDate(anchor);
+            this._habitCalCursor = new Date(d.getFullYear(), d.getMonth(), 1);
+        }
+        this._renderHabitCalendar();
+        document.getElementById('calendarModal').classList.add('open');
+    },
+
+    shiftHabitCal(deltaMonths) {
+        if (!this._habitCalCursor) return;
+        this._habitCalCursor.setMonth(this._habitCalCursor.getMonth() + deltaMonths);
+        this._renderHabitCalendar();
+    },
+
+    onHabitMonthInput(ym) {
+        if (!ym || ym.length < 7) return;
+        const [y, m] = ym.split('-').map(Number);
+        this._habitCalCursor = new Date(y, m - 1, 1);
+        this._renderHabitCalendar();
+    },
+
+    _renderHabitCalendar() {
+        const habit = this.habits.find(h => h.id === this._habitCalId);
+        if (!habit || !this._habitCalCursor) return;
         const statusText = habit.endDate ? '✅ ' + this.t('lbl-completed') : (this.lang === 'ru' ? 'в процессе' : 'in progress');
         document.getElementById('calendarTitle').textContent = `${habit.name} — ${statusText}`;
-        const dayLabels = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
-        const table  = document.getElementById('calendarTable');
-        const header = `<tr>${dayLabels.map(d=>`<th>${d}</th>`).join('')}</tr>`;
-        let html = '<tr>';
-        let current = Util.parseLocalDate(habit.startDate);
-        const offset = (current.getDay() + 6) % 7;
-        for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
+
+        const lang = this.lang;
+        const locale = lang === 'ru' ? 'ru-RU' : 'en-GB';
+        const year = this._habitCalCursor.getFullYear();
+        const month = this._habitCalCursor.getMonth();
+        const label = this._habitCalCursor.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+        const ym = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const nav = document.getElementById('habitCalNav');
+        if (nav) {
+            nav.innerHTML = `
+                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(-12)" aria-label="Previous year">«</button>
+                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(-1)" aria-label="Previous month">‹</button>
+                <label class="cal-nav-label">
+                    <span>${label}</span>
+                    <input type="month" value="${ym}" onchange="diary.onHabitMonthInput(this.value)" aria-label="${label}">
+                </label>
+                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(1)" aria-label="Next month">›</button>
+                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(12)" aria-label="Next year">»</button>
+            `;
+        }
+
+        const dayLabels = lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
+        const table = document.getElementById('calendarTable');
+        const first = new Date(year, month, 1);
+        const startOffset = (first.getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
         const todayStr = this.today();
-        const end = habit.endDate ? Util.parseLocalDate(habit.endDate) : new Date();
-        while (current <= end) {
-            const day = (current.getDay() + 6) % 7;
-            if (day === 0 && (offset > 0 || html !== '<tr>')) html += '</tr><tr>';
-            const d    = Util.localDateStr(current);
-            const done = habit.completedDays.includes(d);
-            html += `<td class="${done ? 'done' : ''}" onclick="diary.toggleDay(${id},'${d}',event);diary.showCalendar(${id},event)">${current.getDate()}</td>`;
-            current.setDate(current.getDate() + 1);
+        const startStr = habit.startDate;
+        const lastStr = habit.endDate || todayStr;
+
+        let html = `<tr>${dayLabels.map(d => `<th>${d}</th>`).join('')}</tr><tr>`;
+        for (let i = 0; i < startOffset; i++) html += '<td class="empty"></td>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            if ((startOffset + d - 1) % 7 === 0 && d !== 1) html += '</tr><tr>';
+            const ds = Util.localDateStr(new Date(year, month, d));
+            const inRange = ds >= startStr && ds <= lastStr;
+            const done = habit.completedDays.includes(ds);
+            const cls = [done ? 'done' : '', !inRange ? 'empty' : '', ds === todayStr ? 'is-today' : ''].filter(Boolean).join(' ');
+            if (!inRange) html += `<td class="${cls}">${d}</td>`;
+            else html += `<td class="${cls}" onclick="diary.toggleDay(${habit.id},'${ds}',event);diary._renderHabitCalendar()">${d}</td>`;
         }
         html += '</tr>';
-        table.innerHTML = header + html;
-        document.getElementById('calendarModal').classList.add('open');
+        table.innerHTML = html;
     },
 
     renderHabits() {
@@ -501,6 +564,10 @@ const diary = {
                     </div>
                 </div>
                 <div class="prog-track mb-3"><div class="prog-fill" style="width:${progress}%"></div></div>
+                ${ended
+                    ? `<div class="habit-countdown is-done">${this.t('habit-timer-done')}</div>`
+                    : `<div class="habit-countdown" data-habit-timer="${h.id}">${this._habitCountdownText(h)}</div>`
+                }
                 ${isOpen ? `
                 <div class="detail-panel" onclick="event.stopPropagation()">
                     <div class="flex gap-2 flex-wrap mb-3">
@@ -518,6 +585,63 @@ const diary = {
                 </div>` : ''}
             </div>`;
         }).join('');
+        this._tickHabitCountdowns();
+    },
+
+    _habitDeadline(h) {
+        const start = Util.parseLocalDate(h.startDate);
+        const remaining = Math.max(0, (h.goal || 0) - (h.completedDays || []).length);
+        const byGoal = new Date();
+        byGoal.setHours(23, 59, 59, 999);
+        if (remaining > 0) byGoal.setDate(byGoal.getDate() + remaining);
+        const planned = new Date(start);
+        planned.setDate(planned.getDate() + Math.max(0, (h.goal || 1) - 1));
+        planned.setHours(23, 59, 59, 999);
+        return planned.getTime() < byGoal.getTime() ? planned : byGoal;
+    },
+
+    _formatCountdown(ms) {
+        if (ms <= 0) return this.t('habit-timer-over');
+        const s = Math.floor(ms / 1000);
+        const d = Math.floor(s / 86400);
+        const hr = Math.floor((s % 86400) / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        const pad = n => String(n).padStart(2, '0');
+        const t = `${d}d ${pad(hr)}h ${pad(m)}m ${pad(sec)}s`;
+        return this.t('habit-timer-left').replace('{t}', t);
+    },
+
+    _habitCountdownText(h) {
+        if (h.endDate || (h.completedDays || []).length >= h.goal) return this.t('habit-timer-done');
+        return this._formatCountdown(this._habitDeadline(h) - Date.now());
+    },
+
+    _tickHabitCountdowns() {
+        document.querySelectorAll('[data-habit-timer]').forEach(el => {
+            const id = +el.getAttribute('data-habit-timer');
+            const h = this.habits.find(x => x.id === id);
+            if (!h || h.endDate) {
+                el.classList.add('is-done');
+                el.textContent = this.t('habit-timer-done');
+                return;
+            }
+            el.classList.remove('is-done');
+            el.textContent = this._habitCountdownText(h);
+        });
+    },
+
+    _startHabitCountdowns() {
+        this._stopHabitCountdowns();
+        this._tickHabitCountdowns();
+        this._habitCountdownTimer = setInterval(() => this._tickHabitCountdowns(), 1000);
+    },
+
+    _stopHabitCountdowns() {
+        if (this._habitCountdownTimer) {
+            clearInterval(this._habitCountdownTimer);
+            this._habitCountdownTimer = null;
+        }
     },
 
     _resetHabitForm() {
@@ -776,11 +900,69 @@ const diary = {
             setTimeout(() => { hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim'); }, 700);
         }
         this.updateFooter();
+        this._renderStreakHeatmap();
     },
 
     async _saveStreak() {
         await StorageManager.setItem('fireStreak',     this.fireStreak.toString());
         await StorageManager.setItem('lastActiveDate', this.lastActiveDate);
+    },
+
+    toggleStreakPanel(e) {
+        if (e) e.stopPropagation();
+        const panel = document.getElementById('streakPanel');
+        if (!panel) return;
+        panel.classList.toggle('open');
+        this._renderStreakHeatmap();
+    },
+
+    _streakDates() {
+        const dates = [];
+        if (!this.lastActiveDate || this.fireStreak < 1) return dates;
+        for (let i = this.fireStreak - 1; i >= 0; i--) {
+            dates.push(Util.addDays(this.lastActiveDate, -i));
+        }
+        return dates;
+    },
+
+    _renderStreakHeatmap() {
+        const mini = document.getElementById('streakMiniHeat');
+        const full = document.getElementById('streakHeatmap');
+        const title = document.getElementById('streak-panel-title');
+        if (title) title.textContent = this.t('streak-panel-title');
+        const dates = this._streakDates();
+        const set = new Set(dates);
+        const locale = this.lang === 'ru' ? 'ru-RU' : 'en-GB';
+
+        if (mini) {
+            mini.innerHTML = dates.slice(-14).map(ds => {
+                const tip = Util.parseLocalDate(ds).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+                return `<div class="streak-heat-cell mini on" title="${tip}"></div>`;
+            }).join('');
+        }
+        if (!full) return;
+        if (!dates.length) {
+            full.innerHTML = `<div class="streak-empty">${this.t('streak-panel-empty')}</div>`;
+            return;
+        }
+        const start = Util.parseLocalDate(dates[0]);
+        const end = Util.parseLocalDate(dates[dates.length - 1]);
+        const gridStart = new Date(start);
+        gridStart.setDate(gridStart.getDate() - ((gridStart.getDay() + 6) % 7));
+        const gridEnd = new Date(end);
+        const trail = (7 - ((gridEnd.getDay() + 6) % 7) - 1 + 7) % 7;
+        gridEnd.setDate(gridEnd.getDate() + trail);
+        const cells = [];
+        const cur = new Date(gridStart);
+        while (cur <= gridEnd) {
+            const ds = Util.localDateStr(cur);
+            const on = set.has(ds);
+            const inRange = ds >= dates[0] && ds <= dates[dates.length - 1];
+            cells.push(`<div class="streak-heat-cell ${on ? 'on' : ''} ${inRange ? '' : 'dim'}" title="${ds}"><span>${cur.getDate()}</span></div>`);
+            cur.setDate(cur.getDate() + 1);
+        }
+        const dayLabels = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
+        full.innerHTML = `<div class="streak-heat-weekdays">${dayLabels.map(d => `<span>${d}</span>`).join('')}</div><div class="streak-heat-grid">${cells.join('')}</div>`;
     },
 
     async init() {

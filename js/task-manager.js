@@ -32,6 +32,7 @@ const TaskManager = {
         activeDaysCount: 0, hadPerfectDay: false, currentStreak: 0, longestStreak: 0, lastStreakDate: ''
     },
     _viewDate: null,
+    _calCursor: null,   // Date at the 1st of the month currently shown in the archive calendar
     _newTaskImp: false,
     _retentionDays: 120, // raw day-shards older than this get pruned; lifetime stats are unaffected
 
@@ -325,28 +326,8 @@ const TaskManager = {
         const inp = document.getElementById('taskQuickInput');
         if (inp) inp.placeholder = diary.t('tasks-quick-ph');
 
-        const archiveScroll = document.getElementById('taskArchiveScroll');
-        if (archiveScroll) {
-            let html = '';
-            for (let i = 0; i < 30; i++) {
-                const ds = Util.addDays(today, -i);
-                const sum = this._summary[ds];
-                const cnt = sum ? sum.done : 0;
-                const tot = sum ? sum.total : 0;
-                let label;
-                if (i === 0) label = diary.t('tasks-today');
-                else if (i === 1) label = diary.t('tasks-yesterday');
-                else {
-                    const [y, m, d] = ds.split('-').map(Number);
-                    const dObj = new Date(y, m - 1, d);
-                    label = dObj.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
-                }
-                const active = (ds === dateStr) ? 'active' : '';
-                const badge = tot > 0 ? `<br><span style="font-size:10px;opacity:0.75">${cnt}/${tot}</span>` : '';
-                html += `<div class="task-archive-day ${active}" onclick="TaskManager.viewDate('${ds}')">${label}${badge}</div>`;
-            }
-            archiveScroll.innerHTML = html;
-        }
+        this._syncCalCursor(dateStr);
+        this._renderMonthCal(lang, dateStr, today);
 
         const statsBar = document.getElementById('taskStatsBar');
         if (statsBar) {
@@ -421,7 +402,99 @@ const TaskManager = {
     async viewDate(dateStr) {
         await this._loadDay(dateStr);
         this._viewDate = dateStr;
+        const [y, m] = dateStr.split('-').map(Number);
+        this._calCursor = new Date(y, m - 1, 1);
         this.render();
+    },
+
+    _syncCalCursor(dateStr) {
+        if (this._calCursor) return;
+        const [y, m] = (dateStr || this.today()).split('-').map(Number);
+        this._calCursor = new Date(y, m - 1, 1);
+    },
+
+    shiftCalendar(deltaMonths) {
+        this._syncCalCursor(this._viewDate || this.today());
+        this._calCursor.setMonth(this._calCursor.getMonth() + deltaMonths);
+        this.render();
+    },
+
+    onMonthInput(ym) {
+        if (!ym || ym.length < 7) return;
+        const [y, m] = ym.split('-').map(Number);
+        this._calCursor = new Date(y, m - 1, 1);
+        this.render();
+    },
+
+    goToday() {
+        this._calCursor = null;
+        this.viewDate(this.today());
+    },
+
+    _renderMonthCal(lang, selectedStr, todayStr) {
+        const host = document.getElementById('taskMonthCal');
+        if (!host) return;
+        const cursor = this._calCursor;
+        const year = cursor.getFullYear();
+        const month = cursor.getMonth();
+        const locale = lang === 'ru' ? 'ru-RU' : 'en-GB';
+        const label = cursor.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+        const ym = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const dayLabels = lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
+
+        const first = new Date(year, month, 1);
+        const startOffset = (first.getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const prevDays = new Date(year, month, 0).getDate();
+
+        let cells = '';
+        for (let i = 0; i < startOffset; i++) {
+            const d = prevDays - startOffset + i + 1;
+            const ds = Util.localDateStr(new Date(year, month - 1, d));
+            cells += this._calDayCell(ds, d, selectedStr, todayStr, true);
+        }
+        for (let d = 1; d <= daysInMonth; d++) {
+            const ds = Util.localDateStr(new Date(year, month, d));
+            cells += this._calDayCell(ds, d, selectedStr, todayStr, false);
+        }
+        const used = startOffset + daysInMonth;
+        const extra = (7 - (used % 7)) % 7;
+        for (let d = 1; d <= extra; d++) {
+            const ds = Util.localDateStr(new Date(year, month + 1, d));
+            cells += this._calDayCell(ds, d, selectedStr, todayStr, true);
+        }
+
+        host.innerHTML = `
+            <div class="month-cal-nav">
+                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(-12)" aria-label="Previous year">«</button>
+                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(-1)" aria-label="Previous month">‹</button>
+                <label class="cal-nav-label">
+                    <span>${label}</span>
+                    <input type="month" value="${ym}" onchange="TaskManager.onMonthInput(this.value)" aria-label="${label}">
+                </label>
+                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(1)" aria-label="Next month">›</button>
+                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(12)" aria-label="Next year">»</button>
+            </div>
+            <button type="button" class="cal-today-btn" onclick="TaskManager.goToday()">${diary.t('cal-today')}</button>
+            <div class="month-cal-weekdays">${dayLabels.map(d => `<span>${d}</span>`).join('')}</div>
+            <div class="month-cal-grid">${cells}</div>
+        `;
+    },
+
+    _calDayCell(ds, dayNum, selectedStr, todayStr, muted) {
+        const sum = this._summary[ds];
+        const tot = sum ? sum.total : 0;
+        const cnt = sum ? sum.done : 0;
+        const cls = [
+            'cal-day',
+            muted ? 'muted' : '',
+            ds === selectedStr ? 'selected' : '',
+            ds === todayStr ? 'today' : '',
+            tot > 0 ? 'has-tasks' : '',
+            tot > 0 && cnt === tot ? 'all-done' : '',
+        ].filter(Boolean).join(' ');
+        const badge = tot > 0 ? `<span class="cal-day-badge">${cnt}/${tot}</span>` : '';
+        return `<button type="button" class="${cls}" onclick="TaskManager.viewDate('${ds}')"><span class="cal-day-num">${dayNum}</span>${badge}</button>`;
     },
 
     _escHtml(str) {

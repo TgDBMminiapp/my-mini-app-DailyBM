@@ -520,34 +520,115 @@ const EncryptionManager = {
             }
         } catch (e) {
             this._key = null;
-            if (btn) { btn.disabled = false; btn.textContent = 'Unlock this device'; }
+            if (btn) { btn.disabled = false; btn.textContent = this._t('enterRecoveryBtn', 'Unlock this device'); }
             this._flashInputError(input);
         }
     },
 
     confirmStartFresh() {
-        const lang = (typeof diary !== 'undefined' && diary.lang) || 'en';
-        const msg = lang === 'ru'
-            ? 'Без кода восстановления старые данные нельзя расшифровать. Начать с чистого листа удалит доступ к ним навсегда. Продолжить?'
-            : 'Without the recovery code, your old data can never be decrypted again. Starting fresh permanently gives up access to it. Continue?';
-        if (!confirm(msg)) return;
-        this._wipeIdentityAndRestart();
+        const modal = document.getElementById('startFreshModal');
+        if (modal) modal.classList.add('open');
+        this.applyLang(this._langHint());
+    },
+
+    cancelStartFresh() {
+        const modal = document.getElementById('startFreshModal');
+        if (modal) modal.classList.remove('open');
+    },
+
+    async executeStartFresh() {
+        const btn = document.getElementById('start-fresh-confirm');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+        try {
+            await this._wipeIdentityAndRestart();
+        } finally {
+            this.cancelStartFresh();
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = this._t('start-fresh-confirm', 'Delete everything and start fresh');
+            }
+        }
     },
 
     async _wipeIdentityAndRestart() {
-        if (TGPlatform.supportsCloud) {
-            for (const k of ['enc_mk_recovery', 'recovery_salt', 'dbmix_sentinel', 'dbmix_salt']) {
+        this._key = null;
+        this._rawMK = null;
+        this._pendingMK = null;
+        this._pendingRecoveryCode = null;
+
+        const cloudKeys = await this._listCloudKeys();
+        if (cloudKeys.length) {
+            await Promise.all(cloudKeys.map(k => TGPlatform.cloudRemove(k).catch(() => {})));
+        } else if (TGPlatform.supportsCloud) {
+            for (const k of this._knownWipeKeys()) {
                 await TGPlatform.cloudRemove(k);
             }
         }
-        if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceRemove('dbmix_sentinel'); await TGPlatform.deviceRemove('mk'); } catch (e) {} }
+
+        const deviceKeys = await this._listDeviceKeys();
+        if (deviceKeys.length) {
+            await Promise.all(deviceKeys.map(k => TGPlatform.deviceRemove(k).catch(() => {})));
+        } else if (TGPlatform.supportsDevice) {
+            for (const k of this._knownWipeKeys().concat(['mk', 'dbmix_sentinel'])) {
+                try { await TGPlatform.deviceRemove(k); } catch (e) {}
+            }
+        }
+
+        if (TGPlatform.supportsSecure) {
+            try { await TGPlatform.secureRemove('mk'); } catch (e) {}
+        }
+
         try {
-            localStorage.removeItem('dbmix_salt'); localStorage.removeItem('dbmix_sentinel'); localStorage.removeItem('dbmix_mk');
+            const keep = 'dbmix_lang_hint';
+            const doomed = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k !== keep && (k.startsWith('dbmix_') || k === 'dbmix_mk')) doomed.push(k);
+            }
+            doomed.forEach(k => localStorage.removeItem(k));
         } catch (e) {}
-        // Immediately create a brand-new vault silently instead of showing a
-        // "welcome" screen that asks for anything — starting fresh means the
-        // person gets a working, unlocked, empty journal right away.
+
+        if (typeof StorageManager !== 'undefined') {
+            try {
+                await StorageManager.wipeCollection('notes');
+                await StorageManager.wipeCollection('habits');
+                await StorageManager.wipeCollection('memories');
+            } catch (e) {}
+        }
+        if (typeof TaskManager !== 'undefined') {
+            try { await TaskManager.wipeAll(); } catch (e) {}
+        }
+
         await this._silentCreateVault();
+    },
+
+    _knownWipeKeys() {
+        return [
+            'enc_mk_recovery', 'recovery_salt', 'dbmix_sentinel', 'dbmix_salt',
+            'fireStreak', 'lastActiveDate', 'userNickname', 'userId', 'achievements_v1',
+            'lang', 'theme', 'notes_index', 'habits_index', 'memories_index',
+            'notes', 'habits', 'memories', 'task_index', 'task_stats', 'tasks_v1',
+        ];
+    },
+
+    _listCloudKeys() {
+        return new Promise(resolve => {
+            try {
+                const api = window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage;
+                if (!api || typeof api.getKeys !== 'function') return resolve([]);
+                api.getKeys((err, keys) => resolve(err ? [] : (keys || [])));
+            } catch (e) { resolve([]); }
+        });
+    },
+
+    _listDeviceKeys() {
+        return new Promise(resolve => {
+            try {
+                const api = window.Telegram && Telegram.WebApp && Telegram.WebApp.DeviceStorage;
+                if (!api || typeof api.getKeys !== 'function') return resolve([]);
+                api.getKeys((err, keys) => resolve(err ? [] : (keys || [])));
+            } catch (e) { resolve([]); }
+        });
     },
 
     // ---------- legacy: migrate an existing v5 (password-based) account to v7 ----------
@@ -729,46 +810,72 @@ const EncryptionManager = {
         try { input.setSelectionRange(pos + delta, pos + delta); } catch (e) {}
     },
 
-    // ---------- translations for the lock screen (independent of main T dict,
-    // mirrors the original applyLang pattern) ----------
+    _langHint() {
+        if (typeof diary !== 'undefined' && diary.lang) return diary.lang;
+        try { return localStorage.getItem('dbmix_lang_hint') || 'en'; } catch (e) { return 'en'; }
+    },
+    _t(key, fallback) {
+        const lang = this._langHint();
+        if (typeof T !== 'undefined') {
+            const dict = T[lang] || T.en || {};
+            if (dict[key]) return dict[key];
+            if (T.en && T.en[key]) return T.en[key];
+        }
+        return fallback || key;
+    },
+
+    // ---------- translations for the lock screen (from translations.js) ----------
     applyLang(lang) {
-        const t = {
-            en: {
-                checking: 'Unlocking…',
-                recTitle: 'Save your recovery code', recDesc: 'Your journal is already unlocked and end-to-end encrypted — no password needed on this device. Save this code once, just in case you ever set up a new device or reinstall.',
-                copyBtn: '📋 Copy code', savedLabel: 'I\u2019ve saved this somewhere safe', continueBtn: 'Continue', skipHint: 'You can always view this again later from the sidebar.',
-                enterRecTitle: 'New device detected', enterRecDesc: 'This Telegram account already has an encrypted vault. Enter the recovery code you saved when you first set it up to unlock it here too.',
-                enterRecPh: 'XXXX-XXXX-XXXX-XXXX-XXXX', enterRecBtn: 'Unlock this device', noRecText: 'Don\u2019t have your code?', startFreshLink: 'Start fresh instead',
-                migrateTitle: 'One-time upgrade', migrateDesc: 'We found an older password-protected journal on this account. Enter that password once to switch to instant unlock — you won\u2019t need to type it again after this.',
-                migratePh: 'Current password', migrateBtn: 'Upgrade my account',
-                errorTitle: 'Connection problem', errorDesc: 'Couldn\u2019t reach Telegram\u2019s secure storage. Your data is safe on your account — you can retry, or keep working locally until the connection is back.', retryBtn: 'Retry', offlineLink: 'Continue offline',
-                legacyTitle: 'DailyBookimix', legacyDesc: 'Enter your password to unlock your encrypted journal.', legacyHint: 'This browser has an existing encrypted journal — enter its password.', legacyBtn: 'Unlock 🔓',
-            },
-            ru: {
-                checking: 'Разблокировка…',
-                recTitle: 'Сохрани код восстановления', recDesc: 'Дневник уже разблокирован и зашифрован сквозным шифрованием — пароль на этом устройстве не нужен. Сохрани этот код на случай нового устройства или переустановки.',
-                copyBtn: '📋 Скопировать', savedLabel: 'Я сохранил его в надёжном месте', continueBtn: 'Продолжить', skipHint: 'Ты всегда можешь посмотреть его снова в боковом меню.',
-                enterRecTitle: 'Обнаружено новое устройство', enterRecDesc: 'На этом аккаунте Telegram уже есть зашифрованное хранилище. Введи код восстановления, который ты сохранил при его создании, чтобы разблокировать его и здесь.',
-                enterRecPh: 'XXXX-XXXX-XXXX-XXXX-XXXX', enterRecBtn: 'Разблокировать устройство', noRecText: 'Нет кода?', startFreshLink: 'Начать с чистого листа',
-                migrateTitle: 'Разовое обновление', migrateDesc: 'Мы нашли на этом аккаунте старый дневник, защищённый паролем. Введи этот пароль один раз, чтобы перейти на мгновенную разблокировку — больше вводить его не понадобится.',
-                migratePh: 'Текущий пароль', migrateBtn: 'Обновить аккаунт',
-                errorTitle: 'Проблема соединения', errorDesc: 'Не удалось подключиться к защищённому хранилищу Telegram. Данные в безопасности — можно повторить попытку или продолжить работу локально.', retryBtn: 'Повторить', offlineLink: 'Продолжить офлайн',
-                legacyTitle: 'DailyBookimix', legacyDesc: 'Введи пароль, чтобы разблокировать зашифрованный дневник.', legacyHint: 'В этом браузере уже есть зашифрованный дневник — введи его пароль.', legacyBtn: 'Разблокировать 🔓',
+        const t = (key, fb) => {
+            if (typeof T !== 'undefined') {
+                const dict = (T[lang] || T.en) || {};
+                if (dict[key]) return dict[key];
+                if (T.en && T.en[key]) return T.en[key];
             }
+            return fb || key;
         };
-        const s = t[lang] || t.en;
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
         const setPh = (id, v) => { const el = document.getElementById(id); if (el) el.placeholder = v; };
-        set('lockCheckingText', s.checking);
-        set('recoveryShowTitle', s.recTitle); set('recoveryShowDesc', s.recDesc);
-        set('recoveryCopyBtn', s.copyBtn); set('recoverySavedLabel', s.savedLabel); set('recoveryContinueBtn', s.continueBtn); set('recoverySkipHint', s.skipHint);
-        set('enterRecoveryTitle', s.enterRecTitle); set('enterRecoveryDesc', s.enterRecDesc);
-        setPh('recoveryCodeInput', s.enterRecPh); set('enterRecoveryBtn', s.enterRecBtn);
-        set('noRecoveryText', s.noRecText); set('startFreshLink', s.startFreshLink);
-        set('migrateTitle', s.migrateTitle); set('migrateDesc', s.migrateDesc);
-        setPh('migratePasswordInput', s.migratePh); set('migrateUnlockBtn', s.migrateBtn);
-        set('errorTitle', s.errorTitle); set('errorDesc', s.errorDesc); set('errorRetryBtn', s.retryBtn); set('errorOfflineLink', s.offlineLink);
-        set('lock-title', s.legacyTitle); set('lock-desc', s.legacyDesc); set('lock-hint', s.legacyHint); set('lockUnlockBtn', s.legacyBtn);
+        set('lockCheckingText', t('checking', lang === 'ru' ? 'Разблокировка…' : 'Unlocking…'));
+        set('recoveryShowTitle', t('recoveryShowTitle', lang === 'ru' ? 'Сохрани код восстановления' : 'Save your recovery code'));
+        set('recoveryShowDesc', t('recoveryShowDesc', lang === 'ru'
+            ? 'Дневник уже разблокирован и зашифрован сквозным шифрованием — пароль на этом устройстве не нужен. Сохрани этот код на случай нового устройства или переустановки.'
+            : 'Your journal is already unlocked and end-to-end encrypted — no password needed on this device. Save this code once, just in case you ever set up a new device or reinstall.'));
+        set('recoveryCopyBtn', t('recoveryCopyBtn', lang === 'ru' ? '📋 Скопировать' : '📋 Copy code'));
+        set('recoverySavedLabel', t('recoverySavedLabel', lang === 'ru' ? 'Я сохранил его в надёжном месте' : 'I’ve saved this somewhere safe'));
+        set('recoveryContinueBtn', t('recoveryContinueBtn', lang === 'ru' ? 'Продолжить' : 'Continue'));
+        set('recoverySkipHint', t('recoverySkipHint', lang === 'ru' ? 'Ты всегда можешь посмотреть его снова в боковом меню.' : 'You can always view this again later from the sidebar.'));
+        set('enterRecoveryTitle', t('enterRecoveryTitle'));
+        set('enterRecoveryDesc', t('enterRecoveryDesc'));
+        setPh('recoveryCodeInput', t('recoveryCodeInput-ph'));
+        set('enterRecoveryBtn', t('enterRecoveryBtn'));
+        set('noRecoveryText', t('noRecoveryText'));
+        set('startFreshBtn', t('startFreshBtn'));
+        set('startFreshHint', t('startFreshHint'));
+        set('start-fresh-title', t('start-fresh-title'));
+        set('start-fresh-desc', t('start-fresh-desc'));
+        set('start-fresh-cancel', t('start-fresh-cancel'));
+        set('start-fresh-confirm', t('start-fresh-confirm'));
+        set('del-modal-title', t('del-modal-title'));
+        set('del-modal-desc', t('del-modal-desc'));
+        set('del-cancel-btn', t('del-cancel-btn'));
+        set('del-confirm-btn', t('del-confirm-btn'));
+        set('migrateTitle', t('migrateTitle', lang === 'ru' ? 'Разовое обновление' : 'One-time upgrade'));
+        set('migrateDesc', t('migrateDesc', lang === 'ru'
+            ? 'Мы нашли на этом аккаунте старый дневник, защищённый паролем. Введи этот пароль один раз, чтобы перейти на мгновенную разблокировку — больше вводить его не понадобится.'
+            : 'We found an older password-protected journal on this account. Enter that password once to switch to instant unlock — you won’t need to type it again after this.'));
+        setPh('migratePasswordInput', t('migratePh', lang === 'ru' ? 'Текущий пароль' : 'Current password'));
+        set('migrateUnlockBtn', t('migrateBtn', lang === 'ru' ? 'Обновить аккаунт' : 'Upgrade my account'));
+        set('errorTitle', t('errorTitle', lang === 'ru' ? 'Проблема соединения' : 'Connection problem'));
+        set('errorDesc', t('errorDesc', lang === 'ru'
+            ? 'Не удалось подключиться к защищённому хранилищу Telegram. Данные в безопасности — можно повторить попытку или продолжить работу локально.'
+            : 'Couldn’t reach Telegram’s secure storage. Your data is safe on your account — you can retry, or keep working locally until the connection is back.'));
+        set('errorRetryBtn', t('retryBtn', lang === 'ru' ? 'Повторить' : 'Retry'));
+        set('errorOfflineLink', t('offlineLink', lang === 'ru' ? 'Продолжить офлайн' : 'Continue offline'));
+        set('lock-title', t('legacyTitle', 'DailyBookimix'));
+        set('lock-desc', t('legacyDesc', lang === 'ru' ? 'Введи пароль, чтобы разблокировать зашифрованный дневник.' : 'Enter your password to unlock your encrypted journal.'));
+        set('lock-hint', t('legacyHint', lang === 'ru' ? 'В этом браузере уже есть зашифрованный дневник — введи его пароль.' : 'This browser has an existing encrypted journal — enter its password.'));
+        set('lockUnlockBtn', t('legacyBtn', lang === 'ru' ? 'Разблокировать 🔓' : 'Unlock 🔓'));
     }
 };
 
