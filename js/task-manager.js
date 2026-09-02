@@ -32,9 +32,10 @@ const TaskManager = {
         activeDaysCount: 0, hadPerfectDay: false, currentStreak: 0, longestStreak: 0, lastStreakDate: ''
     },
     _viewDate: null,
-    _calCursor: null,   // Date at the 1st of the month currently shown in the archive calendar
     _newTaskImp: false,
     _retentionDays: 120, // raw day-shards older than this get pruned; lifetime stats are unaffected
+    _calYear: null,       // year currently shown in the monthly calendar (defaults to today's)
+    _calMonth: null,      // 0-indexed month currently shown in the monthly calendar
 
     today() { return Util.localDateStr(); },
     dateOf(daysAgo) { return Util.addDays(this.today(), -daysAgo); },
@@ -326,8 +327,7 @@ const TaskManager = {
         const inp = document.getElementById('taskQuickInput');
         if (inp) inp.placeholder = diary.t('tasks-quick-ph');
 
-        this._syncCalCursor(dateStr);
-        this._renderMonthCal(lang, dateStr, today);
+        this._renderCalendar(dateStr);
 
         const statsBar = document.getElementById('taskStatsBar');
         if (statsBar) {
@@ -403,98 +403,80 @@ const TaskManager = {
         await this._loadDay(dateStr);
         this._viewDate = dateStr;
         const [y, m] = dateStr.split('-').map(Number);
-        this._calCursor = new Date(y, m - 1, 1);
+        this._calYear = y; this._calMonth = m - 1;
         this.render();
     },
 
-    _syncCalCursor(dateStr) {
-        if (this._calCursor) return;
-        const [y, m] = (dateStr || this.today()).split('-').map(Number);
-        this._calCursor = new Date(y, m - 1, 1);
-    },
-
-    shiftCalendar(deltaMonths) {
-        this._syncCalCursor(this._viewDate || this.today());
-        this._calCursor.setMonth(this._calCursor.getMonth() + deltaMonths);
+    // ---------- monthly calendar (replaces the old fixed 30-day scroller) ----------
+    // Supports navigating to any past or future month/year. Day badges come
+    // from `_summary` (task_index), which already holds {done,total} for
+    // every non-pruned day — no extra loads needed just to draw the grid.
+    calPrevMonth() {
+        this._ensureCalDate();
+        this._calMonth -= 1;
+        if (this._calMonth < 0) { this._calMonth = 11; this._calYear -= 1; }
         this.render();
     },
-
-    onMonthInput(ym) {
-        if (!ym || ym.length < 7) return;
-        const [y, m] = ym.split('-').map(Number);
-        this._calCursor = new Date(y, m - 1, 1);
+    calNextMonth() {
+        this._ensureCalDate();
+        this._calMonth += 1;
+        if (this._calMonth > 11) { this._calMonth = 0; this._calYear += 1; }
         this.render();
     },
-
-    goToday() {
-        this._calCursor = null;
+    calToday() {
         this.viewDate(this.today());
     },
-
-    _renderMonthCal(lang, selectedStr, todayStr) {
-        const host = document.getElementById('taskMonthCal');
-        if (!host) return;
-        const cursor = this._calCursor;
-        const year = cursor.getFullYear();
-        const month = cursor.getMonth();
-        const locale = lang === 'ru' ? 'ru-RU' : 'en-GB';
-        const label = cursor.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
-        const ym = `${year}-${String(month + 1).padStart(2, '0')}`;
-        const dayLabels = lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
-
-        const first = new Date(year, month, 1);
-        const startOffset = (first.getDay() + 6) % 7;
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const prevDays = new Date(year, month, 0).getDate();
-
-        let cells = '';
-        for (let i = 0; i < startOffset; i++) {
-            const d = prevDays - startOffset + i + 1;
-            const ds = Util.localDateStr(new Date(year, month - 1, d));
-            cells += this._calDayCell(ds, d, selectedStr, todayStr, true);
+    _ensureCalDate() {
+        if (this._calYear === null || this._calMonth === null) {
+            const dateStr = this._viewDate || this.today();
+            const [y, m] = dateStr.split('-').map(Number);
+            this._calYear = y; this._calMonth = m - 1;
         }
-        for (let d = 1; d <= daysInMonth; d++) {
-            const ds = Util.localDateStr(new Date(year, month, d));
-            cells += this._calDayCell(ds, d, selectedStr, todayStr, false);
-        }
-        const used = startOffset + daysInMonth;
-        const extra = (7 - (used % 7)) % 7;
-        for (let d = 1; d <= extra; d++) {
-            const ds = Util.localDateStr(new Date(year, month + 1, d));
-            cells += this._calDayCell(ds, d, selectedStr, todayStr, true);
-        }
-
-        host.innerHTML = `
-            <div class="month-cal-nav">
-                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(-12)" aria-label="Previous year">«</button>
-                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(-1)" aria-label="Previous month">‹</button>
-                <label class="cal-nav-label">
-                    <span>${label}</span>
-                    <input type="month" value="${ym}" onchange="TaskManager.onMonthInput(this.value)" aria-label="${label}">
-                </label>
-                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(1)" aria-label="Next month">›</button>
-                <button type="button" class="cal-nav-btn" onclick="TaskManager.shiftCalendar(12)" aria-label="Next year">»</button>
-            </div>
-            <button type="button" class="cal-today-btn" onclick="TaskManager.goToday()">${diary.t('cal-today')}</button>
-            <div class="month-cal-weekdays">${dayLabels.map(d => `<span>${d}</span>`).join('')}</div>
-            <div class="month-cal-grid">${cells}</div>
-        `;
     },
+    _renderCalendar(selectedDateStr) {
+        this._ensureCalDate();
+        const lang = diary.lang || 'en';
+        const year = this._calYear, month = this._calMonth;
+        const today = this.today();
 
-    _calDayCell(ds, dayNum, selectedStr, todayStr, muted) {
-        const sum = this._summary[ds];
-        const tot = sum ? sum.total : 0;
-        const cnt = sum ? sum.done : 0;
-        const cls = [
-            'cal-day',
-            muted ? 'muted' : '',
-            ds === selectedStr ? 'selected' : '',
-            ds === todayStr ? 'today' : '',
-            tot > 0 ? 'has-tasks' : '',
-            tot > 0 && cnt === tot ? 'all-done' : '',
-        ].filter(Boolean).join(' ');
-        const badge = tot > 0 ? `<span class="cal-day-badge">${cnt}/${tot}</span>` : '';
-        return `<button type="button" class="${cls}" onclick="TaskManager.viewDate('${ds}')"><span class="cal-day-num">${dayNum}</span>${badge}</button>`;
+        const label = document.getElementById('taskCalMonthYearLabel');
+        if (label) {
+            const monthName = new Date(year, month, 1).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { month: 'long', year: 'numeric' });
+            label.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+        }
+        const todayBtn = document.getElementById('taskCalTodayBtn');
+        if (todayBtn) todayBtn.textContent = diary.t('tasks-cal-today-btn');
+
+        const weekdaysEl = document.getElementById('taskCalWeekdays');
+        if (weekdaysEl) {
+            const dayLabels = lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
+            weekdaysEl.innerHTML = dayLabels.map(d => `<div class="task-cal-weekday">${d}</div>`).join('');
+        }
+
+        const grid = document.getElementById('taskCalGrid');
+        if (!grid) return;
+
+        const firstOfMonth = new Date(year, month, 1);
+        const offset = (firstOfMonth.getDay() + 6) % 7; // Monday-first grid
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        let html = '';
+        for (let i = 0; i < offset; i++) html += '<div class="task-cal-day empty"></div>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const sum = this._summary[ds];
+            const done = sum ? sum.done : 0;
+            const total = sum ? sum.total : 0;
+            const classes = ['task-cal-day'];
+            if (ds === today) classes.push('is-today');
+            if (ds === selectedDateStr) classes.push('selected');
+            if (total > 0) classes.push(done >= total ? 'has-tasks-done' : 'has-tasks');
+            const badge = total > 0 ? `<span class="task-cal-badge">${done}/${total}</span>` : '';
+            html += `<div class="${classes.join(' ')}" onclick="TaskManager.viewDate('${ds}')">
+                        <span class="task-cal-daynum">${d}</span>${badge}
+                     </div>`;
+        }
+        grid.innerHTML = html;
     },
 
     _escHtml(str) {

@@ -8,18 +8,14 @@ const SidebarUI = {
             achievements: 'Achievements', deleteAccount: 'Delete account & all data',
             saveNick: 'Save nickname', nickPlaceholder: 'Set your nickname...',
             nickSaved: 'Nickname saved ✅',
-            delTitle: 'Delete all data?',
-            delDesc: 'This will permanently erase all your notes, habits, memories, and profile data. This action cannot be undone.',
-            delCancel: 'Cancel', delConfirm: 'Delete everything', defaultUser: 'User',
+            defaultUser: 'User',
         },
         ru: {
             nickname: 'Никнейм', menu: 'Меню', privacy: 'Конфиденциальность',
             achievements: 'Достижения', deleteAccount: 'Удалить аккаунт и все данные',
             saveNick: 'Сохранить никнейм', nickPlaceholder: 'Введи никнейм...',
             nickSaved: 'Никнейм сохранён ✅',
-            delTitle: 'Удалить все данные?',
-            delDesc: 'Это навсегда уничтожит все твои записи, привычки, воспоминания и данные профиля. Действие нельзя отменить.',
-            delCancel: 'Отмена', delConfirm: 'Удалить всё', defaultUser: 'Пользователь',
+            defaultUser: 'Пользователь',
         }
     },
 
@@ -85,10 +81,12 @@ const SidebarUI = {
         set('sb-item-achievements',strs.achievements);
         set('sb-item-delete',      strs.deleteAccount);
         set('sidebarSaveNickBtn',  strs.saveNick);
-        set('del-modal-title',     strs.delTitle);
-        set('del-modal-desc',      strs.delDesc);
-        set('del-cancel-btn',      strs.delCancel);
-        set('del-confirm-btn',     strs.delConfirm);
+        // Delete-account modal copy now lives in translations.js (T) so it fully
+        // switches with the language toggle via diary.t(), like the rest of the app.
+        set('del-modal-title',     diary.t('del-modal-title'));
+        set('del-modal-desc',      diary.t('del-modal-desc'));
+        set('del-cancel-btn',      diary.t('del-cancel-btn'));
+        set('del-confirm-btn',     diary.t('del-confirm-btn'));
         set('ach-modal-title', AchievementsUI._strings[lang]?.title || 'Achievements');
         setPh('sidebarNickInput',  strs.nickPlaceholder);
         this._updateHeaderDisplay();
@@ -130,7 +128,7 @@ const SidebarUI = {
         if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
         try {
             diary.notes = []; diary.habits = []; diary.memories = [];
-            diary.fireStreak = 0; diary.lastActiveDate = '';
+            diary.fireStreak = 0; diary.lastActiveDate = ''; diary.streakLog = [];
 
             // FIX: v5 wrote '' over each key instead of actually removing it,
             // which left every shard sitting in CloudStorage forever, slowly
@@ -143,7 +141,7 @@ const SidebarUI = {
                 StorageManager.wipeCollection('memories'),
                 TaskManager.wipeAll(),
             ]);
-            for (const key of ['fireStreak', 'lastActiveDate', 'userNickname', 'userId', 'achievements_v1']) {
+            for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1']) {
                 await StorageManager.removeItem(key);
             }
             // NOTE: deliberately NOT touching dbmix_sentinel / enc_mk_recovery /
@@ -166,7 +164,7 @@ const SidebarUI = {
             console.error('[SidebarUI] executeDeleteAccount failed:', e);
             diary.toast(diary.t('err-delete-account'), 'error');
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = (this._strings[diary.lang] || this._strings.en).delConfirm; }
+            if (btn) { btn.disabled = false; btn.textContent = diary.t('del-confirm-btn'); }
         }
     },
 

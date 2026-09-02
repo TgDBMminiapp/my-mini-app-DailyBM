@@ -9,11 +9,16 @@ const diary = {
     theme:          'orange',
     fireStreak:     0,
     lastActiveDate: '',
+    streakLog:      [], // recent local dates ('YYYY-MM-DD') that extended/kept the fire streak alive
     tempEndHabitId:    null,
     tempEndRelationsId: null,
     openNoteDetail:   null,
     openHabitDetail:  null,
     openMemoryDetail: null,
+    _calHabitId:    null,  // which habit's calendar modal is currently open
+    _calYear:       null,  // year shown in the habit calendar modal
+    _calMonth:      null,  // 0-indexed month shown in the habit calendar modal
+    _habitTimerInterval: null, // live countdown ticker, only runs while the Habits tab is open
 
     t(key) { return (T[this.lang] || T.en)[key] || key; },
     today() { return Util.localDateStr(); }, // FIX: was toISOString() (UTC) — see Util comment
@@ -112,10 +117,6 @@ const diary = {
             'stat-notes-lbl','stat-habits-lbl','stat-mem-lbl','stat-tasks-lbl',
             'cancel-btn-1','cancel-btn-2','cancel-btn-3',
             'tasks-section-title',
-            'enterRecoveryTitle','enterRecoveryDesc','enterRecoveryBtn','noRecoveryText','startFreshBtn','startFreshHint',
-            'start-fresh-title','start-fresh-desc','start-fresh-cancel','start-fresh-confirm',
-            'del-modal-title','del-modal-desc','del-cancel-btn','del-confirm-btn',
-            'streak-panel-title',
         ];
         ids.forEach(id => {
             const el = document.getElementById(id);
@@ -150,7 +151,6 @@ const diary = {
         ph('memoriesSearch',   'memoriesSearch-ph');
         ph('eventDesc',        'eventDesc-ph');
         ph('taskQuickInput',   'tasks-quick-ph');
-        ph('recoveryCodeInput','recoveryCodeInput-ph');
 
         const nc = document.getElementById('noteCategory');
         if (nc) nc.innerHTML = ['personal','work','ideas']
@@ -165,13 +165,11 @@ const diary = {
             .map(v => `<option value="${v}">${this.t('type-'+v)}</option>`).join('');
 
         this._updateSettingsBar();
-        this._renderStreakHeatmap();
-        EncryptionManager.applyLang(this.lang);
     },
 
     async load() {
         const data = await StorageManager.getItems([
-            'lang','theme','fireStreak','lastActiveDate'
+            'lang','theme','fireStreak','lastActiveDate','streakLog'
         ]);
 
         // v6: notes/habits/memories are now sharded (one key per item) instead
@@ -190,6 +188,7 @@ const diary = {
         if (data.theme) this.theme = data.theme;
         this.fireStreak     = parseInt(data.fireStreak    || '0');
         this.lastActiveDate = data.lastActiveDate || '';
+        try { this.streakLog = data.streakLog ? JSON.parse(data.streakLog) : []; } catch (e) { this.streakLog = []; }
 
         document.body.classList.remove('theme-dark');
         if (this.theme === 'dark') document.body.classList.add('theme-dark');
@@ -222,9 +221,63 @@ const diary = {
             );
             if (btn) btn.classList.toggle('active', t === tab);
         });
+        // Refresh tasks when switching to that tab
         if (tab === 'tasks') TaskManager.render();
-        if (tab === 'habits') this._startHabitCountdowns();
-        else this._stopHabitCountdowns();
+        // Live habit countdowns only tick while the Habits tab is actually open
+        if (tab === 'habits') this._startHabitTimers();
+        else this._stopHabitTimers();
+    },
+
+    // ---------- live countdown timers for active habits (no endDate) ----------
+    _startHabitTimers() {
+        this._stopHabitTimers();
+        this._tickHabitTimers();
+        this._habitTimerInterval = setInterval(() => this._tickHabitTimers(), 1000);
+    },
+    _stopHabitTimers() {
+        if (this._habitTimerInterval) { clearInterval(this._habitTimerInterval); this._habitTimerInterval = null; }
+    },
+    _habitCountdownTarget(h) {
+        // "planned end of the tracker": startDate + goal (days). If the goal is
+        // already reached, there's nothing left to count down to.
+        const plannedEndDate = Util.addDays(h.startDate, h.goal);
+        // Count down to the END of that day (local midnight of the next day).
+        return Util.parseLocalDate(plannedEndDate).getTime() + 86400000;
+    },
+    _tickHabitTimers() {
+        document.querySelectorAll('.habit-countdown[data-target]').forEach(el => {
+            const target = +el.dataset.target;
+            const remaining = target - Date.now();
+            const valueEl = el.querySelector('.habit-countdown-value');
+            if (!valueEl) return;
+            if (remaining <= 0) {
+                el.classList.add('completed');
+                valueEl.textContent = this.t('habit-countdown-completed');
+                return;
+            }
+            const s = Math.floor(remaining / 1000);
+            const days = Math.floor(s / 86400);
+            const hours = Math.floor((s % 86400) / 3600);
+            const mins = Math.floor((s % 3600) / 60);
+            const secs = s % 60;
+            const dU = this.t('habit-countdown-d'), hU = this.t('habit-countdown-h'), mU = this.t('habit-countdown-m'), sU = this.t('habit-countdown-s');
+            valueEl.textContent = `${days}${dU} ${String(hours).padStart(2,'0')}${hU} ${String(mins).padStart(2,'0')}${mU} ${String(secs).padStart(2,'0')}${sU}`;
+        });
+    },
+    _renderHabitCountdown(h) {
+        if (h.endDate) return ''; // only "active" habits (no endDate) get a live timer
+        const done = h.completedDays.length;
+        if (done >= h.goal) {
+            return `<div class="habit-countdown completed"><span class="habit-countdown-value">${this.t('habit-countdown-completed')}</span></div>`;
+        }
+        const target = this._habitCountdownTarget(h);
+        if (target <= Date.now()) {
+            return `<div class="habit-countdown completed"><span class="habit-countdown-value">${this.t('habit-countdown-completed')}</span></div>`;
+        }
+        return `<div class="habit-countdown" data-target="${target}">
+                    <span class="habit-countdown-value">…</span>
+                    <span class="habit-countdown-label">${this.t('habit-countdown-left')}</span>
+                </div>`;
     },
 
     updateFooter() {
@@ -234,7 +287,6 @@ const diary = {
         document.getElementById('memoriesCount').textContent = this.memories.length;
         document.getElementById('tasksCount').textContent   = TaskManager.totalTasks();
         document.getElementById('fireStreakHeader').textContent  = this.fireStreak;
-        this._renderStreakHeatmap();
         if (typeof AchievementsUI !== 'undefined') AchievementsUI.recalculate();
     },
 
@@ -437,86 +489,85 @@ const diary = {
         this.closeModals();
     },
 
-    _habitCalId: null,
-    _habitCalCursor: null,
-    _habitCountdownTimer: null,
-
+    // Full month/year-navigable calendar for a habit (replaces the old
+    // start-date-to-now-only table). Lets the person browse any past or
+    // future month/year while reviewing/toggling that habit's history.
     showCalendar(id, e) {
         if (e) e.stopPropagation();
         const habit = this.habits.find(h => h.id === id);
         if (!habit) return;
-        const keepMonth = this._habitCalId === id && this._habitCalCursor;
-        this._habitCalId = id;
-        if (!keepMonth) {
-            const anchor = habit.endDate || this.today();
-            const d = Util.parseLocalDate(anchor);
-            this._habitCalCursor = new Date(d.getFullYear(), d.getMonth(), 1);
-        }
+        this._calHabitId = id;
+        const start = Util.parseLocalDate(habit.startDate);
+        this._calYear = start.getFullYear();
+        this._calMonth = start.getMonth();
+        // If the habit already has history, land on the month of its most
+        // recent completed day (or today, whichever is more useful) instead
+        // of always starting back at month one.
+        const todayStr = this.today();
+        const mostRecent = habit.completedDays.length ? habit.completedDays.slice().sort().pop() : null;
+        const landOn = habit.endDate || mostRecent || (habit.startDate <= todayStr ? todayStr : habit.startDate);
+        const landDate = Util.parseLocalDate(landOn);
+        this._calYear = landDate.getFullYear();
+        this._calMonth = landDate.getMonth();
         this._renderHabitCalendar();
         document.getElementById('calendarModal').classList.add('open');
     },
-
-    shiftHabitCal(deltaMonths) {
-        if (!this._habitCalCursor) return;
-        this._habitCalCursor.setMonth(this._habitCalCursor.getMonth() + deltaMonths);
+    calHabitPrevMonth() {
+        this._calMonth -= 1;
+        if (this._calMonth < 0) { this._calMonth = 11; this._calYear -= 1; }
         this._renderHabitCalendar();
     },
-
-    onHabitMonthInput(ym) {
-        if (!ym || ym.length < 7) return;
-        const [y, m] = ym.split('-').map(Number);
-        this._habitCalCursor = new Date(y, m - 1, 1);
+    calHabitNextMonth() {
+        this._calMonth += 1;
+        if (this._calMonth > 11) { this._calMonth = 0; this._calYear += 1; }
         this._renderHabitCalendar();
     },
-
+    calHabitToday() {
+        const t = Util.parseLocalDate(this.today());
+        this._calYear = t.getFullYear();
+        this._calMonth = t.getMonth();
+        this._renderHabitCalendar();
+    },
     _renderHabitCalendar() {
-        const habit = this.habits.find(h => h.id === this._habitCalId);
-        if (!habit || !this._habitCalCursor) return;
+        const habit = this.habits.find(h => h.id === this._calHabitId);
+        if (!habit) return;
         const statusText = habit.endDate ? '✅ ' + this.t('lbl-completed') : (this.lang === 'ru' ? 'в процессе' : 'in progress');
         document.getElementById('calendarTitle').textContent = `${habit.name} — ${statusText}`;
 
-        const lang = this.lang;
-        const locale = lang === 'ru' ? 'ru-RU' : 'en-GB';
-        const year = this._habitCalCursor.getFullYear();
-        const month = this._habitCalCursor.getMonth();
-        const label = this._habitCalCursor.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
-        const ym = `${year}-${String(month + 1).padStart(2, '0')}`;
-        const nav = document.getElementById('habitCalNav');
-        if (nav) {
-            nav.innerHTML = `
-                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(-12)" aria-label="Previous year">«</button>
-                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(-1)" aria-label="Previous month">‹</button>
-                <label class="cal-nav-label">
-                    <span>${label}</span>
-                    <input type="month" value="${ym}" onchange="diary.onHabitMonthInput(this.value)" aria-label="${label}">
-                </label>
-                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(1)" aria-label="Next month">›</button>
-                <button type="button" class="cal-nav-btn" onclick="diary.shiftHabitCal(12)" aria-label="Next year">»</button>
-            `;
+        const todayBtn = document.getElementById('calHabitTodayBtn');
+        if (todayBtn) todayBtn.textContent = this.t('habit-cal-today-btn');
+        const hint = document.getElementById('calendar-hint');
+        if (hint) hint.textContent = this.t('habit-cal-hint');
+
+        const year = this._calYear, month = this._calMonth;
+        const label = document.getElementById('calMonthYearLabel');
+        if (label) {
+            const monthName = new Date(year, month, 1).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-GB', { month: 'long', year: 'numeric' });
+            label.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
         }
 
-        const dayLabels = lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
-        const table = document.getElementById('calendarTable');
-        const first = new Date(year, month, 1);
-        const startOffset = (first.getDay() + 6) % 7;
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const todayStr = this.today();
-        const startStr = habit.startDate;
-        const lastStr = habit.endDate || todayStr;
+        const dayLabels = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
+        const table  = document.getElementById('calendarTable');
+        const header = `<tr>${dayLabels.map(d=>`<th>${d}</th>`).join('')}</tr>`;
 
-        let html = `<tr>${dayLabels.map(d => `<th>${d}</th>`).join('')}</tr><tr>`;
-        for (let i = 0; i < startOffset; i++) html += '<td class="empty"></td>';
+        const firstOfMonth = new Date(year, month, 1);
+        const offset = (firstOfMonth.getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        let html = '<tr>';
+        for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
         for (let d = 1; d <= daysInMonth; d++) {
-            if ((startOffset + d - 1) % 7 === 0 && d !== 1) html += '</tr><tr>';
-            const ds = Util.localDateStr(new Date(year, month, d));
-            const inRange = ds >= startStr && ds <= lastStr;
+            const col = (offset + d - 1) % 7;
+            if (col === 0 && d !== 1) html += '</tr><tr>';
+            const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const done = habit.completedDays.includes(ds);
-            const cls = [done ? 'done' : '', !inRange ? 'empty' : '', ds === todayStr ? 'is-today' : ''].filter(Boolean).join(' ');
-            if (!inRange) html += `<td class="${cls}">${d}</td>`;
-            else html += `<td class="${cls}" onclick="diary.toggleDay(${habit.id},'${ds}',event);diary._renderHabitCalendar()">${d}</td>`;
+            const inRange = ds >= habit.startDate && (!habit.endDate || ds <= habit.endDate);
+            const cls = done ? 'done' : '';
+            const clickable = inRange && !habit.endDate;
+            html += `<td class="${cls}" ${clickable ? `onclick="diary.toggleDay(${habit.id},'${ds}',event);diary._renderHabitCalendar()"` : 'style="opacity:0.35;cursor:default"'}>${d}</td>`;
         }
         html += '</tr>';
-        table.innerHTML = html;
+        table.innerHTML = header + html;
     },
 
     renderHabits() {
@@ -564,10 +615,7 @@ const diary = {
                     </div>
                 </div>
                 <div class="prog-track mb-3"><div class="prog-fill" style="width:${progress}%"></div></div>
-                ${ended
-                    ? `<div class="habit-countdown is-done">${this.t('habit-timer-done')}</div>`
-                    : `<div class="habit-countdown" data-habit-timer="${h.id}">${this._habitCountdownText(h)}</div>`
-                }
+                ${this._renderHabitCountdown(h)}
                 ${isOpen ? `
                 <div class="detail-panel" onclick="event.stopPropagation()">
                     <div class="flex gap-2 flex-wrap mb-3">
@@ -585,63 +633,6 @@ const diary = {
                 </div>` : ''}
             </div>`;
         }).join('');
-        this._tickHabitCountdowns();
-    },
-
-    _habitDeadline(h) {
-        const start = Util.parseLocalDate(h.startDate);
-        const remaining = Math.max(0, (h.goal || 0) - (h.completedDays || []).length);
-        const byGoal = new Date();
-        byGoal.setHours(23, 59, 59, 999);
-        if (remaining > 0) byGoal.setDate(byGoal.getDate() + remaining);
-        const planned = new Date(start);
-        planned.setDate(planned.getDate() + Math.max(0, (h.goal || 1) - 1));
-        planned.setHours(23, 59, 59, 999);
-        return planned.getTime() < byGoal.getTime() ? planned : byGoal;
-    },
-
-    _formatCountdown(ms) {
-        if (ms <= 0) return this.t('habit-timer-over');
-        const s = Math.floor(ms / 1000);
-        const d = Math.floor(s / 86400);
-        const hr = Math.floor((s % 86400) / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const sec = s % 60;
-        const pad = n => String(n).padStart(2, '0');
-        const t = `${d}d ${pad(hr)}h ${pad(m)}m ${pad(sec)}s`;
-        return this.t('habit-timer-left').replace('{t}', t);
-    },
-
-    _habitCountdownText(h) {
-        if (h.endDate || (h.completedDays || []).length >= h.goal) return this.t('habit-timer-done');
-        return this._formatCountdown(this._habitDeadline(h) - Date.now());
-    },
-
-    _tickHabitCountdowns() {
-        document.querySelectorAll('[data-habit-timer]').forEach(el => {
-            const id = +el.getAttribute('data-habit-timer');
-            const h = this.habits.find(x => x.id === id);
-            if (!h || h.endDate) {
-                el.classList.add('is-done');
-                el.textContent = this.t('habit-timer-done');
-                return;
-            }
-            el.classList.remove('is-done');
-            el.textContent = this._habitCountdownText(h);
-        });
-    },
-
-    _startHabitCountdowns() {
-        this._stopHabitCountdowns();
-        this._tickHabitCountdowns();
-        this._habitCountdownTimer = setInterval(() => this._tickHabitCountdowns(), 1000);
-    },
-
-    _stopHabitCountdowns() {
-        if (this._habitCountdownTimer) {
-            clearInterval(this._habitCountdownTimer);
-            this._habitCountdownTimer = null;
-        }
     },
 
     _resetHabitForm() {
@@ -890,6 +881,14 @@ const diary = {
         const old = this.fireStreak;
         this.fireStreak     = (this.lastActiveDate === yestStr) ? this.fireStreak + 1 : 1;
         this.lastActiveDate = todayStr;
+
+        // Keep a small rolling log of the exact days that kept the streak alive,
+        // so the mini calendar can show real history rather than just a count.
+        // If the streak was just broken and restarted, drop the old run first.
+        if (this.fireStreak === 1) this.streakLog = [];
+        if (!this.streakLog.includes(todayStr)) this.streakLog.push(todayStr);
+        this.streakLog = this.streakLog.slice(-90); // cap growth; plenty for any heatmap view
+
         this._saveStreak().catch(e => console.warn('[diary] streak save failed:', e));
         if (this.fireStreak > old) {
             const hdr = document.getElementById('fireStreakHeader');
@@ -900,69 +899,40 @@ const diary = {
             setTimeout(() => { hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim'); }, 700);
         }
         this.updateFooter();
-        this._renderStreakHeatmap();
     },
 
     async _saveStreak() {
         await StorageManager.setItem('fireStreak',     this.fireStreak.toString());
         await StorageManager.setItem('lastActiveDate', this.lastActiveDate);
+        await StorageManager.setItem('streakLog',      JSON.stringify(this.streakLog));
     },
 
-    toggleStreakPanel(e) {
-        if (e) e.stopPropagation();
-        const panel = document.getElementById('streakPanel');
-        if (!panel) return;
-        panel.classList.toggle('open');
-        this._renderStreakHeatmap();
-    },
+    // ---------- fire streak mini calendar/heatmap ----------
+    showStreakCalendar() {
+        const countEl = document.getElementById('streakCalCount');
+        if (countEl) countEl.textContent = this.fireStreak;
+        const titleEl = document.getElementById('streak-cal-title');
+        if (titleEl) titleEl.textContent = '🔥 ' + this.t('streak-cal-title');
+        const curLabel = document.getElementById('streak-cal-current');
+        if (curLabel) curLabel.textContent = this.t('streak-cal-current');
+        const hint = document.getElementById('streak-cal-hint');
+        if (hint) hint.textContent = this.t('streak-cal-hint');
 
-    _streakDates() {
-        const dates = [];
-        if (!this.lastActiveDate || this.fireStreak < 1) return dates;
-        for (let i = this.fireStreak - 1; i >= 0; i--) {
-            dates.push(Util.addDays(this.lastActiveDate, -i));
+        const grid = document.getElementById('streakCalGrid');
+        if (grid) {
+            const days = 35; // 5 full weeks, GitHub-style heatmap
+            const todayStr = this.today();
+            const activeSet = new Set(this.streakLog);
+            let html = '';
+            for (let i = days - 1; i >= 0; i--) {
+                const ds = Util.addDays(todayStr, -i);
+                const dayNum = Util.parseLocalDate(ds).getDate();
+                const active = activeSet.has(ds);
+                html += `<div class="streak-day ${active ? 'active' : ''}" title="${ds}">${active ? '🔥' : dayNum}</div>`;
+            }
+            grid.innerHTML = html;
         }
-        return dates;
-    },
-
-    _renderStreakHeatmap() {
-        const mini = document.getElementById('streakMiniHeat');
-        const full = document.getElementById('streakHeatmap');
-        const title = document.getElementById('streak-panel-title');
-        if (title) title.textContent = this.t('streak-panel-title');
-        const dates = this._streakDates();
-        const set = new Set(dates);
-        const locale = this.lang === 'ru' ? 'ru-RU' : 'en-GB';
-
-        if (mini) {
-            mini.innerHTML = dates.slice(-14).map(ds => {
-                const tip = Util.parseLocalDate(ds).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
-                return `<div class="streak-heat-cell mini on" title="${tip}"></div>`;
-            }).join('');
-        }
-        if (!full) return;
-        if (!dates.length) {
-            full.innerHTML = `<div class="streak-empty">${this.t('streak-panel-empty')}</div>`;
-            return;
-        }
-        const start = Util.parseLocalDate(dates[0]);
-        const end = Util.parseLocalDate(dates[dates.length - 1]);
-        const gridStart = new Date(start);
-        gridStart.setDate(gridStart.getDate() - ((gridStart.getDay() + 6) % 7));
-        const gridEnd = new Date(end);
-        const trail = (7 - ((gridEnd.getDay() + 6) % 7) - 1 + 7) % 7;
-        gridEnd.setDate(gridEnd.getDate() + trail);
-        const cells = [];
-        const cur = new Date(gridStart);
-        while (cur <= gridEnd) {
-            const ds = Util.localDateStr(cur);
-            const on = set.has(ds);
-            const inRange = ds >= dates[0] && ds <= dates[dates.length - 1];
-            cells.push(`<div class="streak-heat-cell ${on ? 'on' : ''} ${inRange ? '' : 'dim'}" title="${ds}"><span>${cur.getDate()}</span></div>`);
-            cur.setDate(cur.getDate() + 1);
-        }
-        const dayLabels = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
-        full.innerHTML = `<div class="streak-heat-weekdays">${dayLabels.map(d => `<span>${d}</span>`).join('')}</div><div class="streak-heat-grid">${cells.join('')}</div>`;
+        document.getElementById('streakCalendarModal').classList.add('open');
     },
 
     async init() {

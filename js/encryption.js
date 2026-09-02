@@ -520,115 +520,52 @@ const EncryptionManager = {
             }
         } catch (e) {
             this._key = null;
-            if (btn) { btn.disabled = false; btn.textContent = this._t('enterRecoveryBtn', 'Unlock this device'); }
+            if (btn) { btn.disabled = false; btn.textContent = 'Unlock this device'; }
             this._flashInputError(input);
         }
     },
 
+    // Shows an explicit in-UI confirmation step (rather than a native confirm()
+    // dialog) so the person clearly understands all data will be lost forever
+    // before anything is wiped.
     confirmStartFresh() {
-        const modal = document.getElementById('startFreshModal');
-        if (modal) modal.classList.add('open');
-        this.applyLang(this._langHint());
+        const modal = document.getElementById('startFreshConfirmModal');
+        if (modal) { modal.classList.add('open'); return; }
+        // Fallback in case the modal markup is somehow missing.
+        if (confirm(this._t('sfConfirmDesc'))) this._wipeIdentityAndRestart();
     },
 
     cancelStartFresh() {
-        const modal = document.getElementById('startFreshModal');
+        const modal = document.getElementById('startFreshConfirmModal');
         if (modal) modal.classList.remove('open');
     },
 
     async executeStartFresh() {
-        const btn = document.getElementById('start-fresh-confirm');
+        const modal = document.getElementById('startFreshConfirmModal');
+        const btn = document.getElementById('sfConfirmExecuteBtn');
         if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
         try {
             await this._wipeIdentityAndRestart();
         } finally {
-            this.cancelStartFresh();
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = this._t('start-fresh-confirm', 'Delete everything and start fresh');
-            }
+            if (modal) modal.classList.remove('open');
+            if (btn) { btn.disabled = false; btn.textContent = this._t('sfConfirmBtn'); }
         }
     },
 
     async _wipeIdentityAndRestart() {
-        this._key = null;
-        this._rawMK = null;
-        this._pendingMK = null;
-        this._pendingRecoveryCode = null;
-
-        const cloudKeys = await this._listCloudKeys();
-        if (cloudKeys.length) {
-            await Promise.all(cloudKeys.map(k => TGPlatform.cloudRemove(k).catch(() => {})));
-        } else if (TGPlatform.supportsCloud) {
-            for (const k of this._knownWipeKeys()) {
+        if (TGPlatform.supportsCloud) {
+            for (const k of ['enc_mk_recovery', 'recovery_salt', 'dbmix_sentinel', 'dbmix_salt']) {
                 await TGPlatform.cloudRemove(k);
             }
         }
-
-        const deviceKeys = await this._listDeviceKeys();
-        if (deviceKeys.length) {
-            await Promise.all(deviceKeys.map(k => TGPlatform.deviceRemove(k).catch(() => {})));
-        } else if (TGPlatform.supportsDevice) {
-            for (const k of this._knownWipeKeys().concat(['mk', 'dbmix_sentinel'])) {
-                try { await TGPlatform.deviceRemove(k); } catch (e) {}
-            }
-        }
-
-        if (TGPlatform.supportsSecure) {
-            try { await TGPlatform.secureRemove('mk'); } catch (e) {}
-        }
-
+        if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceRemove('dbmix_sentinel'); await TGPlatform.deviceRemove('mk'); } catch (e) {} }
         try {
-            const keep = 'dbmix_lang_hint';
-            const doomed = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const k = localStorage.key(i);
-                if (k && k !== keep && (k.startsWith('dbmix_') || k === 'dbmix_mk')) doomed.push(k);
-            }
-            doomed.forEach(k => localStorage.removeItem(k));
+            localStorage.removeItem('dbmix_salt'); localStorage.removeItem('dbmix_sentinel'); localStorage.removeItem('dbmix_mk');
         } catch (e) {}
-
-        if (typeof StorageManager !== 'undefined') {
-            try {
-                await StorageManager.wipeCollection('notes');
-                await StorageManager.wipeCollection('habits');
-                await StorageManager.wipeCollection('memories');
-            } catch (e) {}
-        }
-        if (typeof TaskManager !== 'undefined') {
-            try { await TaskManager.wipeAll(); } catch (e) {}
-        }
-
+        // Immediately create a brand-new vault silently instead of showing a
+        // "welcome" screen that asks for anything — starting fresh means the
+        // person gets a working, unlocked, empty journal right away.
         await this._silentCreateVault();
-    },
-
-    _knownWipeKeys() {
-        return [
-            'enc_mk_recovery', 'recovery_salt', 'dbmix_sentinel', 'dbmix_salt',
-            'fireStreak', 'lastActiveDate', 'userNickname', 'userId', 'achievements_v1',
-            'lang', 'theme', 'notes_index', 'habits_index', 'memories_index',
-            'notes', 'habits', 'memories', 'task_index', 'task_stats', 'tasks_v1',
-        ];
-    },
-
-    _listCloudKeys() {
-        return new Promise(resolve => {
-            try {
-                const api = window.Telegram && Telegram.WebApp && Telegram.WebApp.CloudStorage;
-                if (!api || typeof api.getKeys !== 'function') return resolve([]);
-                api.getKeys((err, keys) => resolve(err ? [] : (keys || [])));
-            } catch (e) { resolve([]); }
-        });
-    },
-
-    _listDeviceKeys() {
-        return new Promise(resolve => {
-            try {
-                const api = window.Telegram && Telegram.WebApp && Telegram.WebApp.DeviceStorage;
-                if (!api || typeof api.getKeys !== 'function') return resolve([]);
-                api.getKeys((err, keys) => resolve(err ? [] : (keys || [])));
-            } catch (e) { resolve([]); }
-        });
     },
 
     // ---------- legacy: migrate an existing v5 (password-based) account to v7 ----------
@@ -810,72 +747,38 @@ const EncryptionManager = {
         try { input.setSelectionRange(pos + delta, pos + delta); } catch (e) {}
     },
 
-    _langHint() {
-        if (typeof diary !== 'undefined' && diary.lang) return diary.lang;
-        try { return localStorage.getItem('dbmix_lang_hint') || 'en'; } catch (e) { return 'en'; }
+    // ---------- translations for the lock screen ----------
+    // Sourced from the shared translations.js `T` table (same system the rest
+    // of the app uses via `diary.t()`), instead of a private duplicate dict.
+    // Keys match the element ids 1:1, mirroring diary.applyTranslations().
+    _t(key) {
+        const lang = (typeof diary !== 'undefined' && diary.lang) || this._lastLang || 'en';
+        return (typeof T !== 'undefined' && (T[lang] || T.en)[key]) || key;
     },
-    _t(key, fallback) {
-        const lang = this._langHint();
-        if (typeof T !== 'undefined') {
-            const dict = T[lang] || T.en || {};
-            if (dict[key]) return dict[key];
-            if (T.en && T.en[key]) return T.en[key];
-        }
-        return fallback || key;
-    },
-
-    // ---------- translations for the lock screen (from translations.js) ----------
     applyLang(lang) {
-        const t = (key, fb) => {
-            if (typeof T !== 'undefined') {
-                const dict = (T[lang] || T.en) || {};
-                if (dict[key]) return dict[key];
-                if (T.en && T.en[key]) return T.en[key];
-            }
-            return fb || key;
-        };
+        this._lastLang = lang;
+        const strs = (typeof T !== 'undefined' && T[lang]) || (typeof T !== 'undefined' && T.en) || {};
+        const t = (key) => strs[key] || key;
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
         const setPh = (id, v) => { const el = document.getElementById(id); if (el) el.placeholder = v; };
-        set('lockCheckingText', t('checking', lang === 'ru' ? 'Разблокировка…' : 'Unlocking…'));
-        set('recoveryShowTitle', t('recoveryShowTitle', lang === 'ru' ? 'Сохрани код восстановления' : 'Save your recovery code'));
-        set('recoveryShowDesc', t('recoveryShowDesc', lang === 'ru'
-            ? 'Дневник уже разблокирован и зашифрован сквозным шифрованием — пароль на этом устройстве не нужен. Сохрани этот код на случай нового устройства или переустановки.'
-            : 'Your journal is already unlocked and end-to-end encrypted — no password needed on this device. Save this code once, just in case you ever set up a new device or reinstall.'));
-        set('recoveryCopyBtn', t('recoveryCopyBtn', lang === 'ru' ? '📋 Скопировать' : '📋 Copy code'));
-        set('recoverySavedLabel', t('recoverySavedLabel', lang === 'ru' ? 'Я сохранил его в надёжном месте' : 'I’ve saved this somewhere safe'));
-        set('recoveryContinueBtn', t('recoveryContinueBtn', lang === 'ru' ? 'Продолжить' : 'Continue'));
-        set('recoverySkipHint', t('recoverySkipHint', lang === 'ru' ? 'Ты всегда можешь посмотреть его снова в боковом меню.' : 'You can always view this again later from the sidebar.'));
-        set('enterRecoveryTitle', t('enterRecoveryTitle'));
-        set('enterRecoveryDesc', t('enterRecoveryDesc'));
-        setPh('recoveryCodeInput', t('recoveryCodeInput-ph'));
-        set('enterRecoveryBtn', t('enterRecoveryBtn'));
-        set('noRecoveryText', t('noRecoveryText'));
-        set('startFreshBtn', t('startFreshBtn'));
-        set('startFreshHint', t('startFreshHint'));
-        set('start-fresh-title', t('start-fresh-title'));
-        set('start-fresh-desc', t('start-fresh-desc'));
-        set('start-fresh-cancel', t('start-fresh-cancel'));
-        set('start-fresh-confirm', t('start-fresh-confirm'));
-        set('del-modal-title', t('del-modal-title'));
-        set('del-modal-desc', t('del-modal-desc'));
-        set('del-cancel-btn', t('del-cancel-btn'));
-        set('del-confirm-btn', t('del-confirm-btn'));
-        set('migrateTitle', t('migrateTitle', lang === 'ru' ? 'Разовое обновление' : 'One-time upgrade'));
-        set('migrateDesc', t('migrateDesc', lang === 'ru'
-            ? 'Мы нашли на этом аккаунте старый дневник, защищённый паролем. Введи этот пароль один раз, чтобы перейти на мгновенную разблокировку — больше вводить его не понадобится.'
-            : 'We found an older password-protected journal on this account. Enter that password once to switch to instant unlock — you won’t need to type it again after this.'));
-        setPh('migratePasswordInput', t('migratePh', lang === 'ru' ? 'Текущий пароль' : 'Current password'));
-        set('migrateUnlockBtn', t('migrateBtn', lang === 'ru' ? 'Обновить аккаунт' : 'Upgrade my account'));
-        set('errorTitle', t('errorTitle', lang === 'ru' ? 'Проблема соединения' : 'Connection problem'));
-        set('errorDesc', t('errorDesc', lang === 'ru'
-            ? 'Не удалось подключиться к защищённому хранилищу Telegram. Данные в безопасности — можно повторить попытку или продолжить работу локально.'
-            : 'Couldn’t reach Telegram’s secure storage. Your data is safe on your account — you can retry, or keep working locally until the connection is back.'));
-        set('errorRetryBtn', t('retryBtn', lang === 'ru' ? 'Повторить' : 'Retry'));
-        set('errorOfflineLink', t('offlineLink', lang === 'ru' ? 'Продолжить офлайн' : 'Continue offline'));
-        set('lock-title', t('legacyTitle', 'DailyBookimix'));
-        set('lock-desc', t('legacyDesc', lang === 'ru' ? 'Введи пароль, чтобы разблокировать зашифрованный дневник.' : 'Enter your password to unlock your encrypted journal.'));
-        set('lock-hint', t('legacyHint', lang === 'ru' ? 'В этом браузере уже есть зашифрованный дневник — введи его пароль.' : 'This browser has an existing encrypted journal — enter its password.'));
-        set('lockUnlockBtn', t('legacyBtn', lang === 'ru' ? 'Разблокировать 🔓' : 'Unlock 🔓'));
+
+        set('lockCheckingText', t('lockCheckingText'));
+        set('recoveryShowTitle', t('recoveryShowTitle')); set('recoveryShowDesc', t('recoveryShowDesc'));
+        set('recoveryCopyBtn', t('recoveryCopyBtn')); set('recoverySavedLabel', t('recoverySavedLabel'));
+        set('recoveryContinueBtn', t('recoveryContinueBtn')); set('recoverySkipHint', t('recoverySkipHint'));
+        set('enterRecoveryTitle', t('enterRecoveryTitle')); set('enterRecoveryDesc', t('enterRecoveryDesc'));
+        setPh('recoveryCodeInput', t('recoveryCodeInput-ph')); set('enterRecoveryBtn', t('enterRecoveryBtn'));
+        set('noRecoveryText', t('noRecoveryText')); set('startFreshLink', t('startFreshLink'));
+        set('startFreshBtn', t('startFreshBtn')); set('startFreshHint', t('startFreshHint'));
+        set('sfConfirmTitle', t('sfConfirmTitle')); set('sfConfirmDesc', t('sfConfirmDesc'));
+        set('sfConfirmCancelBtn', t('sfConfirmCancel')); set('sfConfirmExecuteBtn', t('sfConfirmBtn'));
+        set('migrateTitle', t('migrateTitle')); set('migrateDesc', t('migrateDesc'));
+        setPh('migratePasswordInput', t('migratePasswordInput-ph')); set('migrateUnlockBtn', t('migrateUnlockBtn'));
+        set('errorTitle', t('errorTitle')); set('errorDesc', t('errorDesc'));
+        set('errorRetryBtn', t('errorRetryBtn')); set('errorOfflineLink', t('errorOfflineLink'));
+        set('lock-title', t('lock-title')); set('lock-desc', t('lock-desc'));
+        setPh('lockPasswordInput', t('lockPasswordInput-ph')); set('lockUnlockBtn', t('lockUnlockBtn'));
+        set('lock-hint', t('lock-hint'));
     }
 };
 

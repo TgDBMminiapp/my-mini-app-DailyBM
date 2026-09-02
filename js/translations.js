@@ -89,27 +89,66 @@ const T = {
         'toast-all-data-deleted': '🗑️ All data deleted',
         'err-delete-account': '❌ Something went wrong — some data may not have been fully removed',
         'err-recovery-code': '❌ Could not generate a new code — check your connection and try again',
-        'cal-today': 'Today',
-        'habit-timer-left': '{t} left',
-        'habit-timer-done': 'Completed',
-        'habit-timer-over': 'Time is up',
-        'streak-panel-title': 'Fire streak',
-        'streak-panel-empty': 'No streak days yet — save a note, habit, or memory to light the fire.',
+
+        // Lock screen — checking
+        'lockCheckingText': 'Unlocking…',
+        // Lock screen — show recovery code (one-time notice)
+        'recoveryShowTitle': 'Save your recovery code',
+        'recoveryShowDesc': 'Your journal is already unlocked and end-to-end encrypted — no password needed on this device. Save this code once, just in case you ever set up a new device or reinstall.',
+        'recoveryCopyBtn': '📋 Copy code',
+        'recoverySavedLabel': 'I\u2019ve saved this somewhere safe',
+        'recoveryContinueBtn': 'Continue',
+        'recoverySkipHint': 'You can always view this again later from the sidebar.',
+        // Lock screen — enter recovery code on a new device
         'enterRecoveryTitle': 'New device detected',
         'enterRecoveryDesc': 'This Telegram account already has an encrypted vault. Enter the recovery code you saved when you first set it up to unlock it here too.',
-        'enterRecoveryBtn': 'Unlock this device',
         'recoveryCodeInput-ph': 'XXXX-XXXX-XXXX-XXXX-XXXX',
-        'noRecoveryText': 'Forgot your recovery code?',
-        'startFreshBtn': 'I don’t have my code — start fresh',
-        'startFreshHint': 'This permanently erases the old vault. You will get a new empty journal.',
-        'start-fresh-title': 'Start over with a blank journal?',
-        'start-fresh-desc': 'Without the recovery code, old notes, habits, tasks, and memories can never be decrypted. Starting fresh deletes all local and cloud data for this Telegram account forever. This cannot be undone.',
-        'start-fresh-cancel': 'Go back',
-        'start-fresh-confirm': 'Delete everything and start fresh',
+        'enterRecoveryBtn': 'Unlock this device',
+        'noRecoveryText': 'Don\u2019t have your code?',
+        'startFreshLink': 'Start fresh instead',
+        'startFreshBtn': '🗑️ I don\u2019t have my code — start fresh',
+        'startFreshHint': 'This permanently deletes the old, undecryptable data on this account and creates a brand-new empty vault.',
+        // "Start fresh" confirmation modal
+        'sfConfirmTitle': 'Start fresh?',
+        'sfConfirmDesc': 'Without the recovery code, your old encrypted data can never be recovered. This will permanently delete it from this Telegram account and create a brand-new, empty vault. This cannot be undone.',
+        'sfConfirmCancel': 'Cancel',
+        'sfConfirmBtn': 'Yes, delete everything & start fresh',
+        // Lock screen — legacy v5 migration
+        'migrateTitle': 'One-time upgrade',
+        'migrateDesc': 'We found an older password-protected journal on this account. Enter that password once to switch to instant unlock — you won\u2019t need to type it again after this.',
+        'migratePasswordInput-ph': 'Current password',
+        'migrateUnlockBtn': 'Upgrade my account',
+        // Lock screen — connection error
+        'errorTitle': 'Connection problem',
+        'errorDesc': 'Couldn\u2019t reach Telegram\u2019s secure storage. Your data is safe on your account — you can retry, or keep working locally until the connection is back.',
+        'errorRetryBtn': 'Retry',
+        'errorOfflineLink': 'Continue offline',
+        // Lock screen — legacy password (no Telegram storage APIs)
+        'lock-title': 'DailyBookimix',
+        'lock-desc': 'Enter your password to unlock your encrypted journal.',
+        'lockPasswordInput-ph': 'Enter password...',
+        'lockUnlockBtn': 'Unlock 🔓',
+        'lock-hint': 'This browser has an existing encrypted journal — enter its password.',
+        // Delete account modal (used by sidebar.js)
         'del-modal-title': 'Delete all data?',
-        'del-modal-desc': 'This will permanently erase all your notes, habits, tasks, memories, and profile data. This action cannot be undone.',
+        'del-modal-desc': 'This will permanently erase all your notes, habits, memories, and profile data. This action cannot be undone.',
         'del-cancel-btn': 'Cancel',
         'del-confirm-btn': 'Delete everything',
+        // Task calendar
+        'tasks-cal-today-btn': 'Today',
+        // Habit calendar
+        'habit-cal-today-btn': 'Today',
+        'habit-cal-hint': 'Tap a day to mark / unmark',
+        // Habit countdown
+        'habit-countdown-left': 'left',
+        'habit-countdown-completed': '🎉 Goal reached!',
+        'habit-countdown-ended': 'Tracking ended',
+        'habit-countdown-d': 'd', 'habit-countdown-h': 'h', 'habit-countdown-m': 'm', 'habit-countdown-s': 's',
+        // Fire streak mini calendar
+        'streak-cal-title': 'Streak history',
+        'streak-cal-hint': 'Days that kept your streak alive',
+        'streak-cal-current': 'Current streak',
+        'streak-cal-days': 'days',
     },
     ru: {
         'app-desc': 'Защищённый ежедневник',
@@ -196,27 +235,66 @@ const T = {
         'toast-all-data-deleted': '🗑️ Все данные удалены',
         'err-delete-account': '❌ Что-то пошло не так — часть данных могла не удалиться',
         'err-recovery-code': '❌ Не удалось создать новый код — проверь соединение и попробуй снова',
-        'cal-today': 'Сегодня',
-        'habit-timer-left': 'осталось {t}',
-        'habit-timer-done': 'Завершена',
-        'habit-timer-over': 'Время вышло',
-        'streak-panel-title': 'Огненная серия',
-        'streak-panel-empty': 'Пока нет дней серии — сохрани запись, привычку или воспоминание, чтобы зажечь огонь.',
+
+        // Экран блокировки — проверка
+        'lockCheckingText': 'Разблокировка…',
+        // Экран блокировки — показ кода восстановления (разовое уведомление)
+        'recoveryShowTitle': 'Сохрани код восстановления',
+        'recoveryShowDesc': 'Дневник уже разблокирован и защищён сквозным шифрованием — пароль на этом устройстве не нужен. Сохрани этот код один раз, на случай нового устройства или переустановки.',
+        'recoveryCopyBtn': '📋 Скопировать код',
+        'recoverySavedLabel': 'Я сохранил его в надёжном месте',
+        'recoveryContinueBtn': 'Продолжить',
+        'recoverySkipHint': 'Ты всегда можешь посмотреть его снова в боковом меню.',
+        // Экран блокировки — ввод кода восстановления на новом устройстве
         'enterRecoveryTitle': 'Обнаружено новое устройство',
         'enterRecoveryDesc': 'На этом аккаунте Telegram уже есть зашифрованное хранилище. Введи код восстановления, который ты сохранил при его создании, чтобы разблокировать его и здесь.',
-        'enterRecoveryBtn': 'Разблокировать устройство',
         'recoveryCodeInput-ph': 'XXXX-XXXX-XXXX-XXXX-XXXX',
-        'noRecoveryText': 'Не помнишь код восстановления?',
-        'startFreshBtn': 'У меня нет кода — начать заново',
-        'startFreshHint': 'Старое хранилище будет удалено навсегда. Ты получишь пустой дневник.',
-        'start-fresh-title': 'Начать с чистого листа?',
-        'start-fresh-desc': 'Без кода восстановления старые записи, привычки, задачи и воспоминания расшифровать нельзя. Начать заново навсегда удалит все локальные данные и данные в облаке для этого аккаунта Telegram. Отменить это нельзя.',
-        'start-fresh-cancel': 'Назад',
-        'start-fresh-confirm': 'Удалить всё и начать заново',
+        'enterRecoveryBtn': 'Разблокировать устройство',
+        'noRecoveryText': 'Нет кода восстановления?',
+        'startFreshLink': 'Начать с чистого листа',
+        'startFreshBtn': '🗑️ У меня нет кода — начать с чистого листа',
+        'startFreshHint': 'Это навсегда удалит старые, нерасшифровываемые данные с этого аккаунта и создаст новое пустое хранилище.',
+        // Подтверждение "начать с чистого листа"
+        'sfConfirmTitle': 'Начать с чистого листа?',
+        'sfConfirmDesc': 'Без кода восстановления старые зашифрованные данные нельзя вернуть никогда. Это навсегда удалит их с этого аккаунта Telegram и создаст новое, пустое хранилище. Действие нельзя отменить.',
+        'sfConfirmCancel': 'Отмена',
+        'sfConfirmBtn': 'Да, удалить всё и начать заново',
+        // Экран блокировки — обновление со старого пароля (v5)
+        'migrateTitle': 'Разовое обновление',
+        'migrateDesc': 'Мы нашли на этом аккаунте старый дневник, защищённый паролем. Введи этот пароль один раз, чтобы перейти на мгновенную разблокировку — больше вводить его не понадобится.',
+        'migratePasswordInput-ph': 'Текущий пароль',
+        'migrateUnlockBtn': 'Обновить аккаунт',
+        // Экран блокировки — проблема соединения
+        'errorTitle': 'Проблема соединения',
+        'errorDesc': 'Не удалось подключиться к защищённому хранилищу Telegram. Данные в безопасности — можно повторить попытку или продолжить работу локально.',
+        'errorRetryBtn': 'Повторить',
+        'errorOfflineLink': 'Продолжить офлайн',
+        // Экран блокировки — старый пароль (без Telegram Storage API)
+        'lock-title': 'DailyBookimix',
+        'lock-desc': 'Введи пароль, чтобы разблокировать зашифрованный дневник.',
+        'lockPasswordInput-ph': 'Введите пароль...',
+        'lockUnlockBtn': 'Разблокировать 🔓',
+        'lock-hint': 'В этом браузере уже есть зашифрованный дневник — введи его пароль.',
+        // Модалка удаления аккаунта (используется в sidebar.js)
         'del-modal-title': 'Удалить все данные?',
-        'del-modal-desc': 'Это навсегда уничтожит все твои записи, привычки, задачи, воспоминания и данные профиля. Действие нельзя отменить.',
+        'del-modal-desc': 'Это навсегда уничтожит все твои записи, привычки, воспоминания и данные профиля. Действие нельзя отменить.',
         'del-cancel-btn': 'Отмена',
         'del-confirm-btn': 'Удалить всё',
+        // Календарь задач
+        'tasks-cal-today-btn': 'Сегодня',
+        // Календарь привычек
+        'habit-cal-today-btn': 'Сегодня',
+        'habit-cal-hint': 'Нажми на день, чтобы отметить / снять отметку',
+        // Таймер обратного отсчёта привычки
+        'habit-countdown-left': 'осталось',
+        'habit-countdown-completed': '🎉 Цель достигнута!',
+        'habit-countdown-ended': 'Трекинг завершён',
+        'habit-countdown-d': 'д', 'habit-countdown-h': 'ч', 'habit-countdown-m': 'м', 'habit-countdown-s': 'с',
+        // Мини-календарь огненной серии
+        'streak-cal-title': 'История серии',
+        'streak-cal-hint': 'Дни, которые поддержали твою серию',
+        'streak-cal-current': 'Текущая серия',
+        'streak-cal-days': 'дней',
     }
 };
 
