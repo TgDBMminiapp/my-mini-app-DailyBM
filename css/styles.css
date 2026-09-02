@@ -166,12 +166,6 @@
             backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
             border: 1px solid var(--glass-border); border-radius: 22px;
         }
-        .app-title {
-            font-family: 'Syne', sans-serif; font-weight: 800;
-            letter-spacing: -0.03em; color: var(--text-primary);
-            font-size: 20px; line-height: 1.1;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.12);
-        }
         .streak-badge {
             display: inline-flex; align-items: center; gap: 4px;
             background: rgba(255,255,255,0.2); border-radius: 999px;
@@ -637,19 +631,6 @@
             font-size: 13px; font-weight: 700; color: var(--text-primary);
         }
 
-        /* Archive / past days selector */
-        .task-archive-day {
-            padding: 10px 14px; border-radius: 13px; cursor: pointer;
-            background: var(--card-bg); border: 1.5px solid var(--card-border);
-            font-size: 13px; font-weight: 700; color: var(--card-text-muted);
-            transition: background 0.18s, border-color 0.18s;
-            text-align: center; flex-shrink: 0;
-        }
-        .task-archive-day.active { background: var(--accent); border-color: var(--accent); color: white; }
-        .task-archive-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; }
-        .task-archive-scroll::-webkit-scrollbar { height: 3px; }
-        .task-archive-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
-
         /* Mood picker */
         .mood-row { display: flex; gap: 10px; justify-content: center; margin: 12px 0 4px; }
         .mood-btn {
@@ -673,7 +654,109 @@
         .carryover-btn:active { transform: scale(0.97); background: rgba(59,130,246,0.22); }
 
         body:not(.theme-dark) .section-header,
-        body:not(.theme-dark) .app-title,
         body:not(.theme-dark) .tab-btn:not(.active) { text-shadow: 0 1px 4px rgba(0,0,0,0.15); }
         body:not(.theme-dark) .record-card .font-bold { color: rgba(255,255,255,0.97) !important; }
         body:not(.theme-dark) footer { text-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+        /* ══════════════ MINIMAL HEADER ══════════════ */
+        .streak-badge { transition: transform 0.15s; }
+        .streak-badge:active { transform: scale(0.94); }
+
+        /* ══════════════ SHARED MONTH/YEAR CALENDAR NAV (Tasks + Habits) ══════════════ */
+        .cal-nav-row, .task-cal-nav-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; margin-bottom: 10px;
+        }
+        .cal-nav-btn {
+            width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+            background: var(--card-bg); border: 1.5px solid var(--card-border);
+            color: var(--text-primary); font-size: 18px; font-weight: 900;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: background 0.15s, transform 0.15s;
+        }
+        .cal-nav-btn:active { transform: scale(0.9); background: var(--accent); color: white; }
+        .cal-nav-label {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px;
+            color: var(--text-primary); text-align: center; flex: 1; min-width: 0;
+        }
+        .cal-today-btn {
+            border: none; background: none; cursor: pointer;
+            font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800;
+            color: var(--accent-light); padding: 0; text-decoration: underline;
+        }
+
+        /* ══════════════ TASKS MONTHLY CALENDAR ══════════════ */
+        .task-cal-weekdays {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+            margin-bottom: 4px;
+        }
+        .task-cal-weekday {
+            text-align: center; font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+            color: var(--text-label); text-transform: uppercase;
+        }
+        .task-cal-grid {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+            margin-bottom: 14px;
+        }
+        .task-cal-day {
+            aspect-ratio: 1; border-radius: 11px; cursor: pointer;
+            background: var(--card-bg); border: 1.5px solid var(--card-border);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 1px; transition: background 0.15s, border-color 0.15s, transform 0.1s;
+            min-height: 40px;
+        }
+        .task-cal-day:active { transform: scale(0.92); }
+        .task-cal-day.empty { background: transparent; border-color: transparent; cursor: default; }
+        .task-cal-daynum { font-size: 12px; font-weight: 800; color: var(--text-primary); }
+        .task-cal-badge { font-size: 8px; font-weight: 700; opacity: 0.75; color: var(--text-muted); }
+        .task-cal-day.has-tasks { border-color: rgba(251,191,36,0.5); background: rgba(251,191,36,0.12); }
+        .task-cal-day.has-tasks-done { border-color: rgba(16,185,129,0.5); background: rgba(16,185,129,0.14); }
+        .task-cal-day.is-today { box-shadow: 0 0 0 2px var(--accent-light) inset; }
+        .task-cal-day.selected { background: var(--accent); border-color: var(--accent); }
+        .task-cal-day.selected .task-cal-daynum,
+        .task-cal-day.selected .task-cal-badge { color: white; opacity: 1; }
+
+        /* ══════════════ HABITS COUNTDOWN TIMER ══════════════ */
+        .habit-countdown {
+            display: flex; align-items: baseline; justify-content: center; gap: 8px;
+            background: rgba(255,140,66,0.12); border: 1.5px solid rgba(255,140,66,0.28);
+            border-radius: 13px; padding: 10px 12px; margin: 10px 0;
+            font-family: 'Nunito', sans-serif;
+        }
+        .habit-countdown-value { font-size: 16px; font-weight: 900; color: var(--accent-light); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+        .habit-countdown-label { font-size: 11px; font-weight: 700; color: var(--text-label); text-transform: uppercase; letter-spacing: 0.04em; }
+        .habit-countdown.completed {
+            background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.32);
+        }
+        .habit-countdown.completed .habit-countdown-value { color: #34d399; }
+
+        /* ══════════════ FIRE STREAK MINI CALENDAR ══════════════ */
+        .streak-cal-summary { text-align: center; margin-bottom: 16px; }
+        .streak-cal-count { font-size: 40px; font-weight: 900; font-family: 'Syne', sans-serif; color: var(--accent-light); line-height: 1; }
+        .streak-cal-count-label { font-size: 12px; font-weight: 700; color: var(--text-label); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+        .streak-cal-grid {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px;
+        }
+        .streak-day {
+            aspect-ratio: 1; border-radius: 8px;
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.08);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 9px; font-weight: 700; color: var(--text-label);
+        }
+        body:not(.theme-dark) .streak-day { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.06); }
+        .streak-day.empty { background: transparent; border-color: transparent; }
+        .streak-day.active {
+            background: linear-gradient(135deg, #ff8c42, #ff5722); border-color: transparent;
+            color: white; box-shadow: 0 2px 8px rgba(255,87,34,0.35);
+        }
+
+        /* ══════════════ LOCK SCREEN — prominent "start fresh" ══════════════ */
+        .lock-divider-or {
+            height: 1px; background: rgba(255,255,255,0.2); margin: 18px 0 4px;
+        }
+        .lock-btn-danger {
+            background: rgba(239,68,68,0.85); color: white;
+            box-shadow: 0 4px 20px rgba(239,68,68,0.3);
+        }
+        .lock-btn-danger:active { background: rgba(220,38,38,0.9); }
