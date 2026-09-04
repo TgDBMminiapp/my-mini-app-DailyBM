@@ -167,7 +167,7 @@
         <button class="hamburger-btn" id="hamburgerBtn" onclick="SidebarUI.open()" aria-label="Menu">
             <span></span><span></span><span></span>
         </button>
-        <div id="streakBadge" class="streak-badge flex-shrink-0" onclick="diary.showStreakCalendar()" role="button" tabindex="0" aria-label="Streak history">
+        <div id="streakBadge" class="streak-badge flex-shrink-0" onclick="diary.showStreakCalendar()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();diary.showStreakCalendar();}" role="button" tabindex="0" aria-label="Streak history">
             <span id="fireEmoji" class="text-xl">🔥</span>
             <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
         </div>
@@ -539,7 +539,7 @@
     </div>
 </div>
 
-<!-- ══════════════ FIRE STREAK MINI CALENDAR ══════════════ -->
+<!-- ══════════════ FIRE STREAK CALENDAR ══════════════ -->
 <div id="streakCalendarModal" class="modal-overlay">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
@@ -550,7 +550,15 @@
             <div class="streak-cal-count" id="streakCalCount">0</div>
             <div class="streak-cal-count-label" id="streak-cal-current">Current streak</div>
         </div>
-        <div id="streakCalGrid" class="streak-cal-grid"></div>
+        <div class="cal-nav-row">
+            <button class="cal-nav-btn" onclick="diary.streakCalPrevMonth()" aria-label="Previous month">‹</button>
+            <div class="cal-nav-label">
+                <span id="streakCalMonthYearLabel"></span>
+                <button class="cal-today-btn" id="streakCalTodayBtn" onclick="diary.streakCalToday()">Today</button>
+            </div>
+            <button class="cal-nav-btn" onclick="diary.streakCalNextMonth()" aria-label="Next month">›</button>
+        </div>
+        <table id="streakCalTable"></table>
         <p id="streak-cal-hint" class="text-center text-xs mt-4" style="color:#9ca3af">Days that kept your streak alive</p>
     </div>
 </div>
