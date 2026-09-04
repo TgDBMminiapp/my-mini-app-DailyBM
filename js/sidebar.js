@@ -87,6 +87,14 @@ const SidebarUI = {
         set('del-modal-desc',      diary.t('del-modal-desc'));
         set('del-cancel-btn',      diary.t('del-cancel-btn'));
         set('del-confirm-btn',     diary.t('del-confirm-btn'));
+        // Backup & Recovery: sidebar entry + modal — previously left in
+        // English regardless of selected language because nothing ever
+        // wrote diary.t()'s values into these elements.
+        set('sb-item-recovery',        diary.t('sb-item-recovery'));
+        set('recoveryModalTitle',      diary.t('recoveryModalTitle'));
+        set('recoveryModalDesc',       diary.t('recoveryModalDesc'));
+        set('recoveryModalGenerateBtn',diary.t('recoveryModalGenerateBtn'));
+        set('recoveryModalCloseBtn',   diary.t('recoveryModalCloseBtn'));
         set('ach-modal-title', AchievementsUI._strings[lang]?.title || 'Achievements');
         setPh('sidebarNickInput',  strs.nickPlaceholder);
         this._updateHeaderDisplay();
@@ -186,19 +194,15 @@ const SidebarUI = {
         document.getElementById('recoveryModal').classList.remove('open');
     },
     async generateNewRecoveryCode() {
-        const lang = diary.lang || 'en';
-        const msg = lang === 'ru'
-            ? 'Это заменит твой текущий код восстановления — старый перестанет работать на новых устройствах. Продолжить?'
-            : 'This replaces your current recovery code — the old one will stop working for setting up new devices. Continue?';
-        if (!confirm(msg)) return;
+        if (!confirm(diary.t('recoveryModalRegenConfirm'))) return;
         const btn = document.getElementById('recoveryModalGenerateBtn');
         if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
         const code = await EncryptionManager.regenerateRecoveryCode();
-        if (btn) { btn.disabled = false; btn.textContent = lang === 'ru' ? 'Создать новый код' : 'Generate new code'; }
+        if (btn) { btn.disabled = false; btn.textContent = diary.t('recoveryModalGenerateBtn'); }
         const disp = document.getElementById('recoveryModalCode');
         if (code) {
             if (disp) disp.textContent = code;
-            diary.toast(lang === 'ru' ? '✅ Новый код создан — сохрани его' : '✅ New code created — save it now');
+            diary.toast(diary.t('recoveryModalNewCodeToast'));
         } else {
             diary.toast(diary.t('err-recovery-code'), 'error');
         }

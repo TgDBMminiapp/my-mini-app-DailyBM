@@ -139,16 +139,30 @@ const T = {
         // Habit calendar
         'habit-cal-today-btn': 'Today',
         'habit-cal-hint': 'Tap a day to mark / unmark',
+        'habit-cal-status-progress': 'in progress',
         // Habit countdown
         'habit-countdown-left': 'left',
         'habit-countdown-completed': '🎉 Goal reached!',
         'habit-countdown-ended': 'Tracking ended',
         'habit-countdown-d': 'd', 'habit-countdown-h': 'h', 'habit-countdown-m': 'm', 'habit-countdown-s': 's',
-        // Fire streak mini calendar
+        // Fire streak calendar
         'streak-cal-title': 'Streak history',
         'streak-cal-hint': 'Days that kept your streak alive',
         'streak-cal-current': 'Current streak',
         'streak-cal-days': 'days',
+        'streak-cal-today-btn': 'Today',
+        // Sidebar → Backup & recovery
+        'sb-item-recovery': 'Backup & recovery',
+        'recoveryModalTitle': 'Backup & recovery',
+        'recoveryModalDesc': 'Your recovery code is shown only once, when it\u2019s created, and never stored anywhere in readable form — not even here. If you\u2019ve lost it, generate a new one below; the old code will stop working.',
+        'recoveryModalGenerateBtn': 'Generate new code',
+        'recoveryModalCloseBtn': 'Close',
+        'recoveryModalRegenConfirm': 'This replaces your current recovery code — the old one will stop working for setting up new devices. Continue?',
+        'recoveryModalNewCodeToast': '✅ New code created — save it now',
+        'recoveryCopyBtn-copied': '✅ Copied',
+        'recoveryCopyBtn-failed': '⚠️ Select & copy manually',
+        'offlineModeToast': '⚠️ Working offline — sync will resume once reconnected',
+        'mkPersistFailedToast': '⚠️ Couldn\u2019t save the key on this device — you may need the code again next launch',
     },
     ru: {
         'app-desc': 'Защищённый ежедневник',
@@ -285,16 +299,30 @@ const T = {
         // Календарь привычек
         'habit-cal-today-btn': 'Сегодня',
         'habit-cal-hint': 'Нажми на день, чтобы отметить / снять отметку',
+        'habit-cal-status-progress': 'в процессе',
         // Таймер обратного отсчёта привычки
         'habit-countdown-left': 'осталось',
         'habit-countdown-completed': '🎉 Цель достигнута!',
         'habit-countdown-ended': 'Трекинг завершён',
         'habit-countdown-d': 'д', 'habit-countdown-h': 'ч', 'habit-countdown-m': 'м', 'habit-countdown-s': 'с',
-        // Мини-календарь огненной серии
+        // Календарь огненной серии
         'streak-cal-title': 'История серии',
         'streak-cal-hint': 'Дни, которые поддержали твою серию',
         'streak-cal-current': 'Текущая серия',
         'streak-cal-days': 'дней',
+        'streak-cal-today-btn': 'Сегодня',
+        // Боковая панель → Резерв и восстановление
+        'sb-item-recovery': 'Резерв и восстановление',
+        'recoveryModalTitle': 'Резерв и восстановление',
+        'recoveryModalDesc': 'Код восстановления показывается только один раз, в момент создания, и нигде не хранится в читаемом виде — даже здесь. Если ты его потерял(а), создай новый код ниже; старый перестанет работать.',
+        'recoveryModalGenerateBtn': 'Создать новый код',
+        'recoveryModalCloseBtn': 'Закрыть',
+        'recoveryModalRegenConfirm': 'Это заменит твой текущий код восстановления — старый перестанет работать на новых устройствах. Продолжить?',
+        'recoveryModalNewCodeToast': '✅ Новый код создан — сохрани его',
+        'recoveryCopyBtn-copied': '✅ Скопировано',
+        'recoveryCopyBtn-failed': '⚠️ Выдели и скопируй вручную',
+        'offlineModeToast': '⚠️ Работаем офлайн — синхронизация возобновится при подключении',
+        'mkPersistFailedToast': '⚠️ Не удалось сохранить ключ на этом устройстве — при следующем запуске код может понадобиться снова',
     }
 };
 

@@ -18,6 +18,8 @@ const diary = {
     _calHabitId:    null,  // which habit's calendar modal is currently open
     _calYear:       null,  // year shown in the habit calendar modal
     _calMonth:      null,  // 0-indexed month shown in the habit calendar modal
+    _streakCalYear:  null,  // year shown in the fire-streak calendar modal
+    _streakCalMonth: null,  // 0-indexed month shown in the fire-streak calendar modal
     _habitTimerInterval: null, // live countdown ticker, only runs while the Habits tab is open
 
     t(key) { return (T[this.lang] || T.en)[key] || key; },
@@ -208,6 +210,24 @@ const diary = {
         return [...arr].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     },
 
+    // BUG FIX: a habit used to be treated as "finished" the instant it had ANY
+    // endDate at all — including a planned end date the person picked in the
+    // FUTURE when creating the habit. That made the widget immediately
+    // non-interactive (can't mark days) even though the tracking window
+    // hadn't started yet, let alone ended.
+    //
+    // Correct rule: a habit is finished when (a) its goal has already been
+    // reached, or (b) its planned end date has actually passed. The end date
+    // itself is treated as INCLUSIVE — the last day it's still fully
+    // interactive — so it only flips to "finished" starting the day AFTER
+    // that date. (Chosen because "track this until March 31" reads as
+    // including March 31 itself; the alternative, exclusive reading, would
+    // silently cut a day off the goal the person set.)
+    isHabitFinished(h) {
+        if (h.completedDays.length >= h.goal) return true;
+        return !!h.endDate && h.endDate < this.today();
+    },
+
     async saveNotes()    { await StorageManager.saveCollection('notes',    this.notes);    this.renderNotes();    this.updateFooter(); },
     async saveHabits()   { await StorageManager.saveCollection('habits',   this.habits);   this.renderHabits();   this.updateFooter(); },
     async saveMemories() { await StorageManager.saveCollection('memories', this.memories); this.renderMemories(); this.updateFooter(); },
@@ -283,7 +303,7 @@ const diary = {
     updateFooter() {
         document.getElementById('notesCount').textContent   = this.notes.length;
         document.getElementById('habitsCount').textContent  = this.habits.length;
-        document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !h.endDate).length;
+        document.getElementById('activeHabitsCount').textContent = this.habits.filter(h => !this.isHabitFinished(h)).length;
         document.getElementById('memoriesCount').textContent = this.memories.length;
         document.getElementById('tasksCount').textContent   = TaskManager.totalTasks();
         document.getElementById('fireStreakHeader').textContent  = this.fireStreak;
@@ -463,7 +483,7 @@ const diary = {
     toggleDay(id, date, e) {
         if (e) e.stopPropagation();
         const h = this.habits.find(h => h.id === id);
-        if (!h || h.endDate) return;
+        if (!h || this.isHabitFinished(h)) return;
         const s = new Set(h.completedDays);
         s.has(date) ? s.delete(date) : s.add(date);
         h.completedDays = Array.from(s);
@@ -531,7 +551,8 @@ const diary = {
     _renderHabitCalendar() {
         const habit = this.habits.find(h => h.id === this._calHabitId);
         if (!habit) return;
-        const statusText = habit.endDate ? '✅ ' + this.t('lbl-completed') : (this.lang === 'ru' ? 'в процессе' : 'in progress');
+        const finished = this.isHabitFinished(habit);
+        const statusText = finished ? '✅ ' + this.t('lbl-completed') : this.t('habit-cal-status-progress');
         document.getElementById('calendarTitle').textContent = `${habit.name} — ${statusText}`;
 
         const todayBtn = document.getElementById('calHabitTodayBtn');
@@ -553,6 +574,7 @@ const diary = {
         const firstOfMonth = new Date(year, month, 1);
         const offset = (firstOfMonth.getDay() + 6) % 7;
         const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const todayStr = this.today();
 
         let html = '<tr>';
         for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
@@ -562,8 +584,12 @@ const diary = {
             const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const done = habit.completedDays.includes(ds);
             const inRange = ds >= habit.startDate && (!habit.endDate || ds <= habit.endDate);
-            const cls = done ? 'done' : '';
-            const clickable = inRange && !habit.endDate;
+            // BUG FIX: this used to gate on `!habit.endDate`, so simply having
+            // a (possibly future) planned end date made every day non-
+            // clickable immediately. Now gated on the habit actually being
+            // finished (goal reached, or the end date has passed).
+            const clickable = inRange && !finished;
+            const cls = [done ? 'done' : '', ds === todayStr ? 'today' : ''].filter(Boolean).join(' ');
             html += `<td class="${cls}" ${clickable ? `onclick="diary.toggleDay(${habit.id},'${ds}',event);diary._renderHabitCalendar()"` : 'style="opacity:0.35;cursor:default"'}>${d}</td>`;
         }
         html += '</tr>';
@@ -584,7 +610,7 @@ const diary = {
         container.innerHTML = list.map((h, i) => {
             const done      = h.completedDays.length;
             const progress  = Math.min(Math.round(done / h.goal * 100), 100);
-            const ended     = !!h.endDate;
+            const ended     = this.isHabitFinished(h);
             const todayDone = h.completedDays.includes(todayStr);
             const isOpen    = this.openHabitDetail === h.id;
             const delay     = Math.min(i * 0.04, 0.25);
@@ -620,9 +646,11 @@ const diary = {
                 <div class="detail-panel" onclick="event.stopPropagation()">
                     <div class="flex gap-2 flex-wrap mb-3">
                         <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.showCalendar(${h.id},event)">${this.t('lbl-calendar')}</button>
+                        ${!ended ? `
                         <button class="btn-ghost ${todayDone ? 'btn-success' : ''}" style="flex:1;min-width:0;font-size:13px" onclick="diary.toggleDay(${h.id},'${todayStr}',event)">
                             ${todayDone ? this.t('lbl-done-today') : this.t('lbl-mark-today')}
-                        </button>
+                        </button>` : `
+                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px;opacity:0.6" disabled>${this.t('habit-countdown-ended')}</button>`}
                     </div>
                     <div class="flex gap-2 flex-wrap">
                         <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary._loadHabitToForm(diary.habits.find(h=>h.id===${h.id}));diary.openHabitDetail=null;diary.renderHabits()">${this.t('lbl-edit')}</button>
@@ -907,7 +935,11 @@ const diary = {
         await StorageManager.setItem('streakLog',      JSON.stringify(this.streakLog));
     },
 
-    // ---------- fire streak mini calendar/heatmap ----------
+    // ---------- fire streak calendar ----------
+    // Full month/year-navigable calendar, same UX/visual language as the habit
+    // and task calendars (replaces the old fixed 35-day, non-navigable
+    // heatmap that only ever showed the most recent 5 weeks with no month or
+    // year context).
     showStreakCalendar() {
         const countEl = document.getElementById('streakCalCount');
         if (countEl) countEl.textContent = this.fireStreak;
@@ -917,22 +949,68 @@ const diary = {
         if (curLabel) curLabel.textContent = this.t('streak-cal-current');
         const hint = document.getElementById('streak-cal-hint');
         if (hint) hint.textContent = this.t('streak-cal-hint');
+        const todayBtn = document.getElementById('streakCalTodayBtn');
+        if (todayBtn) todayBtn.textContent = this.t('streak-cal-today-btn');
 
-        const grid = document.getElementById('streakCalGrid');
-        if (grid) {
-            const days = 35; // 5 full weeks, GitHub-style heatmap
-            const todayStr = this.today();
-            const activeSet = new Set(this.streakLog);
-            let html = '';
-            for (let i = days - 1; i >= 0; i--) {
-                const ds = Util.addDays(todayStr, -i);
-                const dayNum = Util.parseLocalDate(ds).getDate();
-                const active = activeSet.has(ds);
-                html += `<div class="streak-day ${active ? 'active' : ''}" title="${ds}">${active ? '🔥' : dayNum}</div>`;
-            }
-            grid.innerHTML = html;
-        }
+        // Land on the month of the most recent streak day (or today, if the
+        // streak log is empty), same "land somewhere useful" logic as the
+        // habit calendar.
+        const mostRecent = this.streakLog.length ? this.streakLog.slice().sort().pop() : this.today();
+        const landDate = Util.parseLocalDate(mostRecent);
+        this._streakCalYear  = landDate.getFullYear();
+        this._streakCalMonth = landDate.getMonth();
+        this._renderStreakCalendar();
         document.getElementById('streakCalendarModal').classList.add('open');
+    },
+    streakCalPrevMonth() {
+        this._streakCalMonth -= 1;
+        if (this._streakCalMonth < 0) { this._streakCalMonth = 11; this._streakCalYear -= 1; }
+        this._renderStreakCalendar();
+    },
+    streakCalNextMonth() {
+        this._streakCalMonth += 1;
+        if (this._streakCalMonth > 11) { this._streakCalMonth = 0; this._streakCalYear += 1; }
+        this._renderStreakCalendar();
+    },
+    streakCalToday() {
+        const t = Util.parseLocalDate(this.today());
+        this._streakCalYear  = t.getFullYear();
+        this._streakCalMonth = t.getMonth();
+        this._renderStreakCalendar();
+    },
+    _renderStreakCalendar() {
+        const year = this._streakCalYear, month = this._streakCalMonth;
+        const label = document.getElementById('streakCalMonthYearLabel');
+        if (label) {
+            const monthName = new Date(year, month, 1).toLocaleDateString(this.lang === 'ru' ? 'ru-RU' : 'en-GB', { month: 'long', year: 'numeric' });
+            label.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+        }
+
+        const dayLabels = this.lang === 'ru' ? ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] : ['Mo','Tu','We','Th','Fr','Sa','Su'];
+        const table  = document.getElementById('streakCalTable');
+        const header = `<tr>${dayLabels.map(d=>`<th>${d}</th>`).join('')}</tr>`;
+
+        const firstOfMonth = new Date(year, month, 1);
+        const offset = (firstOfMonth.getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const todayStr = this.today();
+        const activeSet = new Set(this.streakLog);
+
+        let html = '<tr>';
+        for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const col = (offset + d - 1) % 7;
+            if (col === 0 && d !== 1) html += '</tr><tr>';
+            const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const active = activeSet.has(ds);
+            const isToday = ds === todayStr;
+            const cls = [active ? 'streak-fire' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+            // Purely a history view — nothing to toggle here, unlike the
+            // habit/task calendars — so no onclick handler.
+            html += `<td class="${cls}" style="cursor:default" title="${ds}">${active ? '🔥' : d}</td>`;
+        }
+        html += '</tr>';
+        if (table) table.innerHTML = header + html;
     },
 
     async init() {

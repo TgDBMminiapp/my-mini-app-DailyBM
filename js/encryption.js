@@ -330,11 +330,7 @@ const EncryptionManager = {
         await this._persistMKEverywhere(mkB64);
         this._rawMK = mkB64;
         await this._enterApp();
-        this._showToastOnApp(
-            (typeof diary !== 'undefined' && diary.lang === 'ru')
-                ? '⚠️ Работаем офлайн — синхронизация возобновится при подключении'
-                : '⚠️ Working offline — sync will resume once reconnected'
-        );
+        this._showToastOnApp(this._t('offlineModeToast'));
         this._scheduleCloudReconcile();
     },
 
@@ -472,9 +468,9 @@ const EncryptionManager = {
         const orig = btn ? btn.textContent : '';
         try {
             await navigator.clipboard.writeText(code);
-            if (btn) { btn.textContent = '✅ Copied'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+            if (btn) { btn.textContent = this._t('recoveryCopyBtn-copied'); setTimeout(() => { btn.textContent = orig; }, 1500); }
         } catch (e) {
-            if (btn) { btn.textContent = '⚠️ Select & copy manually'; setTimeout(() => { btn.textContent = orig; }, 2000); }
+            if (btn) { btn.textContent = this._t('recoveryCopyBtn-failed'); setTimeout(() => { btn.textContent = orig; }, 2000); }
         }
     },
 
@@ -489,8 +485,14 @@ const EncryptionManager = {
     async unlockWithRecoveryCode() {
         const input = document.getElementById('recoveryCodeInput');
         const btn = document.getElementById('enterRecoveryBtn');
-        const code = Util.normalizeRecoveryCode(input ? input.value : '');
-        if (code.length < 16) { this._flashInputError(input); return; }
+        // BUG FIX: recovery codes are always exactly 20 characters once
+        // hyphens are stripped (see generateRecoveryCode / Util.normalizeRecoveryCode)
+        // — this used to gate on `< 16`, so a code missing its last group (or with
+        // stray pasted characters) would sail past validation and go straight to
+        // a doomed decrypt attempt instead of an immediate, clear "incomplete
+        // code" error. Also cap length defensively in case of a long paste.
+        const code = Util.normalizeRecoveryCode(input ? input.value : '').slice(0, 20);
+        if (code.length < 20) { this._flashInputError(input); return; }
         if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
         try {
             const saltRes = await this._withRetries(() => TGPlatform.cloudGet('recovery_salt'));
@@ -512,15 +514,11 @@ const EncryptionManager = {
             if (!persisted) {
                 // Extremely rare (every local tier failed) — still unlocked for this
                 // session; warn so the person knows to try again on next launch.
-                this._showToastOnApp(
-                    (typeof diary !== 'undefined' && diary.lang === 'ru')
-                        ? '⚠️ Не удалось сохранить ключ на этом устройстве — при следующем запуске код может понадобиться снова'
-                        : "⚠️ Couldn't save the key on this device — you may need the code again next launch"
-                );
+                this._showToastOnApp(this._t('mkPersistFailedToast'));
             }
         } catch (e) {
             this._key = null;
-            if (btn) { btn.disabled = false; btn.textContent = 'Unlock this device'; }
+            if (btn) { btn.disabled = false; btn.textContent = this._t('enterRecoveryBtn'); }
             this._flashInputError(input);
         }
     },
@@ -559,8 +557,40 @@ const EncryptionManager = {
             }
         }
         if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceRemove('dbmix_sentinel'); await TGPlatform.deviceRemove('mk'); } catch (e) {} }
+        // FIX (reliability): SecureStorage's copy of the old Master Key was
+        // never explicitly cleared here. _silentCreateVault() below overwrites
+        // it with the brand-new MK right after, so this alone wasn't actually
+        // stranding anyone — but leaving a stale key sitting in the OS
+        // keychain until the very next write is needless risk on a path whose
+        // whole job is guaranteeing a clean slate, so clear it explicitly too.
+        if (TGPlatform.supportsSecure) { try { await TGPlatform.secureRemove('mk'); } catch (e) {} }
         try {
-            localStorage.removeItem('dbmix_salt'); localStorage.removeItem('dbmix_sentinel'); localStorage.removeItem('dbmix_mk');
+            localStorage.removeItem('dbmix_salt'); localStorage.removeItem('dbmix_sentinel');
+            localStorage.removeItem('dbmix_mk'); localStorage.removeItem('dbmix_pw');
+        } catch (e) {}
+        // FIX (reliability): the old collection indexes were never removed
+        // here, only left behind pointing at now-permanently-undecryptable
+        // data under the new key. Clear what we can reach without a valid
+        // key (the index/bookkeeping entries and any legacy blobs) so
+        // "start fresh" cleans up after itself as completely as it can from
+        // a locked-out lock screen. Per-item shards from collections that
+        // were never loaded in this browser session can't be enumerated
+        // without the old key we're discarding — those are inert, forever-
+        // undecryptable leftovers, harmless to confidentiality but not
+        // something this path can reach; StorageManager already handles
+        // that gracefully everywhere else (see loadCollection).
+        try {
+            await Promise.all([
+                (typeof StorageManager !== 'undefined') && StorageManager.wipeCollection('notes'),
+                (typeof StorageManager !== 'undefined') && StorageManager.wipeCollection('habits'),
+                (typeof StorageManager !== 'undefined') && StorageManager.wipeCollection('memories'),
+                (typeof TaskManager !== 'undefined') && TaskManager.wipeAll(),
+            ]);
+            if (typeof StorageManager !== 'undefined') {
+                for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1']) {
+                    await StorageManager.removeItem(key);
+                }
+            }
         } catch (e) {}
         // Immediately create a brand-new vault silently instead of showing a
         // "welcome" screen that asks for anything — starting fresh means the
@@ -624,7 +654,7 @@ const EncryptionManager = {
             this._presentRecoveryNotice(code);
         } catch (e) {
             this._key = null;
-            if (btn) { btn.disabled = false; btn.textContent = 'Upgrade my account'; }
+            if (btn) { btn.disabled = false; btn.textContent = this._t('migrateUnlockBtn'); }
             this._flashInputError(input);
         }
     },
@@ -656,7 +686,7 @@ const EncryptionManager = {
             await this._enterApp();
         } catch (e) {
             this._key = null;
-            if (btn) { btn.disabled = false; btn.textContent = 'Unlock 🔓'; }
+            if (btn) { btn.disabled = false; btn.textContent = this._t('lockUnlockBtn'); }
             this._flashInputError(input);
         }
     },
