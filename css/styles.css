@@ -243,6 +243,21 @@
             from { opacity:0; transform: scale(0.88) translateY(20px); }
             to   { opacity:1; transform: scale(1)    translateY(0); }
         }
+        /* FIX (light-theme contrast): .modal-box/.delete-modal-box are always
+           light-on-white in the classic Orange theme regardless of the app's
+           overall theme (see --modal-bg/--modal-text), but generic components
+           like .btn-ghost read from the page-level --text-primary (white in
+           that theme) unless a per-button inline override is added. A few
+           Cancel/Generate buttons across these modals were missing that
+           override and rendered white-on-white — effectively invisible.
+           Re-scoping --text-primary here, the same technique already used by
+           .card above, fixes every current AND future button inside a modal
+           automatically instead of relying on each call site to remember it. */
+        .modal-box, .delete-modal-box { --text-primary: var(--modal-text); }
+        .modal-box .btn-ghost:not(.btn-danger):not(.btn-success),
+        .delete-modal-box .btn-ghost:not(.btn-danger):not(.btn-success) {
+            border-color: rgba(127,127,127,0.25);
+        }
         .modal-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--modal-text); }
         .modal-close {
             background: none; border: none; cursor: pointer;
@@ -317,13 +332,22 @@
         .rel-event-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 6px; transition: background 0.15s; }
         .rel-event-btn:hover { background: rgba(0,0,0,0.1); }
 
-        #calendarTable { width: 100%; border-collapse: collapse; text-align: center; }
-        #calendarTable th { padding: 10px 4px; font-size: 12px; font-weight: 800; color: #9ca3af; letter-spacing: 0.05em; }
-        #calendarTable td { padding: 6px 2px; font-size: 13px; font-weight: 700; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
-        #calendarTable td.done  { background: #10b981; color: white; }
-        #calendarTable td.empty { background: transparent; cursor: default; }
-        #calendarTable td:not(.empty):not(.done) { background: rgba(255,255,255,0.1); color: var(--modal-text); }
-        body:not(.theme-dark) #calendarTable td:not(.empty):not(.done) { background: rgba(0,0,0,0.06); }
+        /* Shared table styling for every month/year-navigable modal calendar
+           (habit tracker + fire-streak history). */
+        #calendarTable, #streakCalTable { width: 100%; border-collapse: collapse; text-align: center; }
+        #calendarTable th, #streakCalTable th { padding: 10px 4px; font-size: 12px; font-weight: 800; color: #9ca3af; letter-spacing: 0.05em; }
+        #calendarTable td, #streakCalTable td { padding: 6px 2px; font-size: 13px; font-weight: 700; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
+        #calendarTable td.done, #streakCalTable td.done  { background: #10b981; color: white; }
+        #calendarTable td.empty, #streakCalTable td.empty { background: transparent; cursor: default; }
+        #calendarTable td:not(.empty):not(.done), #streakCalTable td:not(.empty):not(.done) { background: rgba(255,255,255,0.1); color: var(--modal-text); }
+        body:not(.theme-dark) #calendarTable td:not(.empty):not(.done), body:not(.theme-dark) #streakCalTable td:not(.empty):not(.done) { background: rgba(0,0,0,0.06); }
+        /* Current-day indicator, shared by both calendars. */
+        #calendarTable td.today, #streakCalTable td.today { box-shadow: 0 0 0 2px var(--accent-light) inset; }
+        /* Fire-streak calendar is a read-only history view, not an editable
+           tracker — no pointer cursor, and active days get the same orange/red
+           "lit" gradient used by the header's 🔥 badge instead of habit green. */
+        #streakCalTable td { cursor: default; }
+        #streakCalTable td.streak-fire { background: linear-gradient(135deg, #ff8c42, #ff5722); color: white; }
 
         .toast-msg {
             position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
@@ -735,21 +759,6 @@
         .streak-cal-summary { text-align: center; margin-bottom: 16px; }
         .streak-cal-count { font-size: 40px; font-weight: 900; font-family: 'Syne', sans-serif; color: var(--accent-light); line-height: 1; }
         .streak-cal-count-label { font-size: 12px; font-weight: 700; color: var(--text-label); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
-        .streak-cal-grid {
-            display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px;
-        }
-        .streak-day {
-            aspect-ratio: 1; border-radius: 8px;
-            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.08);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 9px; font-weight: 700; color: var(--text-label);
-        }
-        body:not(.theme-dark) .streak-day { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.06); }
-        .streak-day.empty { background: transparent; border-color: transparent; }
-        .streak-day.active {
-            background: linear-gradient(135deg, #ff8c42, #ff5722); border-color: transparent;
-            color: white; box-shadow: 0 2px 8px rgba(255,87,34,0.35);
-        }
 
         /* ══════════════ LOCK SCREEN — prominent "start fresh" ══════════════ */
         .lock-divider-or {
