@@ -138,6 +138,9 @@
         <div class="lock-desc" id="migrateDesc">We found an older password-protected journal on this account. Enter that password once to switch to instant unlock — you won't need to type it again after this.</div>
         <input type="password" id="migratePasswordInput" class="lock-input" placeholder="Current password" autocomplete="current-password" maxlength="64">
         <button class="lock-btn" id="migrateUnlockBtn" onclick="EncryptionManager.migrateFromV5()">Upgrade my account</button>
+        <div class="lock-divider-or"></div>
+        <button class="lock-btn lock-btn-danger" id="migrateStartFreshBtn" onclick="EncryptionManager.confirmStartFresh()">🗑️ I forgot the password — delete all data &amp; start fresh</button>
+        <div class="lock-hint" id="migrateStartFreshHint">This permanently deletes the old, undecryptable data on this account and creates a brand-new empty vault.</div>
     </div>
 
     <div class="lock-box lock-screen" id="lockScreenError">
@@ -591,6 +594,11 @@
         </div>
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
+        <div class="sidebar-item" onclick="SidebarUI.openPrivacyPolicy()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(148,163,184,0.25),rgba(100,116,139,0.15));border:1px solid rgba(148,163,184,0.3)">📄</div>
+            <div class="sidebar-item-label" id="sb-item-privacy">Privacy Policy</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
         <div class="sidebar-item danger" onclick="SidebarUI.confirmDeleteAccount()">
             <div class="sidebar-item-icon" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2)">🗑️</div>
             <div class="sidebar-item-label" id="sb-item-delete">Delete account &amp; all data</div>
