@@ -31,10 +31,6 @@ const Util = {
         return new Date(y, m - 1, d);
     },
 
-    escHtml(str) {
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    },
-
     b64encode(buf) {
         return btoa(String.fromCharCode(...new Uint8Array(buf)));
     },
@@ -64,29 +60,6 @@ const Util = {
     formatRecoveryInput(input) {
         const norm = this.normalizeRecoveryCode(input).slice(0, 20);
         return norm.match(/.{1,4}/g)?.join('-') || norm;
-    },
-
-    // Best-effort gzip compression for large JSON payloads before encryption.
-    // Falls back to plain UTF-8 bytes when CompressionStream isn't available —
-    // correctness over savings; decompress() mirrors the same fallback.
-    async maybeCompress(str) {
-        const bytes = new TextEncoder().encode(str);
-        if (typeof CompressionStream === 'undefined') return { compressed: false, bytes };
-        try {
-            const cs = new CompressionStream('gzip');
-            const writer = cs.writable.getWriter();
-            writer.write(bytes); writer.close();
-            const out = await new Response(cs.readable).arrayBuffer();
-            return { compressed: true, bytes: new Uint8Array(out) };
-        } catch (e) { return { compressed: false, bytes }; }
-    },
-    async maybeDecompress(bytes, compressed) {
-        if (!compressed) return new TextDecoder().decode(bytes);
-        const ds = new DecompressionStream('gzip');
-        const writer = ds.writable.getWriter();
-        writer.write(bytes); writer.close();
-        const out = await new Response(ds.readable).arrayBuffer();
-        return new TextDecoder().decode(out);
     },
 
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); },

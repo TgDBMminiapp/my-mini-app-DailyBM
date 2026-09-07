@@ -6,6 +6,7 @@ const SidebarUI = {
         en: {
             nickname: 'Nickname', menu: 'Menu', privacy: 'Privacy',
             achievements: 'Achievements', deleteAccount: 'Delete account & all data',
+            privacyPolicy: 'Privacy Policy',
             saveNick: 'Save nickname', nickPlaceholder: 'Set your nickname...',
             nickSaved: 'Nickname saved ✅',
             defaultUser: 'User',
@@ -13,6 +14,7 @@ const SidebarUI = {
         ru: {
             nickname: 'Никнейм', menu: 'Меню', privacy: 'Конфиденциальность',
             achievements: 'Достижения', deleteAccount: 'Удалить аккаунт и все данные',
+            privacyPolicy: 'Политика конфиденциальности',
             saveNick: 'Сохранить никнейм', nickPlaceholder: 'Введи никнейм...',
             nickSaved: 'Никнейм сохранён ✅',
             defaultUser: 'Пользователь',
@@ -79,6 +81,7 @@ const SidebarUI = {
         set('sb-lbl-menu',         strs.menu);
         set('sb-lbl-danger',       strs.privacy);
         set('sb-item-achievements',strs.achievements);
+        set('sb-item-privacy',     strs.privacyPolicy);
         set('sb-item-delete',      strs.deleteAccount);
         set('sidebarSaveNickBtn',  strs.saveNick);
         // Delete-account modal copy now lives in translations.js (T) so it fully
@@ -120,6 +123,21 @@ const SidebarUI = {
         this._updateHeaderDisplay();
         diary.toast((this._strings[diary.lang] || this._strings.en).nickSaved);
         AchievementsUI.recalculate(); // profile_custom achievement
+    },
+
+    // Opens the standalone Privacy Policy page. Uses Telegram's own link
+    // opener when running inside the Mini App shell (so it appears in the
+    // user's regular browser rather than an in-app webview), falling back
+    // to a normal new tab everywhere else (e.g. testing outside Telegram).
+    openPrivacyPolicy() {
+        const url = new URL('privacy.html', window.location.href).href;
+        try {
+            if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.openLink === 'function') {
+                Telegram.WebApp.openLink(url);
+                return;
+            }
+        } catch (e) {}
+        window.open(url, '_blank', 'noopener');
     },
 
     confirmDeleteAccount() {

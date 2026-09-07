@@ -25,7 +25,6 @@ const TGPlatform = {
     supportsCloud: false,
     supportsSecure: false,
     supportsDevice: false,
-    supportsBiometric: false,
 
     init() {
         const wa = (window.Telegram && window.Telegram.WebApp) || null;
@@ -33,7 +32,6 @@ const TGPlatform = {
         try { this.supportsCloud     = !!(wa && wa.CloudStorage)     && at('6.9'); } catch (e) { this.supportsCloud = false; }
         try { this.supportsSecure    = !!(wa && wa.SecureStorage)    && at('9.0'); } catch (e) { this.supportsSecure = false; }
         try { this.supportsDevice    = !!(wa && wa.DeviceStorage)    && at('9.0'); } catch (e) { this.supportsDevice = false; }
-        try { this.supportsBiometric = !!(wa && wa.BiometricManager) && at('7.2'); } catch (e) { this.supportsBiometric = false; }
     },
 
     // ── Generic callback->Promise wrapper shared by all three storages.
@@ -87,31 +85,6 @@ const TGPlatform = {
                     resolve({ ok: true, value: value || null });
                 });
             } catch (e) { resolve({ ok: false, error: e }); }
-        });
-    },
-
-    // ── Biometric gate (optional extra "App Lock" layer, not the primary
-    // key-retrieval mechanism — SecureStorage already handles that).
-    biometricAvailable() {
-        try {
-            const bm = window.Telegram.WebApp.BiometricManager;
-            return !!(bm && bm.isInited && bm.isBiometricAvailable);
-        } catch (e) { return false; }
-    },
-    biometricInit() {
-        return new Promise((resolve) => {
-            try {
-                const bm = window.Telegram.WebApp.BiometricManager;
-                if (bm.isInited) return resolve(true);
-                bm.init(() => resolve(true));
-            } catch (e) { resolve(false); }
-        });
-    },
-    biometricAuthenticate(reason) {
-        return new Promise((resolve) => {
-            try {
-                window.Telegram.WebApp.BiometricManager.authenticate({ reason: reason || '' }, (success) => resolve(!!success));
-            } catch (e) { resolve(false); }
         });
     },
 };

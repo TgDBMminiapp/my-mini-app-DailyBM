@@ -728,15 +728,6 @@ const EncryptionManager = {
         }
     },
 
-    // Lets the person re-view their recovery code any time from the sidebar,
-    // reusing the same one-time notice UI (see requirement: "you can always
-    // view this again later from the sidebar").
-    async viewRecoveryCodeAgain() {
-        const code = await this.regenerateRecoveryCode();
-        if (code) this._presentRecoveryNotice(code);
-        return code;
-    },
-
     // ---------- shared screen-state helpers ----------
     _showScreen(id) {
         document.querySelectorAll('#encryptionLock .lock-screen').forEach(el => el.classList.remove('active'));
@@ -751,15 +742,6 @@ const EncryptionManager = {
     // Escape hatch from the error screen: proceed with a local-only vault rather
     // than leaving the person stuck if retries keep failing.
     continueOffline() { this._bootDegraded(); },
-    _showToast(screenId, msg) {
-        const host = document.getElementById(screenId);
-        if (!host) return;
-        let t = host.querySelector('.lock-inline-toast');
-        if (!t) { t = document.createElement('div'); t.className = 'lock-inline-toast'; host.appendChild(t); }
-        t.textContent = msg;
-        t.style.opacity = '1';
-        setTimeout(() => { t.style.opacity = '0'; }, 3000);
-    },
     _flashInputError(input) {
         if (!input) return;
         input.style.borderColor = '#f87171';
@@ -804,6 +786,7 @@ const EncryptionManager = {
         set('sfConfirmCancelBtn', t('sfConfirmCancel')); set('sfConfirmExecuteBtn', t('sfConfirmBtn'));
         set('migrateTitle', t('migrateTitle')); set('migrateDesc', t('migrateDesc'));
         setPh('migratePasswordInput', t('migratePasswordInput-ph')); set('migrateUnlockBtn', t('migrateUnlockBtn'));
+        set('migrateStartFreshBtn', t('migrateStartFreshBtn')); set('migrateStartFreshHint', t('migrateStartFreshHint'));
         set('errorTitle', t('errorTitle')); set('errorDesc', t('errorDesc'));
         set('errorRetryBtn', t('errorRetryBtn')); set('errorOfflineLink', t('errorOfflineLink'));
         set('lock-title', t('lock-title')); set('lock-desc', t('lock-desc'));

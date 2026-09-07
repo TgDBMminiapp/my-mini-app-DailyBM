@@ -38,7 +38,6 @@ const TaskManager = {
     _calMonth: null,      // 0-indexed month currently shown in the monthly calendar
 
     today() { return Util.localDateStr(); },
-    dateOf(daysAgo) { return Util.addDays(this.today(), -daysAgo); },
 
     // ---------- loading / migration ----------
     async load() {
@@ -310,10 +309,6 @@ const TaskManager = {
     // ---------- stats surface used by the footer + AchievementsUI ----------
     completionStreak() { return this._stats.currentStreak; },
     totalCompleted() { return this._stats.totalCompletedAllTime; },
-    todayCompleted() {
-        const day = this._data[this.today()];
-        return day ? day.tasks.filter(t => t.completed).length : 0;
-    },
     totalTasks() { return this._stats.totalTasksAddedAllTime; },
     getStats() { return { ...this._stats }; },
 

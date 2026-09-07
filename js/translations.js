@@ -118,6 +118,8 @@ const T = {
         'migrateDesc': 'We found an older password-protected journal on this account. Enter that password once to switch to instant unlock — you won\u2019t need to type it again after this.',
         'migratePasswordInput-ph': 'Current password',
         'migrateUnlockBtn': 'Upgrade my account',
+        'migrateStartFreshBtn': '🗑️ I forgot the password — delete all data & start fresh',
+        'migrateStartFreshHint': 'This permanently deletes the old, undecryptable data on this account and creates a brand-new empty vault.',
         // Lock screen — connection error
         'errorTitle': 'Connection problem',
         'errorDesc': 'Couldn\u2019t reach Telegram\u2019s secure storage. Your data is safe on your account — you can retry, or keep working locally until the connection is back.',
@@ -278,6 +280,8 @@ const T = {
         'migrateDesc': 'Мы нашли на этом аккаунте старый дневник, защищённый паролем. Введи этот пароль один раз, чтобы перейти на мгновенную разблокировку — больше вводить его не понадобится.',
         'migratePasswordInput-ph': 'Текущий пароль',
         'migrateUnlockBtn': 'Обновить аккаунт',
+        'migrateStartFreshBtn': '🗑️ Я забыл(а) пароль — удалить все данные и начать заново',
+        'migrateStartFreshHint': 'Это навсегда удалит старые, нерасшифровываемые данные с этого аккаунта и создаст новое пустое хранилище.',
         // Экран блокировки — проблема соединения
         'errorTitle': 'Проблема соединения',
         'errorDesc': 'Не удалось подключиться к защищённому хранилищу Telegram. Данные в безопасности — можно повторить попытку или продолжить работу локально.',
