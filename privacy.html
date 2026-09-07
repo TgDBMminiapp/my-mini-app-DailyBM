@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Privacy Policy — DailyBookimix</title>
+<meta name="theme-color" content="#ff4500">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --accent: #ff4500;
+        --accent-light: #ff8c42;
+        --bg-gradient: linear-gradient(155deg,#ff4500 0%,#ff6b35 30%,#f7931e 60%,#ff5722 100%);
+        --glass-bg: rgba(255,255,255,0.16);
+        --glass-border: rgba(255,255,255,0.32);
+        --card-bg: rgba(255,255,255,0.78);
+        --card-border: rgba(26,26,46,0.12);
+        --text-on-hero: #ffffff;
+        --text-primary: #1a1a2e;
+        --text-muted: rgba(26,26,46,0.68);
+        --text-label: rgba(26,26,46,0.5);
+        --pill-bg: rgba(255,255,255,0.22);
+        --pill-active-bg: #ffffff;
+        --pill-active-fg: var(--accent);
+        --pill-fg: #ffffff;
+        --shadow-card: 0 8px 28px rgba(26,26,46,0.14);
+    }
+    body.theme-dark {
+        --bg-gradient: linear-gradient(160deg,#1a1420 0%,#241628 45%,#2b1a20 100%);
+        --glass-bg: rgba(255,255,255,0.06);
+        --glass-border: rgba(255,255,255,0.10);
+        --card-bg: rgba(255,255,255,0.05);
+        --card-border: rgba(255,255,255,0.12);
+        --text-primary: #eaeaf5;
+        --text-muted: rgba(234,234,245,0.66);
+        --text-label: rgba(234,234,245,0.42);
+        --pill-bg: rgba(255,255,255,0.08);
+        --pill-active-bg: #ff7043;
+        --pill-active-fg: #ffffff;
+        --pill-fg: rgba(234,234,245,0.75);
+        --shadow-card: 0 8px 32px rgba(0,0,0,0.45);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+        font-family: 'Nunito', sans-serif;
+        background: var(--bg-gradient);
+        min-height: 100vh;
+        color: var(--text-primary);
+        transition: background 0.4s ease;
+    }
+    .wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 28px 18px 56px;
+    }
+
+    /* ── Top bar: brand + theme/lang controls ── */
+    .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 22px;
+    }
+    .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text-on-hero);
+    }
+    .brand-icon {
+        width: 38px; height: 38px; border-radius: 12px;
+        background: var(--glass-bg); border: 1px solid var(--glass-border);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; backdrop-filter: blur(10px);
+    }
+    body.theme-dark .brand { color: var(--text-primary); }
+    .brand-name {
+        font-family: 'Syne', sans-serif; font-weight: 800; font-size: 17px;
+        letter-spacing: -0.01em;
+    }
+    .controls { display: flex; gap: 8px; }
+    .pill-group {
+        display: flex; background: var(--glass-bg); border: 1px solid var(--glass-border);
+        border-radius: 999px; padding: 3px; backdrop-filter: blur(10px);
+    }
+    .pill-group button {
+        border: none; background: transparent; cursor: pointer;
+        font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 12px;
+        color: var(--pill-fg); padding: 7px 12px; border-radius: 999px;
+        transition: background 0.18s, color 0.18s;
+    }
+    .pill-group button.active {
+        background: var(--pill-active-bg); color: var(--pill-active-fg);
+    }
+    .theme-toggle {
+        width: 36px; height: 36px; border-radius: 999px;
+        background: var(--glass-bg); border: 1px solid var(--glass-border);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 16px; cursor: pointer; backdrop-filter: blur(10px);
+        color: var(--pill-fg);
+    }
+
+    /* ── Hero ── */
+    .hero {
+        color: var(--text-on-hero);
+        padding: 10px 6px 26px;
+    }
+    body.theme-dark .hero { color: var(--text-primary); }
+    .hero-eyebrow {
+        font-size: 13px; font-weight: 700; opacity: 0.85; margin-bottom: 8px;
+    }
+    .hero h1 {
+        font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 800;
+        line-height: 1.15; margin: 0 0 10px;
+    }
+    .hero p {
+        font-size: 14px; font-weight: 600; opacity: 0.85; margin: 0;
+        line-height: 1.5;
+    }
+
+    /* ── Policy card ── */
+    .card {
+        background: var(--card-bg); border: 1px solid var(--card-border);
+        border-radius: 24px; padding: 26px 24px; box-shadow: var(--shadow-card);
+        backdrop-filter: blur(18px);
+    }
+    .card section { margin-bottom: 26px; }
+    .card section:last-child { margin-bottom: 0; }
+    .card h2 {
+        font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 800;
+        margin: 0 0 10px; display: flex; align-items: center; gap: 10px;
+    }
+    .num {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 24px; height: 24px; border-radius: 8px;
+        background: rgba(255,69,0,0.14); color: var(--accent);
+        font-size: 12px; font-weight: 900; flex-shrink: 0;
+    }
+    body.theme-dark .num { background: rgba(255,112,67,0.16); color: var(--accent-light); }
+    .card p {
+        font-size: 14.5px; line-height: 1.65; color: var(--text-muted); margin: 0 0 10px;
+    }
+    .card ul { margin: 0 0 10px; padding-left: 20px; }
+    .card li {
+        font-size: 14.5px; line-height: 1.6; color: var(--text-muted); margin-bottom: 8px;
+    }
+    .card li:last-child { margin-bottom: 0; }
+    .card strong { color: var(--text-primary); }
+
+    .updated {
+        display: inline-block; font-size: 12px; font-weight: 800;
+        color: var(--text-label); text-transform: uppercase; letter-spacing: 0.06em;
+        margin-bottom: 4px;
+    }
+
+    .footer-note {
+        text-align: center; font-size: 12px; color: var(--text-on-hero);
+        opacity: 0.75; margin-top: 24px; line-height: 1.6;
+    }
+    body.theme-dark .footer-note { color: var(--text-muted); opacity: 1; }
+
+    [data-lang] { display: none; }
+    [data-lang].active { display: block; }
+
+    @media (max-width: 420px) {
+        .hero h1 { font-size: 26px; }
+        .card { padding: 22px 18px; border-radius: 20px; }
+    }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+    <div class="topbar">
+        <div class="brand">
+            <div class="brand-icon">🔐</div>
+            <div class="brand-name">DailyBookimix</div>
+        </div>
+        <div class="controls">
+            <div class="pill-group" id="langSwitch">
+                <button type="button" data-set-lang="en" class="active">EN</button>
+                <button type="button" data-set-lang="ru">RU</button>
+            </div>
+            <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme">☀️</button>
+        </div>
+    </div>
+
+    <div class="hero">
+        <div data-lang="en" class="active">
+            <div class="hero-eyebrow">Legal</div>
+            <h1>Privacy Policy</h1>
+            <p>How DailyBookimix handles your diary, notes, habits, tasks and memories.</p>
+        </div>
+        <div data-lang="ru">
+            <div class="hero-eyebrow">Юридическая информация</div>
+            <h1>Политика конфиденциальности</h1>
+            <p>Как DailyBookimix обращается с вашим дневником, заметками, привычками, задачами и воспоминаниями.</p>
+        </div>
+    </div>
+
+    <div class="card">
+
+        <!-- ═══════════════ ENGLISH ═══════════════ -->
+        <div data-lang="en" class="active">
+            <span class="updated">Last updated: 7 September 2026</span>
+
+            <section>
+                <h2><span class="num">1</span>Who we are</h2>
+                <p>DailyBookimix is a Telegram Mini App that lets you keep a private diary, notes, habits, daily tasks and memories.</p>
+                <p>The developer does not collect, receive, store or process any of your personal content on any own servers. No user data is sold, shared with advertisers or third parties for marketing. Privacy and security of your data are the core priority of this app.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">2</span>Data we process</h2>
+                <ul>
+                    <li><strong>Telegram profile data</strong> (user ID, first/last name, profile photo) — received only via Telegram's official WebApp API and used solely to display your name and avatar inside the app. This data is never sent to the developer.</li>
+                    <li><strong>Your content</strong> (notes, habits, tasks, memories, nickname, streaks, achievements) — created and stored by you.</li>
+                    <li><strong>Technical data</strong> — standard web hosting logs (e.g. IP address, browser type) that may be generated by the hosting provider (Vercel) when the static files of the app are loaded. The developer does not access or analyse these logs for user identification.</li>
+                </ul>
+                <p>We do not use analytics, tracking pixels, advertising SDKs or any other tools that collect behavioural data.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">3</span>How your data is protected (encryption)</h2>
+                <p>All your content is encrypted on your device before it is saved:</p>
+                <ul>
+                    <li>A random 256-bit Master Key is generated once using the Web Crypto API (<code>crypto.getRandomValues</code>).</li>
+                    <li>Your data is encrypted with AES-256-GCM using this Master Key.</li>
+                    <li>The Master Key itself is stored only locally (Telegram SecureStorage / DeviceStorage / localStorage) and never leaves your device in readable form.</li>
+                    <li>A recovery code (shown once) protects a copy of the Master Key via PBKDF2 (600,000 iterations, SHA-256) + AES.</li>
+                    <li>Only encrypted blobs are written to Telegram CloudStorage (for cross-device sync under your Telegram account). The developer has no access to the plaintext content or the Master Key.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2><span class="num">4</span>Where data is stored</h2>
+                <ul>
+                    <li>Encrypted data → Telegram CloudStorage, DeviceStorage, SecureStorage and your device's localStorage.</li>
+                    <li>Static app files → Vercel hosting.</li>
+                </ul>
+                <p>Telegram and Vercel act as independent processors according to their own privacy policies. The developer does not control their infrastructure.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">5</span>Your rights</h2>
+                <p>You can delete all your data at any time via the "Delete account &amp; all data" button in the sidebar. After deletion the encrypted data is removed from the storages used by the app.</p>
+                <p>You may also stop using the app and delete the chat with the bot.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">6</span>Changes</h2>
+                <p>We may update this Policy. The current version is always available on this page and via the bot settings.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">7</span>Contact</h2>
+                <p>For any privacy-related questions please contact the developer through the Telegram bot linked to DailyBookimix.</p>
+                <p>By using the app you acknowledge this Privacy Policy.</p>
+            </section>
+        </div>
+
+        <!-- ═══════════════ RUSSIAN ═══════════════ -->
+        <div data-lang="ru">
+            <span class="updated">Последнее обновление: 7 сентября 2026 г.</span>
+
+            <section>
+                <h2><span class="num">1</span>Кто мы</h2>
+                <p>DailyBookimix — это мини-приложение Telegram, которое позволяет вести личный дневник, заметки, привычки, ежедневные задачи и воспоминания.</p>
+                <p>Разработчик не собирает, не получает, не хранит и не обрабатывает какой-либо ваш личный контент на собственных серверах. Никакие пользовательские данные не продаются и не передаются рекламодателям или третьим лицам в маркетинговых целях. Конфиденциальность и безопасность ваших данных — главный приоритет этого приложения.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">2</span>Какие данные мы обрабатываем</h2>
+                <ul>
+                    <li><strong>Данные профиля Telegram</strong> (ID пользователя, имя/фамилия, фото профиля) — получаются только через официальный WebApp API Telegram и используются исключительно для отображения вашего имени и аватара внутри приложения. Эти данные никогда не передаются разработчику.</li>
+                    <li><strong>Ваш контент</strong> (заметки, привычки, задачи, воспоминания, никнейм, стрики, достижения) — создаётся и хранится вами.</li>
+                    <li><strong>Технические данные</strong> — стандартные логи веб-хостинга (например, IP-адрес, тип браузера), которые могут создаваться хостинг-провайдером (Vercel) при загрузке статических файлов приложения. Разработчик не получает доступ к этим логам и не анализирует их для идентификации пользователей.</li>
+                </ul>
+                <p>Мы не используем аналитику, трекинг-пиксели, рекламные SDK или любые другие инструменты, собирающие поведенческие данные.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">3</span>Как защищены ваши данные (шифрование)</h2>
+                <p>Весь ваш контент шифруется на вашем устройстве перед сохранением:</p>
+                <ul>
+                    <li>Случайный 256-битный Мастер-ключ генерируется один раз с помощью Web Crypto API (<code>crypto.getRandomValues</code>).</li>
+                    <li>Ваши данные шифруются алгоритмом AES-256-GCM с использованием этого Мастер-ключа.</li>
+                    <li>Сам Мастер-ключ хранится только локально (Telegram SecureStorage / DeviceStorage / localStorage) и никогда не покидает ваше устройство в открытом виде.</li>
+                    <li>Код восстановления (показывается один раз) защищает копию Мастер-ключа с помощью PBKDF2 (600 000 итераций, SHA-256) + AES.</li>
+                    <li>В Telegram CloudStorage записываются только зашифрованные блоки данных (для синхронизации между устройствами в рамках вашего аккаунта Telegram). У разработчика нет доступа ни к незашифрованному контенту, ни к Мастер-ключу.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2><span class="num">4</span>Где хранятся данные</h2>
+                <ul>
+                    <li>Зашифрованные данные → Telegram CloudStorage, DeviceStorage, SecureStorage и localStorage вашего устройства.</li>
+                    <li>Статические файлы приложения → хостинг Vercel.</li>
+                </ul>
+                <p>Telegram и Vercel действуют как независимые обработчики данных в соответствии со своими собственными политиками конфиденциальности. Разработчик не контролирует их инфраструктуру.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">5</span>Ваши права</h2>
+                <p>Вы можете удалить все свои данные в любой момент с помощью кнопки «Удалить аккаунт и все данные» в боковом меню. После удаления зашифрованные данные удаляются из всех хранилищ, используемых приложением.</p>
+                <p>Вы также можете прекратить использование приложения и удалить чат с ботом.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">6</span>Изменения</h2>
+                <p>Мы можем обновлять эту Политику. Актуальная версия всегда доступна на этой странице и в настройках бота.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">7</span>Контакты</h2>
+                <p>По любым вопросам, связанным с конфиденциальностью, пожалуйста, обращайтесь к разработчику через Telegram-бота, связанного с DailyBookimix.</p>
+                <p>Используя приложение, вы подтверждаете согласие с настоящей Политикой конфиденциальности.</p>
+            </section>
+        </div>
+
+    </div>
+
+    <div class="footer-note">
+        <span data-lang="en" class="active">DailyBookimix · Privacy Policy</span>
+        <span data-lang="ru">DailyBookimix · Политика конфиденциальности</span>
+    </div>
+</div>
+
+<script>
+    (function () {
+        var STORAGE_LANG = 'dbmix_privacy_lang';
+        var STORAGE_THEME = 'dbmix_privacy_theme';
+
+        function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+        function safeSet(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+        // ── Language ──
+        function setLang(lang) {
+            document.querySelectorAll('[data-lang]').forEach(function (el) {
+                el.classList.toggle('active', el.getAttribute('data-lang') === lang);
+            });
+            document.querySelectorAll('#langSwitch button').forEach(function (btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-set-lang') === lang);
+            });
+            document.documentElement.lang = lang;
+            safeSet(STORAGE_LANG, lang);
+        }
+        document.getElementById('langSwitch').addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-set-lang]');
+            if (btn) setLang(btn.getAttribute('data-set-lang'));
+        });
+
+        // Try to inherit the language already chosen inside the Mini App itself
+        // (falls back to a locally saved choice, then the device/browser locale).
+        var initialLang = 'en';
+        var appLangHint = safeGet('dbmix_lang_hint');
+        var savedHere = safeGet(STORAGE_LANG);
+        if (appLangHint === 'ru' || appLangHint === 'en') {
+            initialLang = appLangHint;
+        } else if (savedHere === 'ru' || savedHere === 'en') {
+            initialLang = savedHere;
+        } else if ((navigator.language || '').toLowerCase().startsWith('ru')) {
+            initialLang = 'ru';
+        }
+        setLang(initialLang);
+
+        // ── Theme ──
+        function setTheme(theme) {
+            document.body.classList.toggle('theme-dark', theme === 'dark');
+            document.getElementById('themeToggle').textContent = theme === 'dark' ? '🌙' : '☀️';
+            safeSet(STORAGE_THEME, theme);
+        }
+        document.getElementById('themeToggle').addEventListener('click', function () {
+            var next = document.body.classList.contains('theme-dark') ? 'light' : 'dark';
+            setTheme(next);
+        });
+
+        var initialTheme = 'light';
+        var savedTheme = safeGet(STORAGE_THEME);
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            initialTheme = savedTheme;
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            initialTheme = 'dark';
+        }
+        setTheme(initialTheme);
+    })();
+</script>
+
+</body>
+</html>
