@@ -26,6 +26,20 @@ const TGPlatform = {
     supportsSecure: false,
     supportsDevice: false,
 
+    // ── v8.0 FIX (infinite "Unlocking…" on iOS) ──────────────────────────
+    // CloudStorage/DeviceStorage/SecureStorage calls only ever resolved when
+    // Telegram's native bridge actually invoked our callback. SecureStorage
+    // and DeviceStorage are newer APIs (Bot API 9.0) and on some iOS client
+    // versions `isVersionAtLeast('9.0')` can report true while the native
+    // handler for that specific method never calls back — the Promise then
+    // hangs forever, and since boot()'s very first await is
+    // `_readMKAnywhere()` -> `secureGet('mk')`, the whole app got stuck on
+    // the "Unlocking…" screen with no way out. Every bridge call below now
+    // races against this timeout, so a dead callback resolves as a normal
+    // `{ ok:false, error:'bridge_timeout' }` instead of hanging, letting the
+    // existing retry / degraded-mode logic in EncryptionManager take over.
+    BRIDGE_TIMEOUT_MS: 2500,
+
     init() {
         const wa = (window.Telegram && window.Telegram.WebApp) || null;
         const at = (v) => { try { return !!(wa && wa.isVersionAtLeast && wa.isVersionAtLeast(v)); } catch (e) { return false; } };
@@ -38,27 +52,42 @@ const TGPlatform = {
     // Returns a TRI-STATE result so callers can tell "key genuinely absent"
     // apart from "the call failed" — conflating those two was the root
     // cause of a real data-loss bug in v5 (see EncryptionManager below).
-    _wrapGet(api, key) {
+    // Shared guard: starts a timer alongside the native call and whichever
+    // settles first wins. A `settled` flag stops a late-arriving native
+    // callback (one that finally fires *after* we already gave up) from
+    // double-resolving the promise or clobbering a result we already handed
+    // back to the caller.
+    _withTimeout(executor) {
         return new Promise((resolve) => {
-            try {
-                api.getItem(key, (err, value) => {
-                    if (err) return resolve({ ok: false, error: err });
-                    const present = value !== null && value !== undefined && value !== '';
-                    resolve({ ok: true, value: present ? value : null });
-                });
-            } catch (e) { resolve({ ok: false, error: e }); }
+            let settled = false;
+            const finish = (result) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(result);
+            };
+            const timer = setTimeout(() => finish({ ok: false, error: 'bridge_timeout' }), this.BRIDGE_TIMEOUT_MS);
+            try { executor(finish); }
+            catch (e) { finish({ ok: false, error: e }); }
+        });
+    },
+    _wrapGet(api, key) {
+        return this._withTimeout((finish) => {
+            api.getItem(key, (err, value) => {
+                if (err) return finish({ ok: false, error: err });
+                const present = value !== null && value !== undefined && value !== '';
+                finish({ ok: true, value: present ? value : null });
+            });
         });
     },
     _wrapSet(api, key, value) {
-        return new Promise((resolve) => {
-            try { api.setItem(key, value, (err) => resolve({ ok: !err, error: err || null })); }
-            catch (e) { resolve({ ok: false, error: e }); }
+        return this._withTimeout((finish) => {
+            api.setItem(key, value, (err) => finish({ ok: !err, error: err || null }));
         });
     },
     _wrapRemove(api, key) {
-        return new Promise((resolve) => {
-            try { api.removeItem(key, (err) => resolve({ ok: !err, error: err || null })); }
-            catch (e) { resolve({ ok: false, error: e }); }
+        return this._withTimeout((finish) => {
+            api.removeItem(key, (err) => finish({ ok: !err, error: err || null }));
         });
     },
 
@@ -76,15 +105,13 @@ const TGPlatform = {
     // restoreKey: lets the user explicitly re-grant access to a SecureStorage
     // value that existed on this device before (e.g. after a fresh install).
     secureRestore(key) {
-        return new Promise((resolve) => {
-            try {
-                const ss = window.Telegram.WebApp.SecureStorage;
-                if (typeof ss.restoreKey !== 'function') return resolve({ ok: false, error: 'unsupported' });
-                ss.restoreKey(key, (err, value) => {
-                    if (err) return resolve({ ok: false, error: err });
-                    resolve({ ok: true, value: value || null });
-                });
-            } catch (e) { resolve({ ok: false, error: e }); }
+        return this._withTimeout((finish) => {
+            const ss = window.Telegram.WebApp.SecureStorage;
+            if (typeof ss.restoreKey !== 'function') return finish({ ok: false, error: 'unsupported' });
+            ss.restoreKey(key, (err, value) => {
+                if (err) return finish({ ok: false, error: err });
+                finish({ ok: true, value: value || null });
+            });
         });
     },
 };
