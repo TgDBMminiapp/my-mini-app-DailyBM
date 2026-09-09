@@ -1,5 +1,23 @@
 <!DOCTYPE html>
 <!-- ============================================================
+     DailyBookimix v8.0 — BRIDGE RELIABILITY EDITION
+
+     WHAT CHANGED (v7.7 → v8.0)
+     1. Fixed the iOS "stuck on Unlocking… forever" bug: TGPlatform's
+        CloudStorage/DeviceStorage/SecureStorage calls had no timeout, so a
+        native bridge callback that silently never fired (seen on some iOS
+        Telegram client versions for the newer SecureStorage/DeviceStorage
+        APIs) hung boot() indefinitely. Every bridge call is now bounded by
+        TGPlatform.BRIDGE_TIMEOUT_MS and resolves as a normal failure instead
+        of hanging — see js/tg-platform.js.
+     2. Added a hard boot() watchdog (js/boot.js) as a second, independent
+        safety net so no future unguarded await can strand anyone again.
+     3. Cache-busting on all local script/style tags below, so a redeploy
+        can no longer get stuck behind a stale cached bundle in Telegram's
+        WebView (this was the actual cause of the "missing delete-my-data
+        button" report — that button already existed in v7.7's code, it
+        just wasn't reaching some users).
+     ============================================================
      DailyBookimix v7.7 — AUTH REDESIGN + POLISH EDITION
      ============================================================
 
@@ -88,7 +106,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=8.0">
 </head>
 <body class="font-sans">
 
@@ -654,15 +672,15 @@
 </div>
 
 
-<script src="js/util.js"></script>
-<script src="js/tg-platform.js"></script>
-<script src="js/encryption.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/translations.js"></script>
-<script src="js/task-manager.js"></script>
-<script src="js/diary.js"></script>
-<script src="js/sidebar.js"></script>
-<script src="js/achievements.js"></script>
-<script src="js/boot.js"></script>
+<script src="js/util.js?v=8.0"></script>
+<script src="js/tg-platform.js?v=8.0"></script>
+<script src="js/encryption.js?v=8.0"></script>
+<script src="js/storage.js?v=8.0"></script>
+<script src="js/translations.js?v=8.0"></script>
+<script src="js/task-manager.js?v=8.0"></script>
+<script src="js/diary.js?v=8.0"></script>
+<script src="js/sidebar.js?v=8.0"></script>
+<script src="js/achievements.js?v=8.0"></script>
+<script src="js/boot.js?v=8.0"></script>
 </body>
 </html>
