@@ -386,6 +386,16 @@
         .search-wrap .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; pointer-events: none; }
         .search-wrap .fi { padding-left: 42px; }
 
+        /* v8.1: global search result highlighting — used across Notes,
+           Habits, Archive, and Tasks so a matched word stands out inside a
+           card without affecting layout, wrapping, or interactivity. */
+        mark.search-hl {
+            background: var(--accent-light); color: #1a1408;
+            padding: 0 3px; border-radius: 4px; font-weight: 800;
+            box-decoration-break: clone; -webkit-box-decoration-break: clone;
+        }
+        body.theme-dark mark.search-hl { background: var(--accent); color: #0d1117; }
+
         .section-header {
             font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
             color: var(--text-primary); display: flex; align-items: center; gap: 10px;
