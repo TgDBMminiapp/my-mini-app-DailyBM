@@ -232,6 +232,17 @@
             background: rgba(0,0,0,0.65); backdrop-filter: blur(10px);
         }
         .modal-overlay.open { display: flex; align-items: center; justify-content: center; padding: 20px; }
+        /* FIX v8.2: #startFreshConfirmModal is opened (via .open) from the
+           "I forgot the password / I don't have my code — delete all data &
+           start fresh" buttons, which live inside #encryptionLock. That lock
+           screen sits at z-index 99999, far above .modal-overlay's 8000, so
+           the confirmation modal was being rendered (and correctly toggled
+           open by EncryptionManager.confirmStartFresh()) completely hidden
+           behind the lock screen — clicks landed on the lock screen underneath,
+           making the button look dead even though the button and its handler
+           were both working. Raising just this modal above #encryptionLock
+           makes it visible/clickable without touching any other modal. */
+        #startFreshConfirmModal.open { z-index: 100000; }
         .modal-box {
             background: var(--modal-bg); color: var(--modal-text);
             border-radius: 28px; padding: 28px;
