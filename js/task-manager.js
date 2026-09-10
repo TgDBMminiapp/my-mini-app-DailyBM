@@ -324,14 +324,18 @@ const TaskManager = {
 
         this._renderCalendar(dateStr);
 
+        // NOTE (v8.1): the secondary "🔥 streak" chip that used to appear
+        // here has been removed — the app already has one fire streak
+        // indicator (the main streak in the header). The underlying streak
+        // calculation (`completionStreak()` / `_stats.currentStreak`) is
+        // NOT removed, since it also drives the "3-day task streak"
+        // achievement in achievements.js — only this redundant visual is gone.
         const statsBar = document.getElementById('taskStatsBar');
         if (statsBar) {
             const sum = this._summary[dateStr] || { done: 0, total: 0 };
-            const streak = this.completionStreak();
             statsBar.innerHTML = `
                 <div class="task-stat-chip">✅ <b>${sum.done}</b> ${diary.t('tasks-stat-done')}</div>
                 <div class="task-stat-chip">📋 <b>${sum.total}</b> ${diary.t('tasks-stat-total')}</div>
-                <div class="task-stat-chip">🔥 <b>${streak}</b> ${diary.t('tasks-stat-streak-days')} ${diary.t('tasks-stat-streak')}</div>
             `;
         }
 
@@ -339,19 +343,30 @@ const TaskManager = {
         const dayData = this.dayData(dateStr);
         const tasks = dayData.tasks;
 
+        // v8.1: real-time task search — matches task text, plus a few
+        // localized status keywords (done / pending / important), so a task
+        // can also be found by its completion state, not just its wording.
+        const searchInput = document.getElementById('tasksSearch');
+        const searchRaw   = searchInput ? (searchInput.value || '') : '';
+        const search      = searchRaw.trim().toLowerCase();
+        const visibleTasks = search ? tasks.filter(t => this._matchesTaskSearch(t, search)) : tasks;
+
         if (list) {
             if (!tasks.length) {
                 list.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><p>${diary.t('tasks-empty')}</p></div>`;
+            } else if (!visibleTasks.length) {
+                list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>${diary.t('search-empty')}</p></div>`;
             } else {
-                list.innerHTML = tasks.map((task, i) => {
+                list.innerHTML = visibleTasks.map((task, i) => {
                     const delay = Math.min(i * 0.03, 0.2);
+                    const text = search ? Util.highlightMatch(this._escHtml(task.text), searchRaw) : this._escHtml(task.text);
                     return `
                     <div class="task-item ${task.important ? 'important' : ''} ${task.completed ? 'completed' : ''}"
                          style="animation-delay:${delay}s">
                         <div class="task-check" onclick="TaskManager.toggleTask('${dateStr}',${task.id})">
                             <span class="task-check-inner">✓</span>
                         </div>
-                        <span class="task-text">${this._escHtml(task.text)}</span>
+                        <span class="task-text">${text}</span>
                         ${task.important ? '<span class="task-star">⭐</span>' : ''}
                         <button class="task-del-btn" onclick="TaskManager.deleteTask('${dateStr}',${task.id})">✕</button>
                     </div>`;
@@ -476,6 +491,24 @@ const TaskManager = {
 
     _escHtml(str) {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+
+    // ---------- v8.1: real-time task search ----------
+    // `query` is already trimmed + lower-cased by the caller. Matches the
+    // task's own text first (the common case), then falls back to a small
+    // set of localized status keywords so typing "done"/"important" (or
+    // their Russian equivalents) filters by status too.
+    _matchesTaskSearch(task, query) {
+        if (!query) return true;
+        if (task.text.toLowerCase().includes(query)) return true;
+
+        const kw = (key) => (diary.t(key) || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const fuzzyIncludes = (words) => words.some(w => w && (query.includes(w) || w.includes(query)));
+
+        if (task.completed  && fuzzyIncludes(kw('tasks-search-kw-done')))      return true;
+        if (!task.completed && fuzzyIncludes(kw('tasks-search-kw-pending')))   return true;
+        if (task.important  && fuzzyIncludes(kw('tasks-search-kw-important'))) return true;
+        return false;
     }
 };
 

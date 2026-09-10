@@ -63,6 +63,26 @@ const Util = {
     },
 
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
+
+    // ── v8.1: global search highlighting ──────────────────────────────
+    // Wraps every case-insensitive occurrence of `query` inside `text` with
+    // a <mark class="search-hl"> span so active search results are visually
+    // highlighted while staying fully interactive (the wrapped text is only
+    // used for display — all click/edit/delete handlers still read the
+    // original, un-highlighted data fields). Safe no-op when the query is
+    // empty or contains only regex-special characters that fail to compile.
+    highlightMatch(text, query) {
+        const str = text == null ? '' : String(text);
+        const q = (query == null ? '' : String(query)).trim();
+        if (!q) return str;
+        try {
+            const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp('(' + escaped + ')', 'ig');
+            return str.replace(re, '<mark class="search-hl">$1</mark>');
+        } catch (e) {
+            return str;
+        }
+    },
 };
 
 

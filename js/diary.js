@@ -151,6 +151,7 @@ const diary = {
         ph('notesSearch',      'notesSearch-ph');
         ph('habitsSearch',     'habitsSearch-ph');
         ph('memoriesSearch',   'memoriesSearch-ph');
+        ph('tasksSearch',      'tasksSearch-ph');
         ph('eventDesc',        'eventDesc-ph');
         ph('taskQuickInput',   'tasks-quick-ph');
 
@@ -377,17 +378,26 @@ const diary = {
     },
 
     renderNotes() {
-        const container = document.getElementById('notesList');
-        const search    = (document.getElementById('notesSearch').value || '').toLowerCase();
-        const cat       = document.getElementById('filterCategory').value;
+        const container  = document.getElementById('notesList');
+        const searchRaw  = document.getElementById('notesSearch').value || '';
+        const search     = searchRaw.trim().toLowerCase();
+        const cat        = document.getElementById('filterCategory').value;
 
         let list = [...this.notes];
         if (cat !== 'all') list = list.filter(n => n.category === cat);
+        // v8.1: search now matches title, content, category label, and date —
+        // not just title/content — so a note can also be found by typing its
+        // category or the date it was written on.
         if (search) list = list.filter(n =>
-            n.title.toLowerCase().includes(search) || n.content.toLowerCase().includes(search));
+            n.title.toLowerCase().includes(search) ||
+            n.content.toLowerCase().includes(search) ||
+            this.t('cat-' + n.category).toLowerCase().includes(search) ||
+            (n.date || '').toLowerCase().includes(search));
 
         if (!list.length) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><p>${this.t('notes-empty')}</p></div>`;
+            container.innerHTML = search
+                ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>${this.t('search-empty')}</p></div>`
+                : `<div class="empty-state"><div class="empty-icon">📝</div><p>${this.t('notes-empty')}</p></div>`;
             return;
         }
 
@@ -396,6 +406,8 @@ const diary = {
             const isOpen   = this.openNoteDetail === note.id;
             const delay    = Math.min(i * 0.04, 0.25);
             const pinLabel = note.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
+            const title    = search ? Util.highlightMatch(note.title, searchRaw)   : note.title;
+            const content  = search ? Util.highlightMatch(note.content, searchRaw) : note.content;
             return `
             <div class="record-card ${note.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleNoteDetail(${note.id})">
                 ${note.pinned ? '<span class="pin-badge">📌</span>' : ''}
@@ -403,9 +415,9 @@ const diary = {
                     <span class="cat-pill ${catClass[note.category] || 'cat-personal'}">${this.t('cat-' + note.category)}</span>
                     <span style="font-size:11px;color:var(--text-label);white-space:nowrap">${note.date}</span>
                 </div>
-                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${note.title}</div>
+                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${title}</div>
                 <div style="font-size:14px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'3'};-webkit-box-orient:vertical;overflow:hidden">
-                    ${note.content}
+                    ${content}
                 </div>
                 ${isOpen ? `
                 <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
@@ -598,11 +610,24 @@ const diary = {
 
     renderHabits() {
         const container = document.getElementById('habitsList');
-        const search    = (document.getElementById('habitsSearch').value || '').toLowerCase();
-        const list      = this.habits.filter(h => h.name.toLowerCase().includes(search));
+        const searchRaw = document.getElementById('habitsSearch').value || '';
+        const search    = searchRaw.trim().toLowerCase();
+        // v8.1: search now matches name, description, start/end date, and
+        // completion status (e.g. typing "completed" surfaces finished habits).
+        const list = this.habits.filter(h => {
+            if (!search) return true;
+            if (h.name.toLowerCase().includes(search)) return true;
+            if ((h.description || '').toLowerCase().includes(search)) return true;
+            if ((h.startDate || '').toLowerCase().includes(search)) return true;
+            if ((h.endDate || '').toLowerCase().includes(search)) return true;
+            if (this.isHabitFinished(h) && this.t('lbl-completed').toLowerCase().includes(search)) return true;
+            return false;
+        });
 
         if (!list.length) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔥</div><p>${this.t('habits-empty')}</p></div>`;
+            container.innerHTML = search
+                ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>${this.t('search-empty')}</p></div>`
+                : `<div class="empty-state"><div class="empty-icon">🔥</div><p>${this.t('habits-empty')}</p></div>`;
             return;
         }
 
@@ -615,14 +640,16 @@ const diary = {
             const isOpen    = this.openHabitDetail === h.id;
             const delay     = Math.min(i * 0.04, 0.25);
             const pinLabel  = h.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
+            const name        = search ? Util.highlightMatch(h.name, searchRaw) : h.name;
+            const description = search && h.description ? Util.highlightMatch(h.description, searchRaw) : h.description;
 
             return `
             <div class="record-card ${h.pinned ? 'pinned' : ''} ${ended ? 'opacity-80' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleHabitDetail(${h.id})">
                 ${h.pinned ? '<span class="pin-badge">📌</span>' : ''}
                 <div class="flex items-start justify-between gap-2 mb-2">
                     <div>
-                        <div class="font-bold text-[16px]" style="color:var(--text-primary)">${h.name}</div>
-                        ${h.description ? `<div style="font-size:13px;color:var(--text-muted);margin-top:2px">${h.description}</div>` : ''}
+                        <div class="font-bold text-[16px]" style="color:var(--text-primary)">${name}</div>
+                        ${description ? `<div style="font-size:13px;color:var(--text-muted);margin-top:2px">${description}</div>` : ''}
                     </div>
                     ${ended ? `<span class="chip green">${this.t('lbl-completed')}</span>` : ''}
                 </div>
@@ -789,15 +816,25 @@ const diary = {
 
     renderMemories() {
         const container = document.getElementById('memoriesList');
-        const search    = (document.getElementById('memoriesSearch').value || '').toLowerCase();
-        const list      = this.memories.filter(m =>
-            m.title.toLowerCase().includes(search) ||
-            (m.notes || '').toLowerCase().includes(search) ||
-            (m.partnerName || '').toLowerCase().includes(search)
-        );
+        const searchRaw = document.getElementById('memoriesSearch').value || '';
+        const search    = searchRaw.trim().toLowerCase();
+        // v8.1: search now also matches the memory type label and both dates,
+        // in addition to title, notes, and partner name.
+        const list = this.memories.filter(m => {
+            if (!search) return true;
+            if (m.title.toLowerCase().includes(search)) return true;
+            if ((m.notes || '').toLowerCase().includes(search)) return true;
+            if ((m.partnerName || '').toLowerCase().includes(search)) return true;
+            if (this.t('type-' + m.type).toLowerCase().includes(search)) return true;
+            if ((m.startDate || '').toLowerCase().includes(search)) return true;
+            if ((m.endDate || '').toLowerCase().includes(search)) return true;
+            return false;
+        });
 
         if (!list.length) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div><p>${this.t('memories-empty')}</p></div>`;
+            container.innerHTML = search
+                ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>${this.t('search-empty')}</p></div>`
+                : `<div class="empty-state"><div class="empty-icon">📦</div><p>${this.t('memories-empty')}</p></div>`;
             return;
         }
 
@@ -805,9 +842,11 @@ const diary = {
             const delay    = Math.min(i * 0.04, 0.25);
             const isOpen   = this.openMemoryDetail === m.id;
             const pinLabel = m.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-            if (m.type === 'relations') return this._renderRelCard(m, isOpen, delay, pinLabel);
+            if (m.type === 'relations') return this._renderRelCard(m, isOpen, delay, pinLabel, search, searchRaw);
 
             const typeLabel = this.t('type-' + m.type);
+            const title = search ? Util.highlightMatch(m.title, searchRaw) : m.title;
+            const notes = search && m.notes ? Util.highlightMatch(m.notes, searchRaw) : m.notes;
             return `
             <div class="record-card ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
                 ${m.pinned ? '<span class="pin-badge">📌</span>' : ''}
@@ -815,8 +854,8 @@ const diary = {
                     <span class="chip">${typeLabel}</span>
                     <span style="font-size:11px;color:var(--text-label)">${this.fmtDate(m.startDate)}</span>
                 </div>
-                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${m.title}</div>
-                ${m.notes ? `<div style="font-size:13px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'2'};-webkit-box-orient:vertical;overflow:hidden">${m.notes}</div>` : ''}
+                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${title}</div>
+                ${notes ? `<div style="font-size:13px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'2'};-webkit-box-orient:vertical;overflow:hidden">${notes}</div>` : ''}
                 ${m.endDate ? `<div style="margin-top:6px;font-size:12px;color:var(--text-label)">${this.t('rel-until')} ${this.fmtDate(m.endDate)}</div>` : ''}
                 ${isOpen ? `
                 <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
@@ -830,12 +869,15 @@ const diary = {
         }).join('');
     },
 
-    _renderRelCard(m, isOpen, delay, pinLabel) {
+    _renderRelCard(m, isOpen, delay, pinLabel, search, searchRaw) {
         const msPerDay = 86400000;
         const endMs    = m.endDate ? new Date(m.endDate).getTime() : Date.now();
         const days     = Math.max(1, Math.floor((endMs - new Date(m.startDate).getTime()) / msPerDay) + 1);
         const isEnded  = !!m.endDate;
         const events   = m.events || [];
+        const title       = search ? Util.highlightMatch(m.title, searchRaw) : m.title;
+        const notes       = search && m.notes ? Util.highlightMatch(m.notes, searchRaw) : m.notes;
+        const partnerName = search && m.partnerName ? Util.highlightMatch(m.partnerName, searchRaw) : m.partnerName;
 
         const eventsHtml = events.length
             ? events.map((ev, idx) => `
@@ -856,8 +898,8 @@ const diary = {
                 <div class="flex items-start justify-between gap-2">
                     <div>
                         <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.75;margin-bottom:4px">❤️ ${this.t('type-relations')}</div>
-                        <div style="font-size:20px;font-weight:900;font-family:'Syne',sans-serif">${m.title}</div>
-                        ${m.partnerName ? `<div style="font-size:14px;opacity:.85;margin-top:2px">👤 ${m.partnerName}</div>` : ''}
+                        <div style="font-size:20px;font-weight:900;font-family:'Syne',sans-serif">${title}</div>
+                        ${partnerName ? `<div style="font-size:14px;opacity:.85;margin-top:2px">👤 ${partnerName}</div>` : ''}
                     </div>
                     <div style="text-align:right;flex-shrink:0">
                         <div style="font-size:28px;font-weight:900;line-height:1">${days}</div>
@@ -873,7 +915,7 @@ const diary = {
                 </div>
             </div>
             <div class="rel-card-body" onclick="event.stopPropagation()">
-                ${m.notes ? `<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;font-style:italic">"${m.notes}"</div>` : ''}
+                ${notes ? `<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;font-style:italic">"${notes}"</div>` : ''}
                 <div style="margin-bottom:10px">
                     <div style="font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px">${this.t('lbl-events')}</div>
                     ${eventsHtml}

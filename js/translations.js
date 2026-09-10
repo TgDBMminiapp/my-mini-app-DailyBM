@@ -36,6 +36,9 @@ const T = {
         'type-book': '📚 Book', 'type-movie': '🎬 Movie', 'type-series': '📺 Series',
         'type-game': '🎮 Game', 'type-relations': '❤️ Relationship', 'type-other': '📦 Other',
         'my-memories-title': 'Archive', 'memoriesSearch-ph': 'Search...', 'memories-empty': 'Archive is empty',
+        // v8.1: global search
+        'search-empty': 'No results found',
+        'tasksSearch-ph': 'Search tasks...',
         'rel-days-together': 'days together', 'rel-since': 'Since', 'rel-until': 'Until',
         'rel-broke-up': 'broke up', 'rel-still-together': 'Still together',
         'lbl-add-event': '+ Add event', 'lbl-broke-up': '💔 Broke up',
@@ -71,6 +74,11 @@ const T = {
         'tasks-stat-total': 'Total',
         'tasks-stat-streak': 'Streak',
         'tasks-stat-streak-days': 'days',
+        // v8.1: keywords the task search recognizes for filtering by status
+        // (comma-separated; matched fuzzily against whatever is typed).
+        'tasks-search-kw-done': 'done,completed,finished',
+        'tasks-search-kw-pending': 'pending,incomplete,todo,unfinished',
+        'tasks-search-kw-important': 'important,starred,priority',
         'tasks-mood-great': 'Great', 'tasks-mood-normal': 'Normal',
         'tasks-mood-meh': 'So-so', 'tasks-mood-hard': 'Hard',
         'tasks-toast-added': 'Task added ✅',
@@ -200,6 +208,9 @@ const T = {
         'type-book': '📚 Книга', 'type-movie': '🎬 Фильм', 'type-series': '📺 Сериал',
         'type-game': '🎮 Игра', 'type-relations': '❤️ Отношения', 'type-other': '📦 Другое',
         'my-memories-title': 'Архив воспоминаний', 'memoriesSearch-ph': 'Поиск...', 'memories-empty': 'Архив пока пуст',
+        // v8.1: глобальный поиск
+        'search-empty': 'Ничего не найдено',
+        'tasksSearch-ph': 'Поиск задач...',
         'rel-days-together': 'дней вместе', 'rel-since': 'С', 'rel-until': 'До',
         'rel-broke-up': 'расстались', 'rel-still-together': 'Всё ещё вместе',
         'lbl-add-event': '+ Добавить событие', 'lbl-broke-up': '💔 Расстались',
@@ -235,6 +246,10 @@ const T = {
         'tasks-stat-total': 'Всего',
         'tasks-stat-streak': 'Серия',
         'tasks-stat-streak-days': 'дней',
+        // v8.1: ключевые слова для поиска задач по статусу
+        'tasks-search-kw-done': 'готово,выполнено,выполнен,завершено',
+        'tasks-search-kw-pending': 'ожидает,невыполнено,активн,незаверш',
+        'tasks-search-kw-important': 'важно,важн,приоритет',
         'tasks-mood-great': 'Отлично', 'tasks-mood-normal': 'Нормально',
         'tasks-mood-meh': 'Так себе', 'tasks-mood-hard': 'Тяжело',
         'tasks-toast-added': 'Задача добавлена ✅',
