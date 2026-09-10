@@ -1,5 +1,30 @@
 <!DOCTYPE html>
 <!-- ============================================================
+     DailyBookimix v8.1 — GLOBAL SEARCH EDITION
+
+     WHAT CHANGED (v8.0 → v8.1)
+     1. Added a real-time, as-you-type search to the Daily Tasks section
+        (js/task-manager.js, TaskManager._matchesTaskSearch/render) — the
+        only section that didn't already have one. Notes, Habits, and
+        Archive already had search bars; all four now share the same
+        search-wrap look, and their filtering was broadened to also match
+        category/type labels, dates, and (for habits) completion status —
+        not just the title/name and body text.
+     2. Search results are now visually highlighted (see Util.highlightMatch
+        in js/util.js and the `.search-hl` style in css/styles.css) while
+        staying fully interactive — every card's edit/delete/pin/complete
+        controls work exactly as before, since only the *displayed* text is
+        wrapped for highlighting; the underlying data is untouched.
+     3. Removed the redundant secondary "🔥 streak" chip from the Daily
+        Tasks stats bar. The app already has one fire-streak indicator (the
+        main streak in the header) — this second one in Tasks was
+        redundant and has been deleted. The streak *calculation* underneath
+        it (TaskManager._stats.currentStreak) is kept as-is, since it also
+        feeds the existing "3-day task streak" achievement — only the
+        visual chip is gone.
+     No other behavior, data structures, encryption, storage, achievements,
+     translations, or Telegram integration changed.
+     ============================================================
      DailyBookimix v8.0 — BRIDGE RELIABILITY EDITION
 
      WHAT CHANGED (v7.7 → v8.0)
@@ -106,7 +131,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=8.0">
+    <link rel="stylesheet" href="css/styles.css?v=8.1">
 </head>
 <body class="font-sans">
 
@@ -326,6 +351,12 @@
 
             <!-- Stats bar -->
             <div class="task-stats-bar" id="taskStatsBar"></div>
+
+            <!-- v8.1: real-time task search (title/text + status keywords) -->
+            <div class="search-wrap mb-4">
+                <span class="search-icon">🔍</span>
+                <input id="tasksSearch" type="text" class="fi" oninput="TaskManager.render()">
+            </div>
 
             <!-- Monthly calendar (replaces the old fixed 30-day scroller) -->
             <div class="task-cal-nav-row">
@@ -672,15 +703,15 @@
 </div>
 
 
-<script src="js/util.js?v=8.0"></script>
-<script src="js/tg-platform.js?v=8.0"></script>
-<script src="js/encryption.js?v=8.0"></script>
-<script src="js/storage.js?v=8.0"></script>
-<script src="js/translations.js?v=8.0"></script>
-<script src="js/task-manager.js?v=8.0"></script>
-<script src="js/diary.js?v=8.0"></script>
-<script src="js/sidebar.js?v=8.0"></script>
-<script src="js/achievements.js?v=8.0"></script>
-<script src="js/boot.js?v=8.0"></script>
+<script src="js/util.js?v=8.1"></script>
+<script src="js/tg-platform.js?v=8.1"></script>
+<script src="js/encryption.js?v=8.1"></script>
+<script src="js/storage.js?v=8.1"></script>
+<script src="js/translations.js?v=8.1"></script>
+<script src="js/task-manager.js?v=8.1"></script>
+<script src="js/diary.js?v=8.1"></script>
+<script src="js/sidebar.js?v=8.1"></script>
+<script src="js/achievements.js?v=8.1"></script>
+<script src="js/boot.js?v=8.1"></script>
 </body>
 </html>
