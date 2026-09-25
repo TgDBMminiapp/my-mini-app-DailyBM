@@ -89,6 +89,13 @@ const diary = {
         this._updateSheetChecks();
         this.applyTranslations();
         this.renderAll();
+        // v9.0 BUG FIX: switching language never refreshed the Daily Tasks tab
+        // (quick-add placeholder, mood labels, calendar month name, "Today"
+        // button, stats chips, carry-over button) — renderAll() only covers
+        // Notes/Habits/Archive. If Tasks was the currently-open tab, all of
+        // that stayed in the old language until the person switched away and
+        // back. TaskManager.render() is cheap and safe to call unconditionally.
+        TaskManager.render();
         this.closeSheet();
         SidebarUI.applyTranslations(lang);
         AchievementsUI.applyTranslations(lang);
@@ -243,7 +250,17 @@ const diary = {
             if (btn) btn.classList.toggle('active', t === tab);
         });
         // Refresh tasks when switching to that tab
-        if (tab === 'tasks') TaskManager.render();
+        if (tab === 'tasks') {
+            TaskManager.render();
+            // v9.0: simply opening the Tasks tab now counts as a "meaningful
+            // action" for the fire streak, same as saving a note/habit/memory.
+            // updateStreak() is idempotent per calendar day (it no-ops if
+            // lastActiveDate is already today), so this is safe to call every
+            // single time the tab is opened without double-counting, replaying
+            // the fire animation repeatedly, or interfering with the existing
+            // write-action call sites elsewhere in this file.
+            this.updateStreak();
+        }
         // Live habit countdowns only tick while the Habits tab is actually open
         if (tab === 'habits') this._startHabitTimers();
         else this._stopHabitTimers();
@@ -406,8 +423,10 @@ const diary = {
             const isOpen   = this.openNoteDetail === note.id;
             const delay    = Math.min(i * 0.04, 0.25);
             const pinLabel = note.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-            const title    = search ? Util.highlightMatch(note.title, searchRaw)   : note.title;
-            const content  = search ? Util.highlightMatch(note.content, searchRaw) : note.content;
+            // v9.0 FIX: escape user-entered text before it goes into innerHTML
+            // (previously unescaped — see Util.escHtml comment for the bug).
+            const title    = search ? Util.highlightMatch(Util.escHtml(note.title), searchRaw)   : Util.escHtml(note.title);
+            const content  = search ? Util.highlightMatch(Util.escHtml(note.content), searchRaw) : Util.escHtml(note.content);
             return `
             <div class="record-card ${note.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleNoteDetail(${note.id})">
                 ${note.pinned ? '<span class="pin-badge">📌</span>' : ''}
@@ -640,8 +659,9 @@ const diary = {
             const isOpen    = this.openHabitDetail === h.id;
             const delay     = Math.min(i * 0.04, 0.25);
             const pinLabel  = h.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-            const name        = search ? Util.highlightMatch(h.name, searchRaw) : h.name;
-            const description = search && h.description ? Util.highlightMatch(h.description, searchRaw) : h.description;
+            // v9.0 FIX: escape user-entered text before it goes into innerHTML.
+            const name        = search ? Util.highlightMatch(Util.escHtml(h.name), searchRaw) : Util.escHtml(h.name);
+            const description = h.description ? (search ? Util.highlightMatch(Util.escHtml(h.description), searchRaw) : Util.escHtml(h.description)) : '';
 
             return `
             <div class="record-card ${h.pinned ? 'pinned' : ''} ${ended ? 'opacity-80' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleHabitDetail(${h.id})">
@@ -845,8 +865,9 @@ const diary = {
             if (m.type === 'relations') return this._renderRelCard(m, isOpen, delay, pinLabel, search, searchRaw);
 
             const typeLabel = this.t('type-' + m.type);
-            const title = search ? Util.highlightMatch(m.title, searchRaw) : m.title;
-            const notes = search && m.notes ? Util.highlightMatch(m.notes, searchRaw) : m.notes;
+            // v9.0 FIX: escape user-entered text before it goes into innerHTML.
+            const title = search ? Util.highlightMatch(Util.escHtml(m.title), searchRaw) : Util.escHtml(m.title);
+            const notes = m.notes ? (search ? Util.highlightMatch(Util.escHtml(m.notes), searchRaw) : Util.escHtml(m.notes)) : '';
             return `
             <div class="record-card ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
                 ${m.pinned ? '<span class="pin-badge">📌</span>' : ''}
@@ -875,15 +896,16 @@ const diary = {
         const days     = Math.max(1, Math.floor((endMs - new Date(m.startDate).getTime()) / msPerDay) + 1);
         const isEnded  = !!m.endDate;
         const events   = m.events || [];
-        const title       = search ? Util.highlightMatch(m.title, searchRaw) : m.title;
-        const notes       = search && m.notes ? Util.highlightMatch(m.notes, searchRaw) : m.notes;
-        const partnerName = search && m.partnerName ? Util.highlightMatch(m.partnerName, searchRaw) : m.partnerName;
+        // v9.0 FIX: escape user-entered text before it goes into innerHTML.
+        const title       = search ? Util.highlightMatch(Util.escHtml(m.title), searchRaw) : Util.escHtml(m.title);
+        const notes       = m.notes ? (search ? Util.highlightMatch(Util.escHtml(m.notes), searchRaw) : Util.escHtml(m.notes)) : '';
+        const partnerName = m.partnerName ? (search ? Util.highlightMatch(Util.escHtml(m.partnerName), searchRaw) : Util.escHtml(m.partnerName)) : '';
 
         const eventsHtml = events.length
             ? events.map((ev, idx) => `
                 <div class="rel-event-item">
                     <div class="rel-event-date">${this.fmtDate(ev.date)}</div>
-                    <div class="rel-event-desc">${ev.desc}</div>
+                    <div class="rel-event-desc">${Util.escHtml(ev.desc)}</div>
                     <div class="rel-event-actions">
                         <button class="rel-event-btn" onclick="diary.showAddEvent(${m.id},${idx},event)">✏️</button>
                         <button class="rel-event-btn" onclick="diary.deleteEvent(${m.id},${idx},event)">🗑️</button>
@@ -1117,7 +1139,7 @@ const diary = {
         SidebarUI.init();
         AchievementsUI.init();
 
-        console.log('%c✅ DailyBookimix v6 — Master-Key auth + sharded storage + Daily Tasks fixes!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v9.0 — Fire streak on Tasks tab + Custom Achievements!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 

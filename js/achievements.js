@@ -12,6 +12,28 @@ const AchievementsUI = {
         en: {
             title: 'Achievements', progressLabel: 'Unlocked achievements',
             locked: 'Locked', earnedOn: 'Earned', unlockedToastPrefix: 'Achievement unlocked:',
+            // v9.0: Custom (user-created) achievements — kept in the same
+            // per-language strings object as everything else in this file.
+            customSectionTitle: 'My Achievements',
+            customSectionHint: 'Your own achievements — mark them done yourself, whenever you feel like it.',
+            customAddBtn: '+ Add achievement',
+            customEmpty: 'No custom achievements yet. Create your own above!',
+            customFormTitleNew: 'New achievement',
+            customFormTitleEdit: 'Edit achievement',
+            lblIcon: 'Icon (emoji)',
+            iconPh: '🏅',
+            lblTitle: 'Title',
+            titlePh: 'e.g. Ran my first 5K',
+            lblDesc: 'Description (optional)',
+            descPh: 'Say a bit more about it...',
+            saveCustomBtn: 'Save achievement',
+            markComplete: '✅ Mark as completed',
+            markIncomplete: '↩️ Mark as not completed',
+            confirmDeleteCustom: 'Delete this achievement? This cannot be undone.',
+            customSavedToast: 'Achievement saved ✅',
+            customDeletedToast: 'Achievement deleted',
+            customUnlockedPrefix: 'Achievement unlocked:',
+            customBadgeLabel: 'Custom',
             achs: [
                 { id: 'first_note',      icon: '📝', title: 'First Note',            desc: 'Created your very first note' },
                 { id: 'notes_10',        icon: '📚', title: '10 Notes Written',       desc: 'Wrote 10 notes in total' },
@@ -31,6 +53,27 @@ const AchievementsUI = {
         ru: {
             title: 'Достижения', progressLabel: 'Разблокировано достижений',
             locked: 'Закрыто', earnedOn: 'Получено', unlockedToastPrefix: 'Достижение получено:',
+            // v9.0: Пользовательские достижения
+            customSectionTitle: 'Мои достижения',
+            customSectionHint: 'Твои собственные достижения — отмечай их выполненными сам(а), когда захочешь.',
+            customAddBtn: '+ Добавить достижение',
+            customEmpty: 'Пока нет своих достижений. Создай своё выше!',
+            customFormTitleNew: 'Новое достижение',
+            customFormTitleEdit: 'Изменить достижение',
+            lblIcon: 'Иконка (эмодзи)',
+            iconPh: '🏅',
+            lblTitle: 'Название',
+            titlePh: 'например: Пробежал(а) первые 5 км',
+            lblDesc: 'Описание (необязательно)',
+            descPh: 'Расскажи немного подробнее...',
+            saveCustomBtn: 'Сохранить достижение',
+            markComplete: '✅ Отметить выполненным',
+            markIncomplete: '↩️ Снять отметку',
+            confirmDeleteCustom: 'Удалить это достижение? Действие нельзя отменить.',
+            customSavedToast: 'Достижение сохранено ✅',
+            customDeletedToast: 'Достижение удалено',
+            customUnlockedPrefix: 'Достижение получено:',
+            customBadgeLabel: 'Своё',
             achs: [
                 { id: 'first_note',      icon: '📝', title: 'Первая запись',          desc: 'Создал свою первую заметку' },
                 { id: 'notes_10',        icon: '📚', title: '10 записей',             desc: 'Написал 10 заметок всего' },
@@ -53,6 +96,14 @@ const AchievementsUI = {
     // NEVER mutated until _loaded = true
     _state: {},
     _loaded: false,   // guard: do not recalculate until state is restored from storage
+
+    // v9.0: Custom (user-created) achievements — a completely separate list,
+    // under its own dedicated storage key, from the built-in system
+    // achievements above. Each entry: { id, icon, title, desc, completed,
+    // earnedDate, createdAt }. Never touched by recalculate()/_unlock()/
+    // _state, and never merged into achievements_v1.
+    _custom: [],
+    _customLoaded: false,
 
     init() {
         StorageManager.getItem('achievements_v1').then(raw => {
@@ -82,6 +133,129 @@ const AchievementsUI = {
             this._loaded = true;
             this.recalculate();
         });
+
+        this._initCustom();
+    },
+
+    // ---------- v9.0: Custom achievements — load / save ----------
+    _initCustom() {
+        StorageManager.getItem('custom_achievements_v1').then(raw => {
+            try {
+                this._custom = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(this._custom)) this._custom = [];
+            } catch (e) { this._custom = []; }
+            this._customLoaded = true;
+            if (document.getElementById('achievementsModal').classList.contains('open')) this._renderCustom();
+        }).catch(() => { this._customLoaded = true; });
+    },
+
+    _saveCustom() {
+        const data = JSON.stringify(this._custom);
+        StorageManager.setItem('custom_achievements_v1', data).catch(() => {
+            // Retry once, same durability pattern as system achievements' _save().
+            setTimeout(() => StorageManager.setItem('custom_achievements_v1', data).catch(() => {}), 1500);
+        });
+    },
+
+    _customStrings() {
+        return this._strings[diary.lang] || this._strings.en;
+    },
+
+    // Opens the create/edit form. Pass an id to edit an existing custom
+    // achievement, or omit it to create a new one.
+    openCustomForm(id) {
+        const strs = this._customStrings();
+        const editing = id != null ? this._custom.find(a => a.id === id) : null;
+        document.getElementById('customAchId').value          = editing ? editing.id : '';
+        document.getElementById('customAchIcon').value        = editing ? editing.icon  : '';
+        document.getElementById('customAchTitle').value       = editing ? editing.title : '';
+        document.getElementById('customAchDesc').value        = editing ? (editing.desc || '') : '';
+        document.getElementById('customAchFormTitle').textContent = editing ? strs.customFormTitleEdit : strs.customFormTitleNew;
+        const delBtn = document.getElementById('customAchDeleteBtn');
+        if (delBtn) delBtn.style.display = editing ? '' : 'none';
+        document.getElementById('customAchModal').classList.add('open');
+        setTimeout(() => { const el = document.getElementById('customAchIcon'); if (el) el.focus(); }, 50);
+    },
+
+    closeCustomForm() {
+        document.getElementById('customAchModal').classList.remove('open');
+    },
+
+    saveCustomForm(e) {
+        if (e) e.preventDefault();
+        const idRaw = document.getElementById('customAchId').value;
+        const icon  = document.getElementById('customAchIcon').value.trim();
+        const title = document.getElementById('customAchTitle').value.trim();
+        const desc  = document.getElementById('customAchDesc').value.trim();
+
+        // Icon + title are required (description is optional, per spec); this
+        // mirrors the same validation pattern used by notes/habits/memories.
+        if (!icon || !title) { diary.toast(diary.t('toast-fill-fields'), 'error'); return; }
+
+        if (idRaw) {
+            const id = +idRaw;
+            const existing = this._custom.find(a => a.id === id);
+            if (existing) { existing.icon = icon; existing.title = title; existing.desc = desc; }
+        } else {
+            this._custom.unshift({
+                id: Date.now(), icon, title, desc,
+                completed: false, earnedDate: null,
+                createdAt: diary.today ? diary.today() : Util.localDateStr(),
+            });
+        }
+        this._saveCustom();
+        this._renderCustom();
+        this.closeCustomForm();
+        diary.toast(this._customStrings().customSavedToast);
+    },
+
+    deleteCustom(id, e) {
+        if (e) e.stopPropagation();
+        if (!confirm(this._customStrings().confirmDeleteCustom)) return;
+        this._custom = this._custom.filter(a => a.id !== id);
+        this._saveCustom();
+        this._renderCustom();
+        diary.toast(this._customStrings().customDeletedToast);
+    },
+
+    // Delete button inside the edit form itself — only closes the form if the
+    // deletion was actually confirmed (deleteCustom() returns silently if the
+    // person cancels the confirm() dialog, leaving the form open).
+    deleteCustomFromForm() {
+        const idRaw = document.getElementById('customAchId').value;
+        if (!idRaw) return;
+        const id = +idRaw;
+        const before = this._custom.length;
+        this.deleteCustom(id);
+        if (this._custom.length < before) this.closeCustomForm();
+    },
+
+    // Users mark their own custom achievements complete/incomplete manually —
+    // there is no automatic progress tracking for these, by design (spec).
+    // earnedDate is set only the FIRST time an achievement is completed and
+    // is preserved across any later toggle off/on, mirroring how system
+    // achievements never overwrite an already-recorded earnedDate.
+    toggleCustomComplete(id, e) {
+        if (e) e.stopPropagation();
+        const ach = this._custom.find(a => a.id === id);
+        if (!ach) return;
+        const wasCompleted = !!ach.completed;
+        ach.completed = !wasCompleted;
+        if (ach.completed && !ach.earnedDate) {
+            ach.earnedDate = diary.today ? diary.today() : Util.localDateStr();
+        }
+        this._saveCustom();
+        this._renderCustom();
+        if (!wasCompleted && ach.completed) this._announceCustomUnlock(ach);
+    },
+
+    // Celebratory toast for a custom achievement, matching the look/feel of
+    // the system achievements' unlock toast (same 'achievement' toast style).
+    _announceCustomUnlock(ach) {
+        const strs = this._customStrings();
+        // NOTE: diary.toast() sets textContent (not innerHTML), so the title
+        // is used as-is here — no HTML escaping needed/wanted for a toast.
+        diary.toast(`${ach.icon} ${strs.customUnlockedPrefix} ${ach.title}`.trim(), 'achievement');
     },
 
     _save() {
@@ -95,7 +269,13 @@ const AchievementsUI = {
     // ONLY sets earnedDate on FIRST unlock — never overwrites it
     _unlock(id) {
         if (this._state[id] && this._state[id].earned) return false; // already earned, preserve date
-        const today = diary.today ? diary.today() : new Date().toISOString().split('T')[0];
+        // v9.0 FIX: the fallback here used `new Date().toISOString()`, which is
+        // UTC — the exact class of bug the rest of the app deliberately avoids
+        // (see Util.localDateStr's comment). diary.today() is always available
+        // in practice, but if it somehow isn't, fall back to the same LOCAL
+        // date logic instead of a UTC one so an achievement earned right
+        // around local midnight doesn't get filed under the wrong day.
+        const today = diary.today ? diary.today() : (typeof Util !== 'undefined' ? Util.localDateStr() : new Date().toISOString().split('T')[0]);
         this._state[id] = { earned: true, earnedDate: today };
         (this._newlyUnlocked || (this._newlyUnlocked = [])).push(id);
         return true; // newly unlocked
@@ -204,6 +384,7 @@ const AchievementsUI = {
     open() {
         this.recalculate();
         this._render();
+        this._renderCustom();
         document.getElementById('achievementsModal').classList.add('open');
         document.getElementById('achievementsModal').scrollTop = 0;
     },
@@ -218,7 +399,24 @@ const AchievementsUI = {
         if (el) el.textContent = strs.title;
         const pl = document.getElementById('ach-progress-label');
         if (pl) pl.textContent = strs.progressLabel;
-        if (document.getElementById('achievementsModal').classList.contains('open')) this._render();
+        // v9.0: custom achievements section + its create/edit form.
+        const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+        const setPh = (id, txt) => { const e = document.getElementById(id); if (e) e.placeholder = txt; };
+        set('ach-custom-section-title', strs.customSectionTitle);
+        set('ach-custom-section-hint',  strs.customSectionHint);
+        set('customAchAddBtnTxt',       strs.customAddBtn);
+        set('lbl-custom-ach-icon',      strs.lblIcon);
+        set('lbl-custom-ach-title',     strs.lblTitle);
+        set('lbl-custom-ach-desc',      strs.lblDesc);
+        set('customAchSaveBtnTxt',      strs.saveCustomBtn);
+        set('customAchCancelBtnTxt',    diary.t('lbl-cancel'));
+        set('customAchDeleteBtnTxt',    diary.t('lbl-delete'));
+        setPh('customAchIcon',  strs.iconPh);
+        setPh('customAchTitle', strs.titlePh);
+        setPh('customAchDesc',  strs.descPh);
+        const formTitleEl = document.getElementById('customAchFormTitle');
+        if (formTitleEl) formTitleEl.textContent = document.getElementById('customAchId').value ? strs.customFormTitleEdit : strs.customFormTitleNew;
+        if (document.getElementById('achievementsModal').classList.contains('open')) { this._render(); this._renderCustom(); }
     },
 
     _render() {
@@ -248,7 +446,13 @@ const AchievementsUI = {
             let dateText = '';
             if (unlocked && st.earnedDate) {
                 try {
-                    dateText = strs.earnedOn + ': ' + new Date(st.earnedDate).toLocaleDateString(
+                    // v9.0 FIX: `new Date('YYYY-MM-DD')` parses as UTC midnight while
+                    // toLocaleDateString() reads it back in LOCAL time — for anyone
+                    // west of UTC this could silently display the day BEFORE the one
+                    // actually recorded. Same bug class Util.parseLocalDate already
+                    // exists to prevent elsewhere in the app; use it here too.
+                    const earnedDateObj = (typeof Util !== 'undefined') ? Util.parseLocalDate(st.earnedDate) : new Date(st.earnedDate);
+                    dateText = strs.earnedOn + ': ' + earnedDateObj.toLocaleDateString(
                         lang === 'ru' ? 'ru-RU' : 'en-GB',
                         { day: 'numeric', month: 'short', year: 'numeric' }
                     );
@@ -269,6 +473,66 @@ const AchievementsUI = {
                     <div class="ach-card-date">${dateText}</div>
                 </div>
                 <div class="ach-badge">${unlocked ? '⭐' : '—'}</div>
+            </div>`;
+        }).join('');
+    },
+
+    // ---------- v9.0: Custom achievements — rendering ----------
+    // Rendered into its own grid (#customAchGrid), completely separate from
+    // the system achievements grid above — different data, different empty
+    // state, different card styling (`.ach-card.custom`) so the two are
+    // visually distinguishable at a glance, per spec.
+    _renderCustom() {
+        const strs = this._customStrings();
+        const grid = document.getElementById('customAchGrid');
+        if (!grid) return; // markup not present in this build — no-op
+
+        const emptyEl = document.getElementById('customAchEmpty');
+        if (!this._custom.length) {
+            grid.innerHTML = '';
+            if (emptyEl) { emptyEl.style.display = ''; emptyEl.textContent = strs.customEmpty; }
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        grid.innerHTML = this._custom.map((ach, i) => {
+            const delay = Math.min(i * 0.05, 0.35);
+            const unlocked = !!ach.completed;
+
+            let dateText = strs.locked;
+            if (unlocked && ach.earnedDate) {
+                try {
+                    const d = Util.parseLocalDate(ach.earnedDate);
+                    dateText = strs.earnedOn + ': ' + d.toLocaleDateString(
+                        (diary.lang === 'ru') ? 'ru-RU' : 'en-GB',
+                        { day: 'numeric', month: 'short', year: 'numeric' }
+                    );
+                } catch (e) { dateText = strs.earnedOn; }
+            }
+
+            // Icon/title/desc are free user text — always escaped before
+            // going into innerHTML (see Util.escHtml).
+            const icon  = Util.escHtml(ach.icon);
+            const title = Util.escHtml(ach.title);
+            const desc  = ach.desc ? Util.escHtml(ach.desc) : '';
+
+            return `
+            <div class="ach-card custom ${unlocked ? 'unlocked' : 'locked'}" style="animation-delay:${delay}s">
+                <div class="ach-icon-wrap custom-icon">
+                    <span>${icon}</span>
+                    ${!unlocked ? '<div class="ach-lock-overlay">🔒</div>' : ''}
+                </div>
+                <div class="ach-card-body">
+                    <div class="ach-card-title">${title}</div>
+                    ${desc ? `<div class="ach-card-desc">${desc}</div>` : ''}
+                    <div class="ach-card-date">${dateText}</div>
+                    <div class="ach-custom-actions">
+                        <button class="ach-custom-btn" onclick="AchievementsUI.toggleCustomComplete(${ach.id},event)">${unlocked ? strs.markIncomplete : strs.markComplete}</button>
+                        <button class="ach-custom-btn icon-only" title="${diary.t('lbl-edit')}" onclick="AchievementsUI.openCustomForm(${ach.id})">✏️</button>
+                        <button class="ach-custom-btn icon-only danger" title="${diary.t('lbl-delete')}" onclick="AchievementsUI.deleteCustom(${ach.id},event)">🗑️</button>
+                    </div>
+                </div>
+                <div class="ach-badge custom-badge" title="${strs.customBadgeLabel}">${unlocked ? '⭐' : '—'}</div>
             </div>`;
         }).join('');
     }

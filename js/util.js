@@ -64,6 +64,23 @@ const Util = {
 
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
+    // ── v9.0 BUG FIX: notes/habits/memories rendered user-entered text
+    // (title, content, description, notes, partner name, event text)
+    // directly into innerHTML. TaskManager already escaped task text for
+    // exactly this reason, but the other three sections didn't — typing
+    // something like "<b>" or "a & b" into a note title/content broke the
+    // layout (interpreted as real HTML) instead of showing literally.
+    // Centralizing the same escaping TaskManager already used here so
+    // every section can share it consistently.
+    escHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    },
+
     // ── v8.1: global search highlighting ──────────────────────────────
     // Wraps every case-insensitive occurrence of `query` inside `text` with
     // a <mark class="search-hl"> span so active search results are visually

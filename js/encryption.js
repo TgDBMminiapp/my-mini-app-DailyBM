@@ -587,9 +587,15 @@ const EncryptionManager = {
                 (typeof TaskManager !== 'undefined') && TaskManager.wipeAll(),
             ]);
             if (typeof StorageManager !== 'undefined') {
-                for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1']) {
+                // v9.0: also wipe custom achievements (dedicated key) on a full
+                // "start fresh" reset, same as the account-deletion flow.
+                for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1', 'custom_achievements_v1']) {
                     await StorageManager.removeItem(key);
                 }
+            }
+            if (typeof AchievementsUI !== 'undefined') {
+                AchievementsUI._state = {};
+                AchievementsUI._custom = [];
             }
         } catch (e) {}
         // Immediately create a brand-new vault silently instead of showing a

@@ -167,7 +167,7 @@ const SidebarUI = {
                 StorageManager.wipeCollection('memories'),
                 TaskManager.wipeAll(),
             ]);
-            for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1']) {
+            for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1', 'custom_achievements_v1']) {
                 await StorageManager.removeItem(key);
             }
             // NOTE: deliberately NOT touching dbmix_sentinel / enc_mk_recovery /
@@ -183,6 +183,11 @@ const SidebarUI = {
             TaskManager.render();
             AchievementsUI._state = {};
             AchievementsUI._save();
+            // v9.0: custom achievements are user data too — clear them out on
+            // a full data wipe, same as the built-in achievements state above.
+            AchievementsUI._custom = [];
+            AchievementsUI._saveCustom();
+            AchievementsUI._renderCustom();
 
             document.getElementById('deleteAccountModal').classList.remove('open');
             diary.toast(diary.t('toast-all-data-deleted'));
