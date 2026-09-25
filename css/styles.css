@@ -243,6 +243,15 @@
            were both working. Raising just this modal above #encryptionLock
            makes it visible/clickable without touching any other modal. */
         #startFreshConfirmModal.open { z-index: 100000; }
+        /* FIX v9.0: same bug class as #startFreshConfirmModal above. The new
+           create/edit-custom-achievement modal (#customAchModal) is opened
+           from INSIDE #achievementsModal, which sits at z-index 10002 — well
+           above .modal-overlay's base 8000. Without this, #customAchModal
+           would open successfully (classList toggled, DOM correct) but render
+           completely hidden behind the achievements screen, making its Save/
+           Cancel/Delete buttons look unresponsive. Raise just this modal
+           above #achievementsModal. */
+        #customAchModal.open { z-index: 10010; }
         .modal-box {
             background: var(--modal-bg); color: var(--modal-text);
             border-radius: 28px; padding: 28px;
@@ -508,6 +517,51 @@
         .ach-card.locked   .ach-card-date { color: rgba(255,255,255,0.4); }
         .ach-badge { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #fbbf24, #f59e0b); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(251,191,36,0.4); }
         .ach-card.locked .ach-badge { background: rgba(255,255,255,0.1); box-shadow: none; }
+
+        /* ── v9.0: CUSTOM (USER-CREATED) ACHIEVEMENTS ──
+           Visually distinct from system achievements: purple/violet accent
+           instead of gold, so the two sections read as clearly separate at a
+           glance while sharing the same card layout/rhythm. */
+        .ach-custom-section { margin-top: 28px; }
+        .ach-custom-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+        .ach-custom-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: white; }
+        .ach-custom-hint { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.65); margin-top: 3px; max-width: 260px; }
+        .ach-custom-add-btn {
+            flex-shrink: 0; padding: 10px 16px; border-radius: 12px;
+            background: linear-gradient(135deg, #a78bfa, #8b5cf6); color: white;
+            border: none; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800;
+            cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: 0 4px 16px rgba(139,92,246,0.35);
+            white-space: nowrap;
+        }
+        .ach-custom-add-btn:active { transform: scale(0.95); }
+        .ach-custom-empty {
+            text-align: center; padding: 28px 16px; color: rgba(255,255,255,0.6);
+            font-size: 13px; font-weight: 600;
+            background: rgba(255,255,255,0.06); border: 1px dashed rgba(255,255,255,0.2);
+            border-radius: 16px;
+        }
+        .ach-card.custom { align-items: flex-start; }
+        .ach-card.custom.unlocked { border-color: rgba(167,139,250,0.55); box-shadow: 0 0 0 1px rgba(167,139,250,0.25), 0 8px 24px rgba(0,0,0,0.15); }
+        .ach-card.custom .ach-icon-wrap.custom-icon { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); }
+        .ach-card.custom.unlocked .ach-icon-wrap.custom-icon { background: linear-gradient(135deg, rgba(167,139,250,0.32), rgba(139,92,246,0.2)); border: 1px solid rgba(167,139,250,0.45); }
+        .ach-card.custom.unlocked .ach-card-date { color: #c4b5fd; }
+        .ach-badge.custom-badge { background: rgba(255,255,255,0.1); box-shadow: none; }
+        .ach-card.custom.unlocked .ach-badge.custom-badge { background: linear-gradient(135deg, #a78bfa, #8b5cf6); box-shadow: 0 2px 8px rgba(139,92,246,0.4); }
+        .ach-custom-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+        .ach-custom-btn {
+            padding: 8px 12px; border-radius: 10px; cursor: pointer;
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.16);
+            color: white; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700;
+            transition: background 0.15s, transform 0.15s;
+        }
+        .ach-custom-btn:active { transform: scale(0.94); background: rgba(255,255,255,0.18); }
+        .ach-custom-btn.icon-only { padding: 8px 10px; flex: 0 0 auto; }
+        .ach-custom-btn.danger { color: #f87171; border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.12); }
+        .ach-custom-btn.danger:active { background: rgba(239,68,68,0.22); }
+        /* Emoji icon input on the create/edit form — a bit larger + centered
+           since it's meant to hold a single emoji, not a line of text. */
+        .ach-icon-input { font-size: 22px; text-align: center; }
 
         #deleteAccountModal {
             display: none; position: fixed; inset: 0; z-index: 10003;
