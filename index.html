@@ -1,5 +1,58 @@
 <!DOCTYPE html>
 <!-- ============================================================
+     DailyBookimix v9.0 — FIRE STREAK + CUSTOM ACHIEVEMENTS EDITION
+
+     WHAT CHANGED (v8.2 → v9.0)
+     1. NEW: Custom (user-created) achievements. Inside the Achievements
+        modal there is now a separate "My Achievements" section where
+        anyone can create their own achievement — an emoji icon, a title,
+        and an optional description — and mark it completed themselves
+        whenever they like (no automatic progress tracking, by design).
+        Custom achievements can be edited or deleted, are visually
+        distinct (violet accent vs. the system achievements' gold), and
+        are stored completely separately from the built-in system
+        achievements under their own dedicated key (custom_achievements_v1
+        — see js/achievements.js, js/storage.js). The existing system
+        achievements (auto-unlock via AchievementsUI.recalculate()) are
+        completely untouched. Full English + Russian translations.
+     2. NEW: Opening the Daily Tasks tab now counts toward the fire streak
+        the same way saving a note/habit/memory/event already did — see
+        diary.switchTab()/updateStreak() in js/diary.js. updateStreak() was
+        already a per-day-idempotent no-op once the streak had been
+        updated for today, so this required no changes to the underlying
+        streak-calculation logic, storage keys, or fire animation — only
+        one additional call site.
+     3. FIX: Notes/Habits/Archive rendered user-entered free text (titles,
+        content, descriptions, partner names, event text) directly into
+        innerHTML, unescaped — typing something like "<b>" or "a & b"
+        broke the layout instead of showing literally. Daily Tasks already
+        escaped its text for exactly this reason; the same escaping
+        (Util.escHtml, js/util.js) is now applied everywhere free text is
+        rendered, including the new custom achievements.
+     4. FIX: switching language (applyLang()) never refreshed the Daily
+        Tasks tab — its quick-add placeholder, mood labels, calendar month
+        name, "Today" button, and stats chips stayed in the old language
+        until the tab was closed and reopened. applyLang() now also calls
+        TaskManager.render().
+     5. FIX: an achievement's "earned on" date was parsed with
+        `new Date('YYYY-MM-DD')`, which reads as UTC while the date is
+        then displayed in local time — for anyone west of UTC this could
+        silently show the day *before* the one actually recorded. Now
+        parsed with the same local-date helper (Util.parseLocalDate) the
+        rest of the app already uses to avoid exactly this bug.
+     6. Deleting all data ("Delete everything" / "Start fresh") now also
+        clears custom_achievements_v1, consistent with how it already
+        clears the system achievements' state.
+     7. FIX: the new custom-achievement create/edit modal (#customAchModal)
+        is opened from inside the Achievements screen (#achievementsModal,
+        z-index 10002) but only had the shared .modal-overlay z-index
+        (8000) — the exact same layering bug already fixed once in v8.2 for
+        #startFreshConfirmModal vs. #encryptionLock. Caught and fixed with
+        the same kind of single targeted CSS rule before shipping, so it
+        never reached a "dead button" state for anyone.
+     No other behavior, data structures, encryption, storage, or Telegram
+     integration changed.
+     ============================================================
      DailyBookimix v8.2 — BUGFIX RELEASE
 
      WHAT CHANGED (v8.1 → v8.2)
@@ -145,7 +198,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=8.2">
+    <link rel="stylesheet" href="css/styles.css?v=9.0">
 </head>
 <body class="font-sans">
 
@@ -697,6 +750,61 @@
             <div class="ach-prog-track"><div class="ach-prog-fill" id="ach-prog-fill" style="width:0%"></div></div>
         </div>
         <div class="ach-grid" id="achGrid"></div>
+
+        <!-- ══════════════ v9.0: CUSTOM (USER-CREATED) ACHIEVEMENTS ══════════════
+             Completely separate section, data, and storage key from the system
+             achievements above — the person creates and manually completes
+             these themselves; there is no automatic progress tracking. -->
+        <div class="ach-custom-section">
+            <div class="ach-custom-header">
+                <div>
+                    <div class="ach-custom-title" id="ach-custom-section-title">My Achievements</div>
+                    <div class="ach-custom-hint" id="ach-custom-section-hint">Your own achievements — mark them done yourself, whenever you feel like it.</div>
+                </div>
+                <button class="ach-custom-add-btn" onclick="AchievementsUI.openCustomForm()">
+                    <span id="customAchAddBtnTxt">+ Add achievement</span>
+                </button>
+            </div>
+            <div class="ach-grid" id="customAchGrid"></div>
+            <div class="ach-custom-empty" id="customAchEmpty">No custom achievements yet. Create your own above!</div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ v9.0: CREATE / EDIT CUSTOM ACHIEVEMENT ══════════════ -->
+<div id="customAchModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="flex items-center justify-between mb-5">
+            <span class="modal-title" id="customAchFormTitle">New achievement</span>
+            <button class="modal-close" onclick="AchievementsUI.closeCustomForm()">×</button>
+        </div>
+        <form id="customAchForm" onsubmit="AchievementsUI.saveCustomForm(event)" class="flex flex-col gap-3">
+            <input type="hidden" id="customAchId">
+            <div>
+                <label class="fi-label" id="lbl-custom-ach-icon">Icon (emoji)</label>
+                <input id="customAchIcon" type="text" class="fi ach-icon-input" maxlength="8" required placeholder="🏅">
+            </div>
+            <div>
+                <label class="fi-label" id="lbl-custom-ach-title">Title</label>
+                <input id="customAchTitle" type="text" class="fi" maxlength="60" required placeholder="e.g. Ran my first 5K">
+            </div>
+            <div>
+                <label class="fi-label" id="lbl-custom-ach-desc">Description (optional)</label>
+                <textarea id="customAchDesc" class="fi" rows="3" maxlength="200" placeholder="Say a bit more about it..."></textarea>
+            </div>
+            <button type="submit" class="btn-primary" id="customAchSaveBtn">
+                <span id="customAchSaveBtnTxt">Save achievement</span><span>💾</span>
+            </button>
+            <div class="flex gap-3">
+                <button type="button" class="btn-ghost flex-1" onclick="AchievementsUI.closeCustomForm()">
+                    <span id="customAchCancelBtnTxt">Cancel</span>
+                </button>
+                <button type="button" class="btn-ghost btn-danger flex-1" id="customAchDeleteBtn" style="display:none"
+                        onclick="AchievementsUI.deleteCustomFromForm()">
+                    <span id="customAchDeleteBtnTxt">Delete</span>
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -717,15 +825,15 @@
 </div>
 
 
-<script src="js/util.js?v=8.2"></script>
-<script src="js/tg-platform.js?v=8.2"></script>
-<script src="js/encryption.js?v=8.2"></script>
-<script src="js/storage.js?v=8.2"></script>
-<script src="js/translations.js?v=8.2"></script>
-<script src="js/task-manager.js?v=8.2"></script>
-<script src="js/diary.js?v=8.2"></script>
-<script src="js/sidebar.js?v=8.2"></script>
-<script src="js/achievements.js?v=8.2"></script>
-<script src="js/boot.js?v=8.2"></script>
+<script src="js/util.js?v=9.0"></script>
+<script src="js/tg-platform.js?v=9.0"></script>
+<script src="js/encryption.js?v=9.0"></script>
+<script src="js/storage.js?v=9.0"></script>
+<script src="js/translations.js?v=9.0"></script>
+<script src="js/task-manager.js?v=9.0"></script>
+<script src="js/diary.js?v=9.0"></script>
+<script src="js/sidebar.js?v=9.0"></script>
+<script src="js/achievements.js?v=9.0"></script>
+<script src="js/boot.js?v=9.0"></script>
 </body>
 </html>
