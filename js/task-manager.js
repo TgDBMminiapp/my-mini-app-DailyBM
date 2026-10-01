@@ -1,6 +1,13 @@
 // @ts-check
 // ================================================================
-//  TASK MANAGER v6 — Daily Tasks
+//  TASK MANAGER v6 — Daily Tasks  (v9.1: fire-streak hooks, see below)
+//
+//  v9.1: the FIRE streak (diary.updateStreak) is extended from exactly
+//  two places in this file, and only after the save succeeded:
+//    • quickAdd()   — a new task was created
+//    • toggleTask() — a task became COMPLETED (un-completing, deleting,
+//                     carrying over and merely viewing the tab never do)
+//  updateStreak() is idempotent per calendar day, so repeat calls are safe.
 //
 //  WHAT CHANGED FROM v5 AND WHY (this tab had the worst bugs):
 //   1. v5 stored EVERY day you'd ever used the app in one ever-
@@ -33,6 +40,7 @@ const TaskManager = {
     },
     _viewDate: null,
     _newTaskImp: false,
+    _adding: false,      // v9.1: re-entrancy guard (Enter key could double-submit while a save was in flight)
     _retentionDays: 120, // raw day-shards older than this get pruned; lifetime stats are unaffected
     _calYear: null,       // year currently shown in the monthly calendar (defaults to today's)
     _calMonth: null,      // 0-indexed month currently shown in the monthly calendar
@@ -164,7 +172,8 @@ const TaskManager = {
         const input = document.getElementById('taskQuickInput');
         if (!input) return;
         const text = input.value.trim();
-        if (!text) return;
+        if (!text || this._adding) return;
+        this._adding = true;
 
         const addBtn = document.getElementById('taskAddBtn');
         if (addBtn) addBtn.disabled = true;
@@ -174,7 +183,7 @@ const TaskManager = {
         const day = this.dayData(dateStr);
 
         const newTask = {
-            id: Date.now(), text, important: this._newTaskImp, completed: false,
+            id: this._uniqueId(day), text, important: this._newTaskImp, completed: false,
             completedAt: null, createdAt: new Date().toISOString()
         };
         day.tasks.unshift(newTask);
@@ -193,6 +202,9 @@ const TaskManager = {
         try {
             await this._persistDay(dateStr);
             diary.toast(diary.t('tasks-toast-added'));
+            // v9.1: creating a task is a real action → extend the fire streak
+            // (before recalculate so streak achievements see the new value).
+            diary.updateStreak();
             AchievementsUI.recalculate();
         } catch (e) {
             this._restoreSnapshot(dateStr, snap);
@@ -201,8 +213,19 @@ const TaskManager = {
             diary.toast(diary.t('err-task-save'), 'error');
             console.error('[TaskManager] quickAdd save failed:', e);
         } finally {
+            this._adding = false;
             if (addBtn) addBtn.disabled = false;
         }
+    },
+
+    // v9.1: Date.now() alone can collide if two tasks are created in the
+    // same millisecond (or after a carry-over copy), which would make
+    // toggle/delete hit the wrong task. Bump until unique within the day.
+    _uniqueId(day) {
+        let id = Date.now();
+        const used = new Set(day.tasks.map(t => t.id));
+        while (used.has(id)) id += 1;
+        return id;
     },
 
     onInputKeydown(e) {
@@ -225,11 +248,15 @@ const TaskManager = {
 
         try {
             await this._persistDay(dateStr);
+            // v9.1: only a task becoming COMPLETED extends the fire streak;
+            // un-completing must not.
+            if (task.completed) diary.updateStreak();
             AchievementsUI.recalculate();
         } catch (e) {
             this._restoreSnapshot(dateStr, snap);
             this.render();
             diary.toast(diary.t('err-save'), 'error');
+            console.error('[TaskManager] toggleTask save failed:', e);
         }
     },
 
@@ -248,6 +275,7 @@ const TaskManager = {
             this._restoreSnapshot(dateStr, snap);
             this.render();
             diary.toast(diary.t('err-delete'), 'error');
+            console.error('[TaskManager] deleteTask save failed:', e);
         }
     },
 
@@ -353,7 +381,7 @@ const TaskManager = {
 
         if (list) {
             if (!tasks.length) {
-                list.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><p>${diary.t('tasks-empty')}</p></div>`;
+                list.innerHTML = `<div class="empty-state"><div class="empty-icon" aria-hidden="true">✅</div><p>${diary.t('tasks-empty')}</p></div>`;
             } else if (!visibleTasks.length) {
                 list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>${diary.t('search-empty')}</p></div>`;
             } else {
@@ -363,12 +391,14 @@ const TaskManager = {
                     return `
                     <div class="task-item ${task.important ? 'important' : ''} ${task.completed ? 'completed' : ''}"
                          style="animation-delay:${delay}s">
-                        <div class="task-check" onclick="TaskManager.toggleTask('${dateStr}',${task.id})">
+                        <div class="task-check" role="checkbox" tabindex="0" aria-checked="${task.completed ? 'true' : 'false'}"
+                             onclick="TaskManager.toggleTask('${dateStr}',${task.id})"
+                             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();TaskManager.toggleTask('${dateStr}',${task.id});}">
                             <span class="task-check-inner">✓</span>
                         </div>
                         <span class="task-text">${text}</span>
                         ${task.important ? '<span class="task-star">⭐</span>' : ''}
-                        <button class="task-del-btn" onclick="TaskManager.deleteTask('${dateStr}',${task.id})">✕</button>
+                        <button class="task-del-btn" aria-label="Delete task" onclick="TaskManager.deleteTask('${dateStr}',${task.id})">✕</button>
                     </div>`;
                 }).join('');
             }

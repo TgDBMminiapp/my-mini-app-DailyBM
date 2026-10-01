@@ -251,15 +251,13 @@ const diary = {
         });
         // Refresh tasks when switching to that tab
         if (tab === 'tasks') {
+            // v9.1 BUG FIX: v9.0 called this.updateStreak() here, so merely
+            // OPENING the Tasks tab extended the fire streak. That made the
+            // streak trivially easy. Viewing the tab must never touch the
+            // streak — it is now extended only by a real action, from
+            // TaskManager.quickAdd() (task created) and
+            // TaskManager.toggleTask() (task marked completed).
             TaskManager.render();
-            // v9.0: simply opening the Tasks tab now counts as a "meaningful
-            // action" for the fire streak, same as saving a note/habit/memory.
-            // updateStreak() is idempotent per calendar day (it no-ops if
-            // lastActiveDate is already today), so this is safe to call every
-            // single time the tab is opened without double-counting, replaying
-            // the fire animation repeatedly, or interfering with the existing
-            // write-action call sites elsewhere in this file.
-            this.updateStreak();
         }
         // Live habit countdowns only tick while the Habits tab is actually open
         if (tab === 'habits') this._startHabitTimers();
@@ -985,10 +983,14 @@ const diary = {
         if (this.fireStreak > old) {
             const hdr = document.getElementById('fireStreakHeader');
             const emj = document.getElementById('fireEmoji');
-            hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim');
-            void hdr.offsetWidth;
-            hdr.classList.add('fire-anim'); emj.classList.add('fire-anim');
-            setTimeout(() => { hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim'); }, 700);
+            // v9.1: null-guard — updateStreak() can now be reached from
+            // TaskManager, so never assume the header nodes exist.
+            if (hdr && emj) {
+                hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim');
+                void hdr.offsetWidth;
+                hdr.classList.add('fire-anim'); emj.classList.add('fire-anim');
+                setTimeout(() => { hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim'); }, 700);
+            }
         }
         this.updateFooter();
     },
@@ -1139,7 +1141,7 @@ const diary = {
         SidebarUI.init();
         AchievementsUI.init();
 
-        console.log('%c✅ DailyBookimix v9.0 — Fire streak on Tasks tab + Custom Achievements!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v9.1 — Fire streak only on real task actions + polish!', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
