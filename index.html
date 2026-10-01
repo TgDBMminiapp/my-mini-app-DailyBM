@@ -1,5 +1,33 @@
 <!DOCTYPE html>
 <!-- ============================================================
+     DailyBookimix v9.1 — FIRE STREAK FIX + DESIGN POLISH
+
+     WHAT CHANGED (v9.0 → v9.1)
+     1. FIX (critical): the fire streak was extended just by OPENING the
+        Daily Tasks tab (v9.0 added a updateStreak() call to
+        diary.switchTab()). Removed. The streak is now extended only by a
+        real task action — creating a task (TaskManager.quickAdd) or
+        marking one completed (TaskManager.toggleTask) — and only after
+        the save succeeded. Un-completing, deleting, carrying over and
+        viewing the tab never touch it. updateStreak() itself is unchanged
+        and stays idempotent per calendar day; every other call site
+        (notes, habits, memories, events) is untouched.
+     2. POLISH: short, transform/opacity-only micro-interactions (tab fade-in,
+        hover lift on desktop, checkbox/button press states, streak-badge
+        glow on extend), consistent radii and soft shadows, refined empty
+        states, better dark-theme checkbox contrast, keyboard focus rings,
+        larger delete hit-target, safe-area bottom padding. Additive CSS
+        block at the end of css/styles.css; reduced-motion respected.
+     3. QUALITY: double-submit guard on quick-add (Enter while saving),
+        collision-proof task ids, null-guarded streak animation, error
+        logging on failed task saves, task checkboxes are now keyboard
+        accessible (role=checkbox, Enter/Space) and labelled.
+     No data structures, storage keys, encryption or Telegram integration
+     changed.
+     ============================================================
+     (previous release notes follow)
+-->
+<!-- ============================================================
      DailyBookimix v9.0 — FIRE STREAK + CUSTOM ACHIEVEMENTS EDITION
 
      WHAT CHANGED (v8.2 → v9.0)
@@ -198,7 +226,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=9.0">
+    <link rel="stylesheet" href="css/styles.css?v=9.1">
 </head>
 <body class="font-sans">
 
@@ -825,15 +853,15 @@
 </div>
 
 
-<script src="js/util.js?v=9.0"></script>
-<script src="js/tg-platform.js?v=9.0"></script>
-<script src="js/encryption.js?v=9.0"></script>
-<script src="js/storage.js?v=9.0"></script>
-<script src="js/translations.js?v=9.0"></script>
-<script src="js/task-manager.js?v=9.0"></script>
-<script src="js/diary.js?v=9.0"></script>
-<script src="js/sidebar.js?v=9.0"></script>
-<script src="js/achievements.js?v=9.0"></script>
-<script src="js/boot.js?v=9.0"></script>
+<script src="js/util.js?v=9.1"></script>
+<script src="js/tg-platform.js?v=9.1"></script>
+<script src="js/encryption.js?v=9.1"></script>
+<script src="js/storage.js?v=9.1"></script>
+<script src="js/translations.js?v=9.1"></script>
+<script src="js/task-manager.js?v=9.1"></script>
+<script src="js/diary.js?v=9.1"></script>
+<script src="js/sidebar.js?v=9.1"></script>
+<script src="js/achievements.js?v=9.1"></script>
+<script src="js/boot.js?v=9.1"></script>
 </body>
 </html>
