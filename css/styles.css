@@ -839,3 +839,133 @@
             box-shadow: 0 4px 20px rgba(239,68,68,0.3);
         }
         .lock-btn-danger:active { background: rgba(220,38,38,0.9); }
+
+
+        /* ══════════════════════════════════════════════════════════════
+           v9.1 — DESIGN POLISH
+           Purely additive layer: everything below only refines existing
+           selectors using the EXISTING CSS variables, so the light/dark
+           themes and Telegram theme adaptation keep working untouched.
+           Motion is short (<=0.3s), transform/opacity only, and is
+           disabled under prefers-reduced-motion at the bottom.
+           ══════════════════════════════════════════════════════════════ */
+
+        /* ── Safe area (notched phones / home indicator). env() resolves to 0
+              where unsupported, so this is a no-op on desktop. ── */
+        body { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+        /* ── Keyboard focus: visible ring for keyboard/assistive users only
+              (no ring on tap, so touch UX is unchanged). ── */
+        :where(button, [role="button"], [role="checkbox"], a, .task-cal-day, .tab-btn):focus-visible {
+            outline: 2px solid var(--accent-light);
+            outline-offset: 2px;
+        }
+        .task-check:focus-visible { border-radius: 8px; }
+
+        /* ── Tab content: soft fade/slide-in when a tab is switched to ── */
+        @keyframes tabIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: none; }
+        }
+        #notesSection:not(.hidden), #habitsSection:not(.hidden),
+        #tasksSection:not(.hidden), #memorySection:not(.hidden) {
+            animation: tabIn 0.24s cubic-bezier(0.22,0.8,0.3,1) backwards; /* backwards: no lingering transform (would trap position:fixed children) */
+        }
+
+        /* ── Cards / buttons: consistent soft shadow + gentle lift on desktop hover.
+              (Hover is gated so touch devices never get a "stuck" hover state.) ── */
+        .card { box-shadow: 0 2px 10px rgba(26,26,46,0.06); }
+        body.theme-dark .card { box-shadow: 0 2px 12px rgba(0,0,0,0.25); }
+        .btn-primary { transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s, filter 0.18s; }
+        .btn-ghost, .settings-btn, .carryover-btn { transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s; }
+        @media (hover: hover) {
+            .card:hover        { box-shadow: var(--shadow-card); }
+            .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.04); box-shadow: 0 8px 26px rgba(0,0,0,0.28); }
+            .btn-ghost:hover, .settings-btn:hover { background: rgba(255,255,255,0.24); }
+            .tab-btn:not(.active):hover { background: rgba(255,255,255,0.12); }
+            .carryover-btn:hover { background: rgba(59,130,246,0.22); }
+            .task-add-btn:hover  { transform: scale(1.06); }
+            .task-check:hover    { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.18); }
+            .task-cal-day:not(.empty):hover { transform: translateY(-1px); }
+            .mood-btn:hover      { background: rgba(255,255,255,0.2); }
+        }
+        .btn-primary:active { filter: none; }
+        .btn-primary:disabled, .task-add-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        /* ── Fire-streak header: warm glow on the badge + stable digit width
+              so the badge doesn't jitter when the number changes. ── */
+        .streak-badge {
+            box-shadow: 0 2px 12px rgba(255,140,66,0.18), inset 0 0 0 1px rgba(255,255,255,0.16);
+            transition: transform 0.15s, box-shadow 0.3s;
+        }
+        #fireStreakHeader { font-variant-numeric: tabular-nums; }
+        #fireEmoji { display: inline-block; filter: drop-shadow(0 0 6px rgba(255,140,66,0.55)); transform-origin: 50% 80%; }
+        /* Slightly richer "just extended" pop: a brief golden pulse on the badge
+           (the existing firePop scale/rotate on the emoji + number is unchanged). */
+        @keyframes streakGlow {
+            0%   { box-shadow: 0 0 0 0 rgba(251,191,36,0.55); }
+            100% { box-shadow: 0 0 0 14px rgba(251,191,36,0); }
+        }
+        .streak-badge:has(.fire-anim) { animation: streakGlow 0.7s ease-out 1; }
+
+        /* ── Tasks: quick-add row ── */
+        .task-quick-add { box-shadow: 0 2px 10px rgba(0,0,0,0.08); transition: border-color 0.2s, box-shadow 0.2s; }
+        .task-quick-add:focus-within { box-shadow: 0 0 0 4px var(--accent-glow); }
+        .task-add-btn { box-shadow: 0 2px 8px var(--accent-glow); }
+        .task-imp-toggle:active { transform: scale(0.9); }
+
+        /* ── Tasks: list cards ── */
+        .task-item {
+            border-radius: 18px;
+            box-shadow: 0 2px 8px rgba(26,26,46,0.06);
+            transition: opacity 0.25s, background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s;
+        }
+        body.theme-dark .task-item { box-shadow: 0 2px 10px rgba(0,0,0,0.22); }
+        @media (hover: hover) { .task-item:hover { box-shadow: var(--shadow-card); } }
+        .task-item.important { box-shadow: 0 2px 12px rgba(251,191,36,0.16); }
+        /* Unchecked, non-important checkbox: the old border used --card-border
+           (~14% alpha) which nearly vanished on the dark theme. Use the label tone. */
+        .task-item:not(.completed):not(.important) .task-check { border-color: var(--card-text-label); }
+        .task-check { transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.15s; }
+        .task-check:active { transform: scale(0.88); }
+        .task-check-inner { color: #fff; font-weight: 900; line-height: 1; }
+        .task-text { transition: opacity 0.2s, color 0.2s; }
+        /* Completed tasks: slightly softer text, card stays readable */
+        .task-item.completed { opacity: 0.6; }
+        /* Larger, friendlier delete hit target (was ~19px) without changing the layout */
+        .task-del-btn {
+            min-width: 32px; min-height: 32px; margin: -6px -6px -6px 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 10px; transition: color 0.15s, background 0.15s, transform 0.15s;
+        }
+        .task-del-btn:hover  { background: rgba(239,68,68,0.10); }
+        .task-del-btn:active { transform: scale(0.88); }
+
+        /* ── Tasks: stat chips / mood ── */
+        .task-stat-chip { border-radius: 999px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
+        .mood-btn { transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s; }
+        .mood-btn.selected { box-shadow: 0 0 0 3px rgba(255,140,66,0.18); }
+
+        /* ── Calendar days: consistent radius/transition ── */
+        .task-cal-day { transition: transform 0.15s, background 0.2s, border-color 0.2s; }
+
+        /* ── Empty states: contained, calmer, with a one-shot entrance ── */
+        @keyframes emptyIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to   { opacity: 1; transform: none; }
+        }
+        .empty-state {
+            margin: 4px 0; padding: 40px 20px;
+            border: 1.5px dashed var(--glass-border); border-radius: var(--radius-card);
+            background: var(--glass-bg);
+            animation: emptyIn 0.3s ease-out both;
+        }
+        .empty-state .empty-icon { opacity: 0.75; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.12)); }
+        .empty-state p { max-width: 28ch; margin: 0 auto; line-height: 1.45; }
+
+        /* ── Reduced motion: switch every v9.1 animation/transition off ── */
+        @media (prefers-reduced-motion: reduce) {
+            #notesSection, #habitsSection, #tasksSection, #memorySection,
+            .empty-state, .streak-badge { animation: none !important; }
+            .btn-primary:hover, .task-add-btn:hover, .task-cal-day:hover { transform: none; }
+        }
