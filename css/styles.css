@@ -461,7 +461,6 @@
         .sidebar-avatar { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 3px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 12px; overflow: hidden; }
         .sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
         .sidebar-username { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 2px; }
-        .sidebar-userid { font-size: 12px; opacity: 0.75; font-weight: 600; }
         .sidebar-body { flex: 1; padding: 16px 0 24px; }
         .sidebar-section-label { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #9ca3af; margin: 16px 20px 6px; }
         .sidebar-item { display: flex; align-items: center; gap: 14px; padding: 14px 20px; cursor: pointer; transition: background 0.18s; }
@@ -562,6 +561,29 @@
         /* Emoji icon input on the create/edit form — a bit larger + centered
            since it's meant to hold a single emoji, not a line of text. */
         .ach-icon-input { font-size: 22px; text-align: center; }
+
+        /* v9.2: data / history dialogs share the delete-account overlay look */
+        #dataConfirmModal, #actionHistoryModal {
+            display: none; position: fixed; inset: 0; z-index: 10004;
+            background: rgba(0,0,0,0.72); backdrop-filter: blur(10px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        #dataConfirmModal.open, #actionHistoryModal.open { display: flex; }
+        /* The confirm dialog is opened FROM the history modal, so it must stack above it. */
+        #dataConfirmModal { z-index: 10005; }
+        .sidebar-hint { font-size: 12px; color: #9ca3af; line-height: 1.4; margin: 4px 20px 8px; }
+        .sidebar-item.is-busy { opacity: 0.6; pointer-events: none; }
+        .dc-details { background: rgba(0,0,0,0.05); border-radius: 14px; padding: 10px 14px; margin-bottom: 18px; }
+        body.theme-dark .dc-details { background: rgba(255,255,255,0.07); }
+        .dc-line { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; padding: 4px 0; color: var(--modal-text); }
+        .ah-box { max-width: 420px; display: flex; flex-direction: column; max-height: 88vh; }
+        .ah-list { flex: 1 1 auto; min-height: 0; max-height: 52vh; overflow-y: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid rgba(0,0,0,0.07); }
+        body.theme-dark .ah-list { border-top-color: rgba(255,255,255,0.08); }
+        .ah-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 2px; border-bottom: 1px solid rgba(0,0,0,0.07); font-size: 14px; color: var(--modal-text); }
+        body.theme-dark .ah-row { border-bottom-color: rgba(255,255,255,0.08); }
+        .ah-label { font-weight: 700; }
+        .ah-time { font-size: 12px; color: #9ca3af; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .ah-empty { text-align: center; color: #9ca3af; font-size: 14px; padding: 24px 0 8px; }
 
         #deleteAccountModal {
             display: none; position: fixed; inset: 0; z-index: 10003;
