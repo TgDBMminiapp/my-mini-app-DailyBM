@@ -15,6 +15,12 @@ const Util = {
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
     },
+    /** Local 'YYYY-MM-DD HH:mm' for an epoch-ms timestamp (or Date). Local, NOT UTC. */
+    localDateTimeStr(ts) {
+        const d = ts instanceof Date ? ts : new Date(ts);
+        const p = (n) => String(n).padStart(2, '0');
+        return `${this.localDateStr(d)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    },
     /** Add n local calendar days to a YYYY-MM-DD string, return YYYY-MM-DD. */
     addDays(dateStr, n) {
         const [y, m, d] = dateStr.split('-').map(Number);

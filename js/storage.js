@@ -78,6 +78,30 @@ const StorageManager = {
         return EncryptionManager.decrypt(raw);
     },
 
+    /** Local-only variants: encrypted like everything else but NEVER sent to
+     *  CloudStorage. Used for data that must stay on this device (action
+     *  history) and that may exceed CloudStorage's per-value size cap. */
+    async setLocalItem(key, value) {
+        const encrypted = await EncryptionManager.encrypt(value);
+        if (TGPlatform.supportsDevice) {
+            const r = await TGPlatform.deviceSet(key, encrypted);
+            if (r.ok) return;
+        }
+        this._localSetRaw(key, encrypted);
+    },
+    async getLocalItem(key) {
+        let raw = null;
+        if (TGPlatform.supportsDevice) { const dr = await TGPlatform.deviceGet(key); raw = dr.ok ? dr.value : null; }
+        if (!raw) raw = this._localGetRaw(key);
+        if (!raw) return null;
+        return EncryptionManager.decrypt(raw);
+    },
+
+    async removeLocalItem(key) {
+        if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceRemove(key); } catch (e) {} }
+        this._localRemoveRaw(key);
+    },
+
     async removeItem(key) {
         if (TGPlatform.supportsCloud) { try { await TGPlatform.cloudRemove(key); } catch (e) {} }
         if (TGPlatform.supportsDevice) { try { await TGPlatform.deviceRemove(key); } catch (e) {} }

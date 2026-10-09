@@ -201,6 +201,7 @@ const TaskManager = {
 
         try {
             await this._persistDay(dateStr);
+            ActionLog.record('task_created');
             diary.toast(diary.t('tasks-toast-added'));
             // v9.1: creating a task is a real action → extend the fire streak
             // (before recalculate so streak achievements see the new value).
@@ -250,7 +251,7 @@ const TaskManager = {
             await this._persistDay(dateStr);
             // v9.1: only a task becoming COMPLETED extends the fire streak;
             // un-completing must not.
-            if (task.completed) diary.updateStreak();
+            if (task.completed) { ActionLog.record('task_completed'); diary.updateStreak(); }
             AchievementsUI.recalculate();
         } catch (e) {
             this._restoreSnapshot(dateStr, snap);
@@ -270,6 +271,7 @@ const TaskManager = {
         this.render();
         try {
             await this._persistDay(dateStr);
+            ActionLog.record('task_deleted');
             diary.toast(diary.t('tasks-toast-deleted'));
         } catch (e) {
             this._restoreSnapshot(dateStr, snap);

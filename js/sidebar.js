@@ -21,6 +21,8 @@ const SidebarUI = {
         }
     },
 
+    // userId is kept for internal use only — it must never be rendered in the UI
+    // (users mistake it for something shareable). Display uses nickname/name only.
     profile: { name: '', userId: '', photoUrl: '', nickname: '' },
 
     init() {
@@ -52,11 +54,9 @@ const SidebarUI = {
         const lang   = diary.lang || 'en';
         const strs   = this._strings[lang] || this._strings.en;
         const name   = this.profile.nickname || this.profile.name || strs.defaultUser;
-        const uid    = this.profile.userId || '—';
 
         const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
         set('sidebarUsername', name);
-        set('sidebarUserid',  'ID: ' + uid);
         const elNick = document.getElementById('sidebarNickInput');
         if (elNick) elNick.value = this.profile.nickname || '';
 
@@ -99,11 +99,13 @@ const SidebarUI = {
         set('recoveryModalGenerateBtn',diary.t('recoveryModalGenerateBtn'));
         set('recoveryModalCloseBtn',   diary.t('recoveryModalCloseBtn'));
         set('ach-modal-title', AchievementsUI._strings[lang]?.title || 'Achievements');
+        BackupManager.applyTranslations(); // v9.2: Data section, dialogs, action history
         setPh('sidebarNickInput',  strs.nickPlaceholder);
         this._updateHeaderDisplay();
     },
 
     open() {
+        ActionLog.record('settings_opened');
         document.getElementById('sidebarBackdrop').classList.add('open');
         document.getElementById('sidebarPanel').classList.add('open');
         this._updateHeaderDisplay();
@@ -170,6 +172,7 @@ const SidebarUI = {
             for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1', 'custom_achievements_v1']) {
                 await StorageManager.removeItem(key);
             }
+            await ActionLog.clear(); // v9.2: action history is user data too
             // NOTE: deliberately NOT touching dbmix_sentinel / enc_mk_recovery /
             // recovery_salt / SecureStorage mk — "delete account" erases your
             // DATA, not your encryption identity. Your existing recovery code

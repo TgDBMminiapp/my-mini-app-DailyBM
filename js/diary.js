@@ -73,6 +73,7 @@ const diary = {
     },
 
     applyTheme(theme) {
+        if (theme !== this.theme) ActionLog.record('theme_changed');
         this.theme = theme;
         document.body.classList.remove('theme-dark');
         if (theme === 'dark') document.body.classList.add('theme-dark');
@@ -83,6 +84,7 @@ const diary = {
     },
 
     applyLang(lang) {
+        if (lang !== this.lang) ActionLog.record('language_changed');
         this.lang = lang;
         document.documentElement.lang = lang;
         StorageManager.setItem('lang', lang);
@@ -364,11 +366,13 @@ const diary = {
             pinned: false
         };
         const existing = this.notes.findIndex(n => n.id === id);
+        const isNewNote = existing < 0;
         if (existing >= 0) { note.pinned = this.notes[existing].pinned; this.notes[existing] = note; }
         else this.notes.unshift(note);
 
         this.notes = this._sortPinned(this.notes);
         await this.saveNotes();
+        ActionLog.record(isNewNote ? 'note_created' : 'note_updated');
         this.updateStreak();
         this._resetNoteForm();
         this.toast(this.t('toast-note-saved'));
@@ -389,6 +393,7 @@ const diary = {
         if (!confirm(this.t('confirm-delete-note'))) return;
         this.notes = this.notes.filter(n => n.id !== id);
         await this.saveNotes();
+        ActionLog.record('note_deleted');
         this.toast(this.t('toast-note-deleted'));
     },
 
@@ -480,11 +485,13 @@ const diary = {
         };
 
         const idx = this.habits.findIndex(h => h.id === id);
+        const isNewHabit = idx < 0;
         if (idx >= 0) this.habits[idx] = habit;
         else this.habits.unshift(habit);
 
         this.habits = this._sortPinned(this.habits);
         await this.saveHabits();
+        ActionLog.record(isNewHabit ? 'habit_created' : 'habit_updated');
         this.updateStreak();
         this._resetHabitForm();
         this.toast(this.t('toast-habit-added'));
@@ -506,6 +513,7 @@ const diary = {
         if (!confirm(this.t('confirm-delete-habit'))) return;
         this.habits = this.habits.filter(h => h.id !== id);
         await this.saveHabits();
+        ActionLog.record('habit_deleted');
         this.toast(this.t('toast-habit-deleted'));
     },
 
@@ -514,10 +522,12 @@ const diary = {
         const h = this.habits.find(h => h.id === id);
         if (!h || this.isHabitFinished(h)) return;
         const s = new Set(h.completedDays);
-        s.has(date) ? s.delete(date) : s.add(date);
+        const wasChecked = s.has(date);
+        wasChecked ? s.delete(date) : s.add(date);
         h.completedDays = Array.from(s);
         if (h.completedDays.length >= h.goal) h.endDate = date;
         this.saveHabits();
+        ActionLog.record(wasChecked ? 'habit_unchecked' : 'habit_checked');
         this.updateStreak();
     },
 
@@ -734,11 +744,13 @@ const diary = {
         };
 
         const idx = this.memories.findIndex(m => m.id === id);
+        const isNewMemory = idx < 0;
         if (idx >= 0) this.memories[idx] = memory;
         else this.memories.unshift(memory);
 
         this.memories = this._sortPinned(this.memories);
         await this.saveMemories();
+        ActionLog.record(isNewMemory ? 'memory_created' : 'memory_updated');
         this.updateStreak();
         this._resetMemoryForm();
         this.toast(this.t('toast-memory-saved'));
@@ -768,6 +780,7 @@ const diary = {
         if (!confirm(this.t('confirm-delete-memory'))) return;
         this.memories = this.memories.filter(m => m.id !== id);
         await this.saveMemories();
+        ActionLog.record('memory_deleted');
         this.toast(this.t('toast-memory-deleted'));
     },
 
@@ -1089,6 +1102,7 @@ const diary = {
 
         StorageManager.init();
         await this.load();
+        ActionLog.init().catch(e => console.warn('[diary] action log init failed:', e)); // never blocks startup
 
         document.getElementById('noteForm').addEventListener('submit',   e => this.saveNote(e));
         document.getElementById('habitForm').addEventListener('submit',  e => this.saveHabit(e));
@@ -1130,6 +1144,7 @@ const diary = {
             if (e.key === 'Escape') {
                 this.closeModals(); this.closeSheet();
                 SidebarUI.close(); AchievementsUI.close();
+                ActionHistoryUI.close(); DataDialog.onCancel();
             }
         });
 
@@ -1141,7 +1156,7 @@ const diary = {
         SidebarUI.init();
         AchievementsUI.init();
 
-        console.log('%c✅ DailyBookimix v9.1 — Fire streak only on real task actions + polish!', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v9.2 — Data export/import, action history, hidden Telegram ID', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 
