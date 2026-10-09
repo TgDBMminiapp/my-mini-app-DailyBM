@@ -716,7 +716,6 @@
     <div class="sidebar-hero">
         <div class="sidebar-avatar" id="sidebarAvatar">👤</div>
         <div class="sidebar-username" id="sidebarUsername">User</div>
-        <div class="sidebar-userid" id="sidebarUserid">ID: —</div>
     </div>
     <div class="sidebar-body">
         <div class="sidebar-section-label" id="sb-lbl-nickname">Nickname</div>
@@ -736,6 +735,25 @@
             <div class="sidebar-item-label" id="sb-item-recovery">Backup &amp; recovery</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section-label" id="sb-lbl-data">Data</div>
+        <div class="sidebar-item" id="sbExportRow" onclick="BackupManager.exportData()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(16,185,129,0.2),rgba(5,150,105,0.15));border:1px solid rgba(16,185,129,0.3)">📤</div>
+            <div class="sidebar-item-label" id="sb-item-export">Export data</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
+        <div class="sidebar-item" id="sbImportRow" onclick="BackupManager.pickFile()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.2),rgba(37,99,235,0.15));border:1px solid rgba(59,130,246,0.3)">📥</div>
+            <div class="sidebar-item-label" id="sb-item-import">Import data</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
+        <div class="sidebar-item" onclick="ActionHistoryUI.open()">
+            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(168,85,247,0.2),rgba(126,34,206,0.15));border:1px solid rgba(168,85,247,0.3)">🕘</div>
+            <div class="sidebar-item-label" id="sb-item-history">Action history</div>
+            <div class="sidebar-item-arrow">›</div>
+        </div>
+        <p class="sidebar-hint" id="sb-data-hint">Backup files are not encrypted — keep them private.</p>
+        <input type="file" id="importFileInput" accept=".json,application/json" style="display:none" onchange="BackupManager.onFileChosen(this)">
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
         <div class="sidebar-item" onclick="SidebarUI.openPrivacyPolicy()">
@@ -837,6 +855,34 @@
 </div>
 
 
+<!-- ══════════════ v9.2: GENERIC CONFIRM (import overwrite / clear history) ══════════════ -->
+<div id="dataConfirmModal" onclick="if(event.target===this)DataDialog.onCancel()">
+    <div class="delete-modal-box">
+        <div class="delete-modal-icon" id="dcIcon">⚠️</div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="dcTitle"></h2>
+        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:16px" id="dcDesc"></p>
+        <div class="dc-details" id="dcDetails" style="display:none"></div>
+        <div class="flex gap-3">
+            <button class="btn-ghost flex-1" id="dcCancel" onclick="DataDialog.onCancel()" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
+            <button class="btn-ghost btn-danger flex-1" id="dcConfirm" onclick="DataDialog.onConfirm()">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ v9.2: ACTION HISTORY ══════════════ -->
+<div id="actionHistoryModal" onclick="if(event.target===this)ActionHistoryUI.close()">
+    <div class="delete-modal-box ah-box">
+        <div class="flex items-center justify-between mb-3" style="display:flex;align-items:center;justify-content:space-between">
+            <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text)" id="ahTitle">Action history</h2>
+            <button class="modal-close" onclick="ActionHistoryUI.close()" aria-label="Close">×</button>
+        </div>
+        <p style="font-size:13px;color:#6b7280;line-height:1.5;margin-bottom:12px" id="ahDesc"></p>
+        <div class="ah-list" id="ahList"></div>
+        <div class="ah-empty" id="ahEmpty" style="display:none"></div>
+        <button class="btn-ghost btn-danger" id="ahClearBtn" style="width:100%;margin-top:14px" onclick="ActionHistoryUI.requestClear()">Clear history</button>
+    </div>
+</div>
+
 <!-- ══════════════ DELETE ACCOUNT MODAL ══════════════ -->
 <div id="deleteAccountModal">
     <div class="delete-modal-box">
@@ -853,15 +899,17 @@
 </div>
 
 
-<script src="js/util.js?v=9.1"></script>
+<script src="js/util.js?v=9.2"></script>
 <script src="js/tg-platform.js?v=9.1"></script>
 <script src="js/encryption.js?v=9.1"></script>
-<script src="js/storage.js?v=9.1"></script>
-<script src="js/translations.js?v=9.1"></script>
-<script src="js/task-manager.js?v=9.1"></script>
-<script src="js/diary.js?v=9.1"></script>
-<script src="js/sidebar.js?v=9.1"></script>
+<script src="js/storage.js?v=9.2"></script>
+<script src="js/translations.js?v=9.2"></script>
+<script src="js/action-log.js?v=9.2"></script>
+<script src="js/task-manager.js?v=9.2"></script>
+<script src="js/diary.js?v=9.2"></script>
+<script src="js/sidebar.js?v=9.2"></script>
 <script src="js/achievements.js?v=9.1"></script>
+<script src="js/backup.js?v=9.2"></script>
 <script src="js/boot.js?v=9.1"></script>
 </body>
 </html>
