@@ -1,5 +1,36 @@
 <!DOCTYPE html>
 <!-- ============================================================
+     DailyBookimix v9.3 — DAY STREAK FREEZES + LIGHT POLISH
+
+     WHAT CHANGED (v9.2 → v9.3)
+     1. NEW: Day Streak Freezes ("❄️"). Everyone gets 2 per calendar month
+        (local time; refilled automatically on the 1st, incl. Dec→Jan).
+        If exactly ONE day was missed, the next real action spends a
+        freeze and the fire streak continues instead of resetting. Gaps
+        of 2+ days still reset and never spend a freeze. The frozen day
+        protects the chain but is not itself counted in the number.
+        UI: "❄️ n" chip in the streak badge, a toast when a freeze is
+        used, and ❄️ cells (distinct from 🔥) in the streak calendar.
+        Stored as freezeCount / freezeMonth / freezeLog; included in
+        export/import (older backups without them get safe defaults)
+        and in delete-account / start-fresh wipes.
+     2. POLISH: additive CSS block at the end of css/styles.css — larger
+        touch targets (44px) for modal close, calendar nav, streak badge
+        and hamburger; clearer placeholder / label / muted-text contrast;
+        modal title hierarchy; safe-area-aware, wrapping toasts; press
+        states. Colour system, themes and layout are unchanged.
+     3. MINI-FIXES: fire-day cells in the streak calendar never showed
+        their gradient (a more specific grey rule won) — fixed; streak
+        save is now serialised (no interleaved writes) and NaN-guarded;
+        a streak is no longer reset when the local date is one day
+        behind the stored one (timezone travel); streak badge aria-label
+        is now translated; cache-busting ?v= params were mixed 9.1/9.2 —
+        every asset now uses 9.3.
+     No encryption, achievements, task-manager or privacy changes.
+     ============================================================
+     (previous release notes follow)
+-->
+<!-- ============================================================
      DailyBookimix v9.1 — FIRE STREAK FIX + DESIGN POLISH
 
      WHAT CHANGED (v9.0 → v9.1)
@@ -226,7 +257,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=9.1">
+    <link rel="stylesheet" href="css/styles.css?v=9.3">
 </head>
 <body class="font-sans">
 
@@ -311,6 +342,7 @@
         <div id="streakBadge" class="streak-badge flex-shrink-0" onclick="diary.showStreakCalendar()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();diary.showStreakCalendar();}" role="button" tabindex="0" aria-label="Streak history">
             <span id="fireEmoji" class="text-xl">🔥</span>
             <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
+            <span id="freezeChip" class="freeze-chip" aria-hidden="true">❄️<span id="freezeCountHeader">2</span></span>
         </div>
     </header>
 
@@ -696,6 +728,7 @@
         <div class="streak-cal-summary">
             <div class="streak-cal-count" id="streakCalCount">0</div>
             <div class="streak-cal-count-label" id="streak-cal-current">Current streak</div>
+            <div class="streak-freeze-summary" id="streakFreezeSummary"></div>
         </div>
         <div class="cal-nav-row">
             <button class="cal-nav-btn" onclick="diary.streakCalPrevMonth()" aria-label="Previous month">‹</button>
@@ -706,7 +739,8 @@
             <button class="cal-nav-btn" onclick="diary.streakCalNextMonth()" aria-label="Next month">›</button>
         </div>
         <table id="streakCalTable"></table>
-        <p id="streak-cal-hint" class="text-center text-xs mt-4" style="color:#9ca3af">Days that kept your streak alive</p>
+        <p id="streak-cal-hint" class="streak-cal-hint text-center text-xs mt-4">Days that kept your streak alive</p>
+        <p id="streak-cal-hint-freeze" class="streak-cal-hint text-center text-xs mt-1"></p>
     </div>
 </div>
 
@@ -899,17 +933,17 @@
 </div>
 
 
-<script src="js/util.js?v=9.2"></script>
-<script src="js/tg-platform.js?v=9.1"></script>
-<script src="js/encryption.js?v=9.1"></script>
-<script src="js/storage.js?v=9.2"></script>
-<script src="js/translations.js?v=9.2"></script>
-<script src="js/action-log.js?v=9.2"></script>
-<script src="js/task-manager.js?v=9.2"></script>
-<script src="js/diary.js?v=9.2"></script>
-<script src="js/sidebar.js?v=9.2"></script>
-<script src="js/achievements.js?v=9.1"></script>
-<script src="js/backup.js?v=9.2"></script>
-<script src="js/boot.js?v=9.1"></script>
+<script src="js/util.js?v=9.3"></script>
+<script src="js/tg-platform.js?v=9.3"></script>
+<script src="js/encryption.js?v=9.3"></script>
+<script src="js/storage.js?v=9.3"></script>
+<script src="js/translations.js?v=9.3"></script>
+<script src="js/action-log.js?v=9.3"></script>
+<script src="js/task-manager.js?v=9.3"></script>
+<script src="js/diary.js?v=9.3"></script>
+<script src="js/sidebar.js?v=9.3"></script>
+<script src="js/achievements.js?v=9.3"></script>
+<script src="js/backup.js?v=9.3"></script>
+<script src="js/boot.js?v=9.3"></script>
 </body>
 </html>
