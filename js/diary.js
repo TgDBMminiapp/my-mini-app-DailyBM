@@ -10,6 +10,14 @@ const diary = {
     fireStreak:     0,
     lastActiveDate: '',
     streakLog:      [], // recent local dates ('YYYY-MM-DD') that extended/kept the fire streak alive
+    // v9.3: Day Streak Freezes. Each calendar month (local time) grants FREEZES_PER_MONTH
+    // freezes. See updateStreak() for the auto-consume rules.
+    FREEZES_PER_MONTH: 2,
+    FREEZE_LOG_MAX:    36,
+    freezeCount:    2,  // freezes remaining in freezeMonth (never < 0, never > FREEZES_PER_MONTH)
+    freezeMonth:    '', // 'YYYY-MM' (local) the current allowance belongs to; '' = not initialised yet
+    freezeLog:      [], // local dates ('YYYY-MM-DD') of MISSED days that a freeze covered (calendar marks them)
+    _streakSaveChain: Promise.resolve(), // v9.3: serialises streak/freeze writes (see _queueStreakSave)
     tempEndHabitId:    null,
     tempEndRelationsId: null,
     openNoteDetail:   null,
@@ -181,7 +189,8 @@ const diary = {
 
     async load() {
         const data = await StorageManager.getItems([
-            'lang','theme','fireStreak','lastActiveDate','streakLog'
+            'lang','theme','fireStreak','lastActiveDate','streakLog',
+            'freezeCount','freezeMonth','freezeLog'
         ]);
 
         // v6: notes/habits/memories are now sharded (one key per item) instead
@@ -198,9 +207,20 @@ const diary = {
 
         if (data.lang)  this.lang  = data.lang;
         if (data.theme) this.theme = data.theme;
-        this.fireStreak     = parseInt(data.fireStreak    || '0');
+        // v9.3 null-guard: parseInt('garbage') is NaN, which would render "NaN" in the
+        // header and poison every later `fireStreak + 1`.
+        this.fireStreak     = parseInt(data.fireStreak || '0', 10) || 0;
         this.lastActiveDate = data.lastActiveDate || '';
         try { this.streakLog = data.streakLog ? JSON.parse(data.streakLog) : []; } catch (e) { this.streakLog = []; }
+        if (!Array.isArray(this.streakLog)) this.streakLog = [];
+
+        // v9.3: freezes. Missing keys (first launch, or upgrading from v9.2) → initialised
+        // to a full allowance for the current month; a stale month is refilled here too.
+        let rawFreezeLog = [];
+        try { rawFreezeLog = data.freezeLog ? JSON.parse(data.freezeLog) : []; } catch (e) { rawFreezeLog = []; }
+        if (this._setFreezeState(data.freezeCount, data.freezeMonth, rawFreezeLog)) {
+            this._saveFreezes().catch(e => console.warn('[diary] freeze save failed:', e));
+        }
 
         document.body.classList.remove('theme-dark');
         if (this.theme === 'dark') document.body.classList.add('theme-dark');
@@ -325,6 +345,7 @@ const diary = {
         document.getElementById('memoriesCount').textContent = this.memories.length;
         document.getElementById('tasksCount').textContent   = TaskManager.totalTasks();
         document.getElementById('fireStreakHeader').textContent  = this.fireStreak;
+        this._renderFreezeBadge();
         if (typeof AchievementsUI !== 'undefined') AchievementsUI.recalculate();
     },
 
@@ -977,18 +998,109 @@ const diary = {
         document.getElementById('memoryFormTitle').textContent = this.t('memoryFormTitle-new');
     },
 
+    // ---------- v9.3: Day Streak Freezes ----------
+    _curMonthStr() { return this.today().slice(0, 7); }, // local 'YYYY-MM' (same local-date helper as everything else)
+
+    /** Freezes the person can use RIGHT NOW. Pure (no mutation): if the stored allowance
+     *  belongs to an earlier month, the new month has already refilled it. */
+    _freezesLeft() {
+        const MAX = this.FREEZES_PER_MONTH;
+        if (!this.freezeMonth || this.freezeMonth < this._curMonthStr()) return MAX;
+        return Math.min(MAX, Math.max(0, this.freezeCount));
+    },
+
+    /** Brings freezeMonth/freezeCount up to date. Returns true if anything changed (caller persists).
+     *   - never initialised (first launch / old backup / v9.2 upgrade) → full allowance
+     *   - stored month is EARLIER than now (incl. Dec→Jan: '2026-12' < '2027-01') → refill once
+     *   - stored month is LATER than now (device clock moved back / timezone shift) → re-anchor to
+     *     now but KEEP the count, so a clock glitch can never mint extra freezes mid-month. */
+    _syncFreezeMonth() {
+        const MAX = this.FREEZES_PER_MONTH, cur = this._curMonthStr();
+        if (!this.freezeMonth || this.freezeMonth < cur) {
+            this.freezeCount = MAX; this.freezeMonth = cur; return true;
+        }
+        if (this.freezeMonth > cur) {
+            this.freezeCount = Math.min(MAX, Math.max(0, this.freezeCount)); this.freezeMonth = cur; return true;
+        }
+        return false;
+    },
+
+    /** Validates raw freeze values (from storage or an imported backup) then syncs the month.
+     *  Anything missing/garbled falls back to a safe default instead of throwing. */
+    _setFreezeState(count, month, log) {
+        const MAX = this.FREEZES_PER_MONTH, n = parseInt(count, 10);
+        this.freezeCount = Number.isFinite(n) ? Math.min(MAX, Math.max(0, n)) : MAX;
+        this.freezeMonth = typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : '';
+        this.freezeLog = (Array.isArray(log) ? log : [])
+            .filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+            .slice(-this.FREEZE_LOG_MAX);
+        return this._syncFreezeMonth();
+    },
+
+    _freezeLabel() {
+        return this.t('freeze-left-label')
+            .replace('{n}', this._freezesLeft()).replace('{max}', this.FREEZES_PER_MONTH);
+    },
+
+    _renderFreezeBadge() {
+        const left = this._freezesLeft();
+        const num = document.getElementById('freezeCountHeader');
+        if (num) num.textContent = left;
+        const chip = document.getElementById('freezeChip');
+        if (chip) { chip.classList.toggle('empty', left === 0); chip.title = this._freezeLabel(); }
+        const badge = document.getElementById('streakBadge');
+        if (badge) badge.setAttribute('aria-label', this.t('streak-cal-title') + '. ' + this._freezeLabel());
+    },
+
+    /**
+     * Extends the fire streak for today (idempotent per calendar day). Called only on real
+     * user actions — never on open / viewing a tab (see v9.1 note in switchTab).
+     *
+     * FREEZE RULES (v9.3) — evaluated when the person's next action arrives:
+     *   lastActiveDate == yesterday          → normal +1, no freeze used.
+     *   lastActiveDate == 2 days ago         → EXACTLY ONE missed day (yesterday). If a freeze is
+     *                                          left, spend 1, mark yesterday in freezeLog and
+     *                                          continue the streak (+1 for today's real action; the
+     *                                          frozen day protects the chain but is not itself counted).
+     *   anything older / no freeze left      → streak restarts at 1. A freeze is NEVER spent on a gap of
+     *                                          2+ missed days, so it can't be wasted on a lost cause.
+     * The allowance is refilled (_syncFreezeMonth) BEFORE this decision, so the first action of a
+     * new month can already draw on the new month's freezes. A freeze is charged to the month in
+     * which it is applied (i.e. when the person comes back), not the month of the missed day.
+     */
     updateStreak() {
         const todayStr = this.today();
         if (this.lastActiveDate === todayStr) return;
+        // Timezone guard: after travelling west the local date can be one day BEHIND the date we
+        // stored. That is the same moment in time, not a break — leave the streak untouched
+        // (and never burn a freeze) instead of resetting it.
+        if (this.lastActiveDate === Util.addDays(todayStr, 1)) return;
+
+        this._syncFreezeMonth();
         const yestStr = Util.addDays(todayStr, -1);
         const old = this.fireStreak;
-        this.fireStreak     = (this.lastActiveDate === yestStr) ? this.fireStreak + 1 : 1;
+        let restarted = false, frozenDay = '';
+
+        if (this.lastActiveDate === yestStr) {
+            this.fireStreak += 1;
+        } else if (this.fireStreak > 0 && this.freezeCount > 0 &&
+                   this.lastActiveDate === Util.addDays(todayStr, -2)) {
+            this.freezeCount -= 1;               // guarded above: can't go negative
+            frozenDay = yestStr;
+            this.freezeLog.push(frozenDay);
+            this.freezeLog = this.freezeLog.slice(-this.FREEZE_LOG_MAX);
+            this.fireStreak += 1;
+        } else {
+            this.fireStreak = 1;
+            restarted = true;
+        }
         this.lastActiveDate = todayStr;
 
         // Keep a small rolling log of the exact days that kept the streak alive,
         // so the mini calendar can show real history rather than just a count.
-        // If the streak was just broken and restarted, drop the old run first.
-        if (this.fireStreak === 1) this.streakLog = [];
+        // If the streak was just broken and restarted, drop the old run first
+        // (frozen days belonged to that old run, so they go with it).
+        if (restarted) { this.streakLog = []; this.freezeLog = []; }
         if (!this.streakLog.includes(todayStr)) this.streakLog.push(todayStr);
         this.streakLog = this.streakLog.slice(-90); // cap growth; plenty for any heatmap view
 
@@ -1005,14 +1117,48 @@ const diary = {
                 setTimeout(() => { hdr.classList.remove('fire-anim'); emj.classList.remove('fire-anim'); }, 700);
             }
         }
+        if (frozenDay) {
+            const chip = document.getElementById('freezeChip');
+            if (chip) {
+                chip.classList.remove('freeze-anim'); void chip.offsetWidth; chip.classList.add('freeze-anim');
+                setTimeout(() => chip.classList.remove('freeze-anim'), 800);
+            }
+            // Delayed so it follows (instead of instantly replacing) the "Note saved" /
+            // "Task added" toast that callers show right around updateStreak().
+            setTimeout(() => this.toast(this.t('toast-freeze-used'), 'freeze'), 1000);
+        }
         this.updateFooter();
     },
 
-    async _saveStreak() {
-        await StorageManager.setItem('fireStreak',     this.fireStreak.toString());
-        await StorageManager.setItem('lastActiveDate', this.lastActiveDate);
-        await StorageManager.setItem('streakLog',      JSON.stringify(this.streakLog));
+    // v9.3: all streak/freeze writes go through ONE queue. Before, _saveStreak() did three
+    // sequential awaits with no ordering guarantee between calls, so two overlapping saves
+    // (e.g. a streak update racing a backup import) could interleave and leave mixed state.
+    // Entries are read when the job RUNS, so the newest in-memory state always wins.
+    _queueStreakSave(getEntries) {
+        const run = async () => {
+            await Promise.all(getEntries().map(([k, v]) => StorageManager.setItem(k, v)));
+        };
+        const p = this._streakSaveChain.then(run, run); // run even if the previous job failed
+        this._streakSaveChain = p.catch(() => {});
+        return p;
     },
+    _freezeEntries() {
+        return [
+            ['freezeCount', String(this.freezeCount)],
+            ['freezeMonth', this.freezeMonth],
+            ['freezeLog',   JSON.stringify(this.freezeLog)],
+        ];
+    },
+    _saveStreak() {
+        return this._queueStreakSave(() => [
+            ['fireStreak',     this.fireStreak.toString()],
+            ['lastActiveDate', this.lastActiveDate],
+            ['streakLog',      JSON.stringify(this.streakLog)],
+            ...this._freezeEntries(),
+        ]);
+    },
+    /** Freeze keys only — used at load so a refill never rewrites (and risks clobbering) streak keys. */
+    _saveFreezes() { return this._queueStreakSave(() => this._freezeEntries()); },
 
     // ---------- fire streak calendar ----------
     // Full month/year-navigable calendar, same UX/visual language as the habit
@@ -1028,6 +1174,10 @@ const diary = {
         if (curLabel) curLabel.textContent = this.t('streak-cal-current');
         const hint = document.getElementById('streak-cal-hint');
         if (hint) hint.textContent = this.t('streak-cal-hint');
+        const fHint = document.getElementById('streak-cal-hint-freeze');
+        if (fHint) fHint.textContent = '❄️ ' + this.t('streak-cal-hint-freeze');
+        const fSum = document.getElementById('streakFreezeSummary');
+        if (fSum) fSum.textContent = '❄️ ' + this._freezeLabel();
         const todayBtn = document.getElementById('streakCalTodayBtn');
         if (todayBtn) todayBtn.textContent = this.t('streak-cal-today-btn');
 
@@ -1074,6 +1224,7 @@ const diary = {
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const todayStr = this.today();
         const activeSet = new Set(this.streakLog);
+        const freezeSet = new Set(this.freezeLog); // v9.3: missed days a freeze covered
 
         let html = '<tr>';
         for (let i = 0; i < offset; i++) html += '<td class="empty"></td>';
@@ -1082,11 +1233,13 @@ const diary = {
             if (col === 0 && d !== 1) html += '</tr><tr>';
             const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const active = activeSet.has(ds);
+            const frozen = !active && freezeSet.has(ds); // a real active day always wins over a freeze mark
             const isToday = ds === todayStr;
-            const cls = [active ? 'streak-fire' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+            const cls = [active ? 'streak-fire' : '', frozen ? 'streak-freeze' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+            const title = frozen ? `${ds} — ${this.t('streak-freeze-day')}` : ds;
             // Purely a history view — nothing to toggle here, unlike the
             // habit/task calendars — so no onclick handler.
-            html += `<td class="${cls}" style="cursor:default" title="${ds}">${active ? '🔥' : d}</td>`;
+            html += `<td class="${cls}" style="cursor:default" title="${title}">${active ? '🔥' : frozen ? '❄️' : d}</td>`;
         }
         html += '</tr>';
         if (table) table.innerHTML = header + html;
@@ -1156,7 +1309,7 @@ const diary = {
         SidebarUI.init();
         AchievementsUI.init();
 
-        console.log('%c✅ DailyBookimix v9.2 — Data export/import, action history, hidden Telegram ID', 'color:#ff8c42;font-weight:900;font-size:16px');
+        console.log('%c✅ DailyBookimix v9.3 — Day streak freezes, light design polish', 'color:#ff8c42;font-weight:900;font-size:16px');
     }
 };
 

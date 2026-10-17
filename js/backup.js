@@ -1,11 +1,14 @@
 // @ts-check
 // ================================================================
-//  BACKUP — account data export / import (v9.2)
+//  BACKUP — account data export / import (v9.2; v9.3 adds streak freezes)
 //
 //  FILE FORMAT (JSON, "format": 1)
 //    { app, format, appVersion, exportedAt, data: {
 //        notes[], habits[], memories[],
-//        settings{lang,theme,nickname}, streak{...},
+//        settings{lang,theme,nickname},
+//        streak{fireStreak,lastActiveDate,streakLog,
+//               freezeCount,freezeMonth,freezeLog}   (freeze fields new in v9.3,
+//               optional on import — older backups get safe defaults),
 //        tasks{days{YYYY-MM-DD: day}, stats}, achievements{state,custom},
 //        actionLog[] } }
 //
@@ -31,7 +34,7 @@
 const BackupManager = {
     APP_ID: 'dailybookimix',
     FORMAT_VERSION: 1,
-    APP_VERSION: '9.2',
+    APP_VERSION: '9.3',
     MAX_FILE_BYTES: 10 * 1024 * 1024,
 
     _busy: false,
@@ -65,7 +68,10 @@ const BackupManager = {
                 habits: diary.habits,
                 memories: diary.memories,
                 settings: { lang: diary.lang, theme: diary.theme, nickname: SidebarUI.profile.nickname || '' },
-                streak: { fireStreak: diary.fireStreak, lastActiveDate: diary.lastActiveDate, streakLog: diary.streakLog },
+                streak: {
+                    fireStreak: diary.fireStreak, lastActiveDate: diary.lastActiveDate, streakLog: diary.streakLog,
+                    freezeCount: diary.freezeCount, freezeMonth: diary.freezeMonth, freezeLog: diary.freezeLog,
+                },
                 tasks: { days, stats: TaskManager._stats },
                 achievements: { state: AchievementsUI._state, custom: AchievementsUI._custom },
                 actionLog: ActionLog.getAll(),
@@ -281,6 +287,13 @@ const BackupManager = {
             fireStreak: Math.max(0, Math.floor(this._num(d.streak.fireStreak))),
             lastActiveDate: d.streak.lastActiveDate ? this._date(d.streak.lastActiveDate) : '',
             streakLog: (d.streak.streakLog == null ? [] : this._arr(d.streak.streakLog)).map(x => this._date(x)).slice(-90),
+            // v9.3 freezes — all optional. Lenient on purpose: a bad freeze field must never
+            // reject an otherwise good backup, it just falls back to the default
+            // (diary._setFreezeState() clamps count to 0..2 and re-syncs to the current month).
+            freezeCount: Number.isFinite(d.streak.freezeCount) ? Math.floor(d.streak.freezeCount) : null,
+            freezeMonth: typeof d.streak.freezeMonth === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(d.streak.freezeMonth) ? d.streak.freezeMonth : '',
+            freezeLog: (Array.isArray(d.streak.freezeLog) ? d.streak.freezeLog : [])
+                .filter(x => typeof x === 'string' && this._DATE_RE.test(x)).slice(-diary.FREEZE_LOG_MAX),
         };
 
         if (!this._isObj(d.tasks) || !this._isObj(d.tasks.days)) throw new Error('bad tasks');
@@ -389,6 +402,8 @@ const BackupManager = {
         diary.fireStreak = d.streak.fireStreak;
         diary.lastActiveDate = d.streak.lastActiveDate;
         diary.streakLog = d.streak.streakLog.slice();
+        // v9.3: freezes (missing in pre-9.3 backups → full allowance for this month).
+        diary._setFreezeState(d.streak.freezeCount, d.streak.freezeMonth, d.streak.freezeLog);
         await diary._saveStreak();
 
         // Tasks: remove every existing day shard (including any not in the index), then write the imported ones.

@@ -217,6 +217,11 @@ const T = {
         'streak-cal-current': 'Current streak',
         'streak-cal-days': 'days',
         'streak-cal-today-btn': 'Today',
+        // v9.3: day streak freezes
+        'toast-freeze-used': '❄️ Streak protected by a freeze',
+        'freeze-left-label': 'Freezes left this month: {n} of {max}',
+        'streak-cal-hint-freeze': 'Days saved by a freeze. You get 2 each month; one covers a single missed day.',
+        'streak-freeze-day': 'saved by a freeze',
         // Sidebar → Backup & recovery
         'sb-item-recovery': 'Backup & recovery',
         'recoveryModalTitle': 'Backup & recovery',
@@ -442,6 +447,11 @@ const T = {
         'streak-cal-current': 'Текущая серия',
         'streak-cal-days': 'дней',
         'streak-cal-today-btn': 'Сегодня',
+        // v9.3: заморозки серии
+        'toast-freeze-used': '❄️ Серия сохранена заморозкой',
+        'freeze-left-label': 'Заморозок в этом месяце: {n} из {max}',
+        'streak-cal-hint-freeze': 'Дни, спасённые заморозкой. Каждый месяц даётся 2; одна закрывает один пропущенный день.',
+        'streak-freeze-day': 'спасён заморозкой',
         // Боковая панель → Резерв и восстановление
         'sb-item-recovery': 'Резерв и восстановление',
         'recoveryModalTitle': 'Резерв и восстановление',

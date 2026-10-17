@@ -589,7 +589,7 @@ const EncryptionManager = {
             if (typeof StorageManager !== 'undefined') {
                 // v9.0: also wipe custom achievements (dedicated key) on a full
                 // "start fresh" reset, same as the account-deletion flow.
-                for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'userNickname', 'userId', 'achievements_v1', 'custom_achievements_v1']) {
+                for (const key of ['fireStreak', 'lastActiveDate', 'streakLog', 'freezeCount', 'freezeMonth', 'freezeLog', 'userNickname', 'userId', 'achievements_v1', 'custom_achievements_v1']) {
                     await StorageManager.removeItem(key);
                 }
             }
