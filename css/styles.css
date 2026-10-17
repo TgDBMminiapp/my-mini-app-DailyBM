@@ -991,3 +991,124 @@
             .empty-state, .streak-badge { animation: none !important; }
             .btn-primary:hover, .task-add-btn:hover, .task-cal-day:hover { transform: none; }
         }
+
+
+        /* ══════════════════════════════════════════════════════════════
+           v9.3 — DAY STREAK FREEZES + LIGHT POLISH
+           Additive again: only refines existing selectors / adds new ones,
+           re-uses the existing variables, and keeps both themes. Motion is
+           limited to one short pulse on the freeze chip (switched off under
+           prefers-reduced-motion at the bottom of this block).
+           ══════════════════════════════════════════════════════════════ */
+
+        :root {
+            /* Contrast nudges — same hues, slightly higher alpha. The old
+               secondary/label tones fell below ~3:1 on the orange gradient
+               and on the dark cards. */
+            --text-label:      rgba(255,255,255,0.84);
+            --card-text-muted: rgba(26,26,46,0.74);
+            --card-text-label: rgba(26,26,46,0.60);
+            /* Freeze (ice) accent — used only by the ❄️ UI */
+            --freeze-bg:     rgba(14,165,233,0.14);
+            --freeze-border: rgba(2,132,199,0.45);
+            --freeze-fg:     #075985;
+            --muted-on-modal:#6b7280;   /* was #9ca3af: ~2.5:1 on the white modal */
+        }
+        body.theme-dark {
+            --text-muted:      rgba(234,234,245,0.70);
+            --text-label:      rgba(234,234,245,0.54);
+            --card-text-muted: rgba(234,234,245,0.70);
+            --card-text-label: rgba(234,234,245,0.54);
+            --freeze-bg:     rgba(56,189,248,0.16);
+            --freeze-border: rgba(125,211,252,0.45);
+            --freeze-fg:     #7dd3fc;
+            --muted-on-modal:#9ca3af;
+        }
+
+        /* BUG FIX (v9.3): same class of bug v9.1 fixed for --text-primary. Inside the always-white
+           modal (light theme) the page-level --text-label / --text-muted are white, so form labels
+           and the "Current streak" caption were effectively invisible. Re-scope them like .card does. */
+        .modal-box, .delete-modal-box {
+            --text-muted: var(--card-text-muted);
+            --text-label: var(--card-text-label);
+        }
+
+        /* ── Touch: no 300ms/double-tap-zoom delay and no grey flash in Telegram WebView ── */
+        button, [role="button"], [role="checkbox"], .tab-btn, .sheet-option, .task-cal-day {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        /* ── Touch targets: >=44px where a thumb has to hit them ── */
+        .hamburger-btn { width: 44px; height: 44px; }
+        .streak-badge  { min-height: 44px; }
+        .cal-nav-btn   { width: 44px; height: 44px; border-radius: 12px; }
+        .cal-today-btn { padding: 6px 12px; border-radius: 8px; }
+        .modal-close {
+            min-width: 44px; min-height: 44px; margin: -8px -10px -8px 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: var(--muted-on-modal);
+        }
+        .rel-event-btn { min-width: 32px; min-height: 32px; border-radius: 8px; }
+
+        /* ── Type hierarchy + legibility ── */
+        .modal-title { line-height: 1.2; letter-spacing: -0.01em; }
+        .fi::placeholder { color: var(--muted-on-modal); opacity: 1; }
+        .sheet-option-sub { color: var(--muted-on-modal); }
+        #calendarTable th, #streakCalTable th { color: var(--muted-on-modal); }
+        .streak-cal-hint { color: var(--muted-on-modal); line-height: 1.45; max-width: 34ch; margin-left: auto; margin-right: auto; }
+        /* press feedback for the small controls that had none */
+        .cal-today-btn:active, .rel-event-btn:active { opacity: 0.6; }
+
+        /* ── Toasts: keep inside the screen (long RU strings), clear the notch ── */
+        .toast-msg {
+            top: calc(env(safe-area-inset-top, 0px) + 16px);
+            max-width: calc(100vw - 32px);
+            white-space: normal; text-align: center; line-height: 1.3;
+            padding: 12px 20px;
+        }
+        .toast-freeze { background: linear-gradient(135deg, #0284c7, #0369a1); } /* white text: >=4.1:1 */
+
+        /* ── ❄️ freeze chip inside the streak badge ── */
+        .freeze-chip {
+            display: inline-flex; align-items: center; gap: 3px;
+            margin-left: 6px; padding-left: 9px;
+            border-left: 1px solid rgba(255,255,255,0.30);
+            font-size: 14px; font-weight: 800; line-height: 1; color: #fff;
+            font-variant-numeric: tabular-nums;
+            transition: opacity 0.25s;
+        }
+        .freeze-chip.empty { opacity: 0.5; filter: grayscale(0.6); } /* 0 left: visibly "spent" */
+        @keyframes freezePulse {
+            0%   { transform: scale(1); }
+            35%  { transform: scale(1.3); filter: drop-shadow(0 0 6px rgba(125,211,252,0.9)); }
+            100% { transform: scale(1); }
+        }
+        .freeze-chip.freeze-anim { animation: freezePulse 0.7s ease-out 1; }
+
+        /* ── Streak calendar: freeze summary + day styles ── */
+        .streak-freeze-summary {
+            display: inline-flex; align-items: center; margin-top: 12px;
+            padding: 6px 14px; border-radius: 999px;
+            font-size: 12px; font-weight: 800; line-height: 1.2;
+            background: var(--freeze-bg); color: var(--freeze-fg);
+            box-shadow: inset 0 0 0 1px var(--freeze-border);
+        }
+        /* BUG FIX (v9.3): since v8.x the generic rule
+           `#streakCalTable td:not(.empty):not(.done)` (grey background) out-ranked
+           `td.streak-fire` on specificity, so 🔥 days never got their orange gradient.
+           The `html body` prefix + repeated :not() lifts these above both the light- and
+           dark-theme variants of that rule. */
+        html body #streakCalTable td.streak-fire:not(.empty):not(.done) {
+            background: linear-gradient(135deg, #ff8c42, #ff5722); color: #fff;
+        }
+        /* Saved-by-a-freeze day: soft ice tint + inset ring (hollow vs. the solid fire gradient),
+           so it can't be mistaken for a normal active day, in light or dark. */
+        html body #streakCalTable td.streak-freeze:not(.empty):not(.done) {
+            background: var(--freeze-bg); color: var(--freeze-fg);
+            box-shadow: inset 0 0 0 1.5px var(--freeze-border);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .freeze-chip.freeze-anim { animation: none; }
+        }
