@@ -1112,3 +1112,126 @@
         @media (prefers-reduced-motion: reduce) {
             .freeze-chip.freeze-anim { animation: none; }
         }
+
+        /* ══════════════════════════════════════════════════════════════
+           v9.5 — ARCHIVE TYPE FILTER + CARD REFRESH + iOS DATE FIX
+           Additive: new selectors only (.date-row, .type-filter/.type-chip,
+           .mem-*). Uses the existing variables so both themes follow along.
+           ══════════════════════════════════════════════════════════════ */
+
+        /* ── iOS FIX: Start/End date fields overlapping ──────────────────
+           Cause: iOS Safari / Telegram iOS WebView lay out a native
+           <input type="date"> with its own intrinsic min-width and ignore
+           `width:100%` (and, with an empty value, its height too). Inside the
+           old `grid grid-cols-2` the input therefore stuck out of its column
+           and painted over the neighbouring field.
+           Fix: explicit two-column grid whose cells may shrink (min-width:0),
+           date inputs normalised (appearance:none, fixed height, narrower side
+           padding, clipped inner value), labels allowed to wrap, and a single
+           column below 350px. Scoped to .date-row so every other field,
+           including the single date fields inside modals, is untouched. */
+        .date-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .date-row > div {
+            min-width: 0;                       /* grid items default to min-width:auto -> overflow */
+            display: flex; flex-direction: column;
+            justify-content: flex-end;          /* inputs line up even if one label wraps to 2 lines */
+        }
+        .date-row label.fi-label { overflow-wrap: anywhere; line-height: 1.25; }
+        .date-row input[type="date"].fi {
+            display: block;
+            -webkit-appearance: none; appearance: none;
+            width: 100%; min-width: 0; max-width: 100%;
+            height: 58px;                       /* same height empty or filled (iOS collapses empty ones) */
+            padding: 0 12px;
+            line-height: 1.2;
+            text-align: left;
+            overflow: hidden;
+        }
+        .date-row input[type="date"].fi::-webkit-date-and-time-value { min-width: 0; margin: 0; text-align: left; }
+        .date-row input[type="date"].fi::-webkit-datetime-edit { padding: 0; }
+        @media (max-width: 349px) {
+            .date-row { grid-template-columns: minmax(0, 1fr); }
+        }
+
+        /* ── Per-type accent colours (Archive cards) ───────────────────── */
+        .mem-t-book      { --mem-rgb: 217,119,6;   --mem-fg: #92400e; }
+        .mem-t-movie     { --mem-rgb: 139,92,246;  --mem-fg: #5b21b6; }
+        .mem-t-series    { --mem-rgb: 59,130,246;  --mem-fg: #1d4ed8; }
+        .mem-t-game      { --mem-rgb: 16,185,129;  --mem-fg: #047857; }
+        .mem-t-relations { --mem-rgb: 236,72,153;  --mem-fg: #9d174d; }
+        .mem-t-other     { --mem-rgb: 100,116,139; --mem-fg: #334155; }
+        body.theme-dark .mem-t-book      { --mem-fg: #fcd34d; }
+        body.theme-dark .mem-t-movie     { --mem-fg: #c4b5fd; }
+        body.theme-dark .mem-t-series    { --mem-fg: #93c5fd; }
+        body.theme-dark .mem-t-game      { --mem-fg: #6ee7b7; }
+        body.theme-dark .mem-t-relations { --mem-fg: #f9a8d4; }
+        body.theme-dark .mem-t-other     { --mem-fg: #cbd5e1; }
+
+        /* ── Archive type filter (chip row under the search bar) ───────── */
+        .type-filter {
+            display: flex; gap: 8px;
+            overflow-x: auto; overscroll-behavior-x: contain;
+            -webkit-overflow-scrolling: touch; scrollbar-width: none;
+            padding: 2px 2px 4px; margin: 0 -2px;
+            /* soft fade on the right edge = "there is more to scroll" */
+            -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+                    mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+        }
+        .type-filter::-webkit-scrollbar { display: none; }
+        .type-filter::after { content: ''; flex: 0 0 18px; }   /* lets the last chip scroll clear of the fade */
+        .type-chip {
+            flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+            min-height: 40px; padding: 0 14px; border-radius: 999px;
+            background: rgba(255,255,255,0.18); color: var(--text-primary);
+            border: 1.5px solid rgba(255,255,255,0.28);
+            font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700;
+            white-space: nowrap; cursor: pointer;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+        }
+        .type-chip:active { transform: scale(0.95); }
+        .type-chip.active {
+            background: var(--tab-active-bg); color: var(--tab-active-fg);
+            border-color: transparent; text-shadow: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+        }
+
+        /* ── Archive card (non-relationship) ───────────────────────────── */
+        .mem-card { padding: 16px 18px 16px 22px; }
+        .mem-card::before {                                   /* coloured edge = type at a glance */
+            content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px;
+            border-radius: 0 4px 4px 0; background: rgb(var(--mem-rgb, 100,116,139));
+        }
+        .mem-top   { display: flex; align-items: center; min-height: 26px; padding-right: 28px; margin-bottom: 8px; }  /* right gap = pin badge */
+        .mem-chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 4px 12px; border-radius: 999px;
+            font-size: 12px; font-weight: 800; letter-spacing: 0.02em;
+            background: rgba(var(--mem-rgb, 100,116,139), 0.16); color: var(--mem-fg, var(--card-text));
+        }
+        .mem-title { font-size: 17px; font-weight: 800; line-height: 1.28; color: var(--text-primary); overflow-wrap: anywhere; margin-bottom: 10px; }
+        .mem-dates { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-items: center; margin-bottom: 10px; }
+        .mem-dates.has-end { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+        .mem-date {
+            display: flex; flex-direction: column; gap: 2px; min-width: 0;
+            padding: 8px 10px; border-radius: 12px;
+            background: rgba(var(--mem-rgb, 100,116,139), 0.10);
+            border: 1px solid rgba(var(--mem-rgb, 100,116,139), 0.24);
+        }
+        .mem-dates:not(.has-end) .mem-date { justify-self: start; }   /* lone start date: hug its content */
+        .mem-date-lbl { font-size: 10px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); }
+        .mem-date-val { font-size: 13.5px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+        .mem-date-arrow { font-size: 16px; font-weight: 800; color: var(--text-muted); }
+        .mem-notes {
+            font-size: 13.5px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .mem-notes.open { display: block; overflow: visible; white-space: pre-wrap; -webkit-line-clamp: unset; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .type-chip { transition: none; }
+        }
