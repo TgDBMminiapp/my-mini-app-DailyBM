@@ -1,5 +1,37 @@
 <!DOCTYPE html>
 <!-- ============================================================
+     DailyBookimix v9.5 — ARCHIVE TYPE FILTER + CARD REFRESH + iOS DATE FIX
+
+     WHAT CHANGED (v9.3 → v9.5)
+     1. NEW: Archive type filter. A row of compact chips (All / Book / Movie /
+        Series / Game / Relationship / Other) sits under the Archive search
+        bar. It combines with the text search (type AND query). The filter is
+        view-only state — nothing is saved, nothing in storage changes.
+        Empty states: truly empty archive, "nothing of this type yet", and
+        "no results" for a text search are now three distinct messages.
+     2. REDESIGN: non-relationship Archive cards. Type chip + coloured accent
+        edge, a bigger title, and a clear date block (From -> To) that shows
+        the end date as an equal partner of the start date instead of a tiny
+        footnote. Notes clamp to 3 lines when collapsed and show in full
+        (line breaks kept) when expanded. Pin badge, expand/collapse, action
+        buttons and search highlighting are unchanged. Relationship cards are
+        unchanged.
+     3. FIX (iOS): on iOS Safari / Telegram iOS WebView the native
+        <input type="date"> ignores width:100% and keeps its intrinsic width,
+        so the End-date field collided with the Start-date field on the Habits
+        and Archive forms. Both forms now use .date-row (CSS) with
+        min-width:0 columns and a normalised date input; below 350px wide the
+        two fields stack instead of squeezing.
+     4. MINI-FIX: fmtDate() parsed 'YYYY-MM-DD' as UTC, so card dates could
+        show one day early west of UTC. It now parses as a local date.
+     5. New translation keys (en + ru): mem-filter-all, mem-filter-label,
+        mem-filter-empty, mem-date-from, mem-date-to.
+     No storage, encryption, backup-format, achievements or task changes.
+     Cache-busting ?v= params on every asset are now 9.5.
+     ============================================================
+     (previous release notes follow)
+-->
+<!-- ============================================================
      DailyBookimix v9.3 — DAY STREAK FREEZES + LIGHT POLISH
 
      WHAT CHANGED (v9.2 → v9.3)
@@ -257,7 +289,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=9.3">
+    <link rel="stylesheet" href="css/styles.css?v=9.5">
 </head>
 <body class="font-sans">
 
@@ -429,7 +461,7 @@
                     <label class="fi-label" id="lbl-habit-name">Habit name</label>
                     <input id="habitName" type="text" class="fi" required>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="date-row">
                     <div>
                         <label class="fi-label" id="lbl-start-date">Start date</label>
                         <input id="habitStartDate" type="date" class="fi" required>
@@ -533,7 +565,7 @@
                     <label class="fi-label" id="lbl-partner-name">Partner name</label>
                     <input id="partnerName" type="text" class="fi">
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="date-row">
                     <div>
                         <label class="fi-label" id="lbl-mem-start">Start date</label>
                         <input id="memoryStartDate" type="date" class="fi" required>
@@ -554,10 +586,12 @@
         </div>
         <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
             <div class="section-header"><span>🗃️</span><span id="my-memories-title">Archive</span></div>
-            <div class="search-wrap mb-4">
+            <div class="search-wrap mb-3">
                 <span class="search-icon">🔍</span>
                 <input id="memoriesSearch" type="text" class="fi" oninput="diary.renderMemories()">
             </div>
+            <!-- v9.5: type filter chips — filled by diary._renderMemoryFilter() (labels are translated) -->
+            <div id="memoriesTypeFilter" class="type-filter mb-4" role="group" aria-label="Filter by type"></div>
             <div id="memoriesList" class="scrollable"></div>
         </div>
     </div>
@@ -933,17 +967,17 @@
 </div>
 
 
-<script src="js/util.js?v=9.3"></script>
-<script src="js/tg-platform.js?v=9.3"></script>
-<script src="js/encryption.js?v=9.3"></script>
-<script src="js/storage.js?v=9.3"></script>
-<script src="js/translations.js?v=9.3"></script>
-<script src="js/action-log.js?v=9.3"></script>
-<script src="js/task-manager.js?v=9.3"></script>
-<script src="js/diary.js?v=9.3"></script>
-<script src="js/sidebar.js?v=9.3"></script>
-<script src="js/achievements.js?v=9.3"></script>
-<script src="js/backup.js?v=9.3"></script>
-<script src="js/boot.js?v=9.3"></script>
+<script src="js/util.js?v=9.5"></script>
+<script src="js/tg-platform.js?v=9.5"></script>
+<script src="js/encryption.js?v=9.5"></script>
+<script src="js/storage.js?v=9.5"></script>
+<script src="js/translations.js?v=9.5"></script>
+<script src="js/action-log.js?v=9.5"></script>
+<script src="js/task-manager.js?v=9.5"></script>
+<script src="js/diary.js?v=9.5"></script>
+<script src="js/sidebar.js?v=9.5"></script>
+<script src="js/achievements.js?v=9.5"></script>
+<script src="js/backup.js?v=9.5"></script>
+<script src="js/boot.js?v=9.5"></script>
 </body>
 </html>
