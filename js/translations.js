@@ -94,6 +94,10 @@ const T = {
         'my-memories-title': 'Archive', 'memoriesSearch-ph': 'Search...', 'memories-empty': 'Archive is empty',
         // v8.1: global search
         'search-empty': 'No results found',
+        // v9.5: Archive type filter + card date block
+        'mem-filter-all': 'All', 'mem-filter-label': 'Filter by type',
+        'mem-filter-empty': 'Nothing of this type yet',
+        'mem-date-from': 'From', 'mem-date-to': 'To',
         'tasksSearch-ph': 'Search tasks...',
         'rel-days-together': 'days together', 'rel-since': 'Since', 'rel-until': 'Until',
         'rel-broke-up': 'broke up', 'rel-still-together': 'Still together',
@@ -327,6 +331,10 @@ const T = {
         'my-memories-title': 'Архив воспоминаний', 'memoriesSearch-ph': 'Поиск...', 'memories-empty': 'Архив пока пуст',
         // v8.1: глобальный поиск
         'search-empty': 'Ничего не найдено',
+        // v9.5: фильтр архива по типу + блок дат на карточке
+        'mem-filter-all': 'Все', 'mem-filter-label': 'Фильтр по типу',
+        'mem-filter-empty': 'Записей этого типа пока нет',
+        'mem-date-from': 'С', 'mem-date-to': 'По',
         'tasksSearch-ph': 'Поиск задач...',
         'rel-days-together': 'дней вместе', 'rel-since': 'С', 'rel-until': 'До',
         'rel-broke-up': 'расстались', 'rel-still-together': 'Всё ещё вместе',

@@ -1,6 +1,6 @@
 // @ts-check
 // ================================================================
-//  BACKUP — account data export / import (v9.2; v9.3 adds streak freezes)
+//  BACKUP — account data export / import (v9.2; v9.3 adds streak freezes; v9.5 only bumps APP_VERSION)
 //
 //  FILE FORMAT (JSON, "format": 1)
 //    { app, format, appVersion, exportedAt, data: {
@@ -34,7 +34,7 @@
 const BackupManager = {
     APP_ID: 'dailybookimix',
     FORMAT_VERSION: 1,
-    APP_VERSION: '9.3',
+    APP_VERSION: '9.5',
     MAX_FILE_BYTES: 10 * 1024 * 1024,
 
     _busy: false,

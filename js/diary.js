@@ -23,6 +23,9 @@ const diary = {
     openNoteDetail:   null,
     openHabitDetail:  null,
     openMemoryDetail: null,
+    // v9.5: Archive type filter. View-only state (never stored): 'all' or one of MEMORY_TYPES.
+    MEMORY_TYPES:     ['book','movie','series','game','relations','other'],
+    memoryFilter:     'all',
     _calHabitId:    null,  // which habit's calendar modal is currently open
     _calYear:       null,  // year shown in the habit calendar modal
     _calMonth:      null,  // 0-indexed month shown in the habit calendar modal
@@ -35,7 +38,10 @@ const diary = {
 
     fmtDate(d) {
         if (!d) return '';
-        return new Date(d).toLocaleDateString(
+        // v9.5 FIX: new Date('YYYY-MM-DD') is UTC midnight, so west of UTC the label showed the
+        // PREVIOUS day. Plain date strings are now read as local calendar dates (see Util.parseLocalDate).
+        const dt = /^\d{4}-\d{2}-\d{2}$/.test(d) ? Util.parseLocalDate(d) : new Date(d);
+        return dt.toLocaleDateString(
             this.lang === 'ru' ? 'ru-RU' : 'en-GB',
             { day: 'numeric', month: 'short', year: 'numeric' }
         );
@@ -181,8 +187,10 @@ const diary = {
             ['personal','work','ideas'].map(v => `<option value="${v}">${this.t('cat-'+v)}</option>`).join('');
 
         const mt = document.getElementById('memoryType');
-        if (mt) mt.innerHTML = ['book','movie','series','game','relations','other']
+        if (mt) mt.innerHTML = this.MEMORY_TYPES
             .map(v => `<option value="${v}">${this.t('type-'+v)}</option>`).join('');
+
+        this._renderMemoryFilter(); // v9.5: Archive type chips (translated labels)
 
         this._updateSettingsBar();
     },
@@ -770,6 +778,9 @@ const diary = {
         else this.memories.unshift(memory);
 
         this.memories = this._sortPinned(this.memories);
+        // v9.5: an active type filter must not hide the entry that was just saved
+        // (it would look like the save failed) — fall back to "All".
+        if (this.memoryFilter !== 'all' && this.memoryFilter !== type) this._syncMemoryFilterUI('all');
         await this.saveMemories();
         ActionLog.record(isNewMemory ? 'memory_created' : 'memory_updated');
         this.updateStreak();
@@ -866,13 +877,50 @@ const diary = {
         this.closeModals();
     },
 
+    // ---------- v9.5: Archive type filter ----------
+    // Builds the chip row. Called from applyTranslations() (language switch / first load) only;
+    // a chip tap goes through setMemoryFilter(), which just toggles classes so the row keeps its
+    // horizontal scroll position.
+    _renderMemoryFilter() {
+        const el = document.getElementById('memoriesTypeFilter');
+        if (!el) return;
+        el.setAttribute('aria-label', this.t('mem-filter-label'));
+        el.innerHTML = ['all', ...this.MEMORY_TYPES].map(v => {
+            const label = v === 'all' ? this.t('mem-filter-all') : this.t('type-' + v);
+            const on    = this.memoryFilter === v;
+            return `<button type="button" class="type-chip${on ? ' active' : ''}" data-type="${v}" aria-pressed="${on}" onclick="diary.setMemoryFilter('${v}')">${label}</button>`;
+        }).join('');
+    },
+
+    // Sets the filter value and mirrors it onto the chips (no re-render of the list).
+    _syncMemoryFilterUI(v) {
+        if (v !== 'all' && !this.MEMORY_TYPES.includes(v)) v = 'all';
+        this.memoryFilter = v;
+        document.querySelectorAll('#memoriesTypeFilter .type-chip').forEach(b => {
+            const on = b.dataset.type === v;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            // keep the chosen chip in view inside the scrollable row (no page scroll: block 'nearest')
+            if (on) { try { b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) { /* old WebView */ } }
+        });
+    },
+
+    setMemoryFilter(v) {
+        this._syncMemoryFilterUI(v);
+        this.renderMemories();
+    },
+
     renderMemories() {
         const container = document.getElementById('memoriesList');
         const searchRaw = document.getElementById('memoriesSearch').value || '';
         const search    = searchRaw.trim().toLowerCase();
+        const typeFilter = this.memoryFilter;
         // v8.1: search now also matches the memory type label and both dates,
         // in addition to title, notes, and partner name.
+        // v9.5: the type filter is applied first (cheap equality check), so it is
+        // type AND text query — still a single pass over the list.
         const list = this.memories.filter(m => {
+            if (typeFilter !== 'all' && m.type !== typeFilter) return false;
             if (!search) return true;
             if (m.title.toLowerCase().includes(search)) return true;
             if ((m.notes || '').toLowerCase().includes(search)) return true;
@@ -884,9 +932,14 @@ const diary = {
         });
 
         if (!list.length) {
-            container.innerHTML = search
-                ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>${this.t('search-empty')}</p></div>`
-                : `<div class="empty-state"><div class="empty-icon">📦</div><p>${this.t('memories-empty')}</p></div>`;
+            // Three different "nothing to show" situations, three messages:
+            //  - the archive itself is empty            -> memories-empty
+            //  - only the type filter hides everything  -> mem-filter-empty
+            //  - a text search (with or without filter) -> search-empty
+            let icon = '🔍', msg = this.t('search-empty');
+            if (!this.memories.length)                  { icon = '📦';  msg = this.t('memories-empty'); }
+            else if (!search && typeFilter !== 'all')   { icon = '🗂️'; msg = this.t('mem-filter-empty'); }
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${msg}</p></div>`;
             return;
         }
 
@@ -897,19 +950,25 @@ const diary = {
             if (m.type === 'relations') return this._renderRelCard(m, isOpen, delay, pinLabel, search, searchRaw);
 
             const typeLabel = this.t('type-' + m.type);
+            const typeCls   = 'mem-t-' + (this.MEMORY_TYPES.includes(m.type) ? m.type : 'other');
             // v9.0 FIX: escape user-entered text before it goes into innerHTML.
             const title = search ? Util.highlightMatch(Util.escHtml(m.title), searchRaw) : Util.escHtml(m.title);
             const notes = m.notes ? (search ? Util.highlightMatch(Util.escHtml(m.notes), searchRaw) : Util.escHtml(m.notes)) : '';
+            // v9.5: start and (optional) end date as one labelled block: From -> To.
+            const dateBox = (lblKey, d) => `<div class="mem-date"><span class="mem-date-lbl">${this.t(lblKey)}</span><time class="mem-date-val" datetime="${Util.escHtml(d)}">${this.fmtDate(d)}</time></div>`;
+            const dates = (m.startDate || m.endDate) ? `
+                <div class="mem-dates${m.endDate ? ' has-end' : ''}">
+                    ${m.startDate ? dateBox('mem-date-from', m.startDate) : ''}
+                    ${m.startDate && m.endDate ? '<span class="mem-date-arrow" aria-hidden="true">→</span>' : ''}
+                    ${m.endDate ? dateBox('mem-date-to', m.endDate) : ''}
+                </div>` : '';
             return `
-            <div class="record-card ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
+            <div class="record-card mem-card ${typeCls} ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
                 ${m.pinned ? '<span class="pin-badge">📌</span>' : ''}
-                <div class="flex items-start justify-between gap-2 mb-2">
-                    <span class="chip">${typeLabel}</span>
-                    <span style="font-size:11px;color:var(--text-label)">${this.fmtDate(m.startDate)}</span>
-                </div>
-                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${title}</div>
-                ${notes ? `<div style="font-size:13px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'2'};-webkit-box-orient:vertical;overflow:hidden">${notes}</div>` : ''}
-                ${m.endDate ? `<div style="margin-top:6px;font-size:12px;color:var(--text-label)">${this.t('rel-until')} ${this.fmtDate(m.endDate)}</div>` : ''}
+                <div class="mem-top"><span class="mem-chip">${typeLabel}</span></div>
+                <div class="mem-title">${title}</div>
+                ${dates}
+                ${notes ? `<div class="mem-notes${isOpen ? ' open' : ''}">${notes}</div>` : ''}
                 ${isOpen ? `
                 <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
                     <div class="flex gap-2 flex-wrap" style="padding:14px">
