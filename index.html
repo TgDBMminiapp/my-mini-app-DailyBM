@@ -1,297 +1,24 @@
 <!DOCTYPE html>
-<!-- ============================================================
-     DailyBookimix v9.5 — ARCHIVE TYPE FILTER + CARD REFRESH + iOS DATE FIX
-
-     WHAT CHANGED (v9.3 → v9.5)
-     1. NEW: Archive type filter. A row of compact chips (All / Book / Movie /
-        Series / Game / Relationship / Other) sits under the Archive search
-        bar. It combines with the text search (type AND query). The filter is
-        view-only state — nothing is saved, nothing in storage changes.
-        Empty states: truly empty archive, "nothing of this type yet", and
-        "no results" for a text search are now three distinct messages.
-     2. REDESIGN: non-relationship Archive cards. Type chip + coloured accent
-        edge, a bigger title, and a clear date block (From -> To) that shows
-        the end date as an equal partner of the start date instead of a tiny
-        footnote. Notes clamp to 3 lines when collapsed and show in full
-        (line breaks kept) when expanded. Pin badge, expand/collapse, action
-        buttons and search highlighting are unchanged. Relationship cards are
-        unchanged.
-     3. FIX (iOS): on iOS Safari / Telegram iOS WebView the native
-        <input type="date"> ignores width:100% and keeps its intrinsic width,
-        so the End-date field collided with the Start-date field on the Habits
-        and Archive forms. Both forms now use .date-row (CSS) with
-        min-width:0 columns and a normalised date input; below 350px wide the
-        two fields stack instead of squeezing.
-     4. MINI-FIX: fmtDate() parsed 'YYYY-MM-DD' as UTC, so card dates could
-        show one day early west of UTC. It now parses as a local date.
-     5. New translation keys (en + ru): mem-filter-all, mem-filter-label,
-        mem-filter-empty, mem-date-from, mem-date-to.
-     No storage, encryption, backup-format, achievements or task changes.
-     Cache-busting ?v= params on every asset are now 9.5.
-     ============================================================
-     (previous release notes follow)
--->
-<!-- ============================================================
-     DailyBookimix v9.3 — DAY STREAK FREEZES + LIGHT POLISH
-
-     WHAT CHANGED (v9.2 → v9.3)
-     1. NEW: Day Streak Freezes ("❄️"). Everyone gets 2 per calendar month
-        (local time; refilled automatically on the 1st, incl. Dec→Jan).
-        If exactly ONE day was missed, the next real action spends a
-        freeze and the fire streak continues instead of resetting. Gaps
-        of 2+ days still reset and never spend a freeze. The frozen day
-        protects the chain but is not itself counted in the number.
-        UI: "❄️ n" chip in the streak badge, a toast when a freeze is
-        used, and ❄️ cells (distinct from 🔥) in the streak calendar.
-        Stored as freezeCount / freezeMonth / freezeLog; included in
-        export/import (older backups without them get safe defaults)
-        and in delete-account / start-fresh wipes.
-     2. POLISH: additive CSS block at the end of css/styles.css — larger
-        touch targets (44px) for modal close, calendar nav, streak badge
-        and hamburger; clearer placeholder / label / muted-text contrast;
-        modal title hierarchy; safe-area-aware, wrapping toasts; press
-        states. Colour system, themes and layout are unchanged.
-     3. MINI-FIXES: fire-day cells in the streak calendar never showed
-        their gradient (a more specific grey rule won) — fixed; streak
-        save is now serialised (no interleaved writes) and NaN-guarded;
-        a streak is no longer reset when the local date is one day
-        behind the stored one (timezone travel); streak badge aria-label
-        is now translated; cache-busting ?v= params were mixed 9.1/9.2 —
-        every asset now uses 9.3.
-     No encryption, achievements, task-manager or privacy changes.
-     ============================================================
-     (previous release notes follow)
--->
-<!-- ============================================================
-     DailyBookimix v9.1 — FIRE STREAK FIX + DESIGN POLISH
-
-     WHAT CHANGED (v9.0 → v9.1)
-     1. FIX (critical): the fire streak was extended just by OPENING the
-        Daily Tasks tab (v9.0 added a updateStreak() call to
-        diary.switchTab()). Removed. The streak is now extended only by a
-        real task action — creating a task (TaskManager.quickAdd) or
-        marking one completed (TaskManager.toggleTask) — and only after
-        the save succeeded. Un-completing, deleting, carrying over and
-        viewing the tab never touch it. updateStreak() itself is unchanged
-        and stays idempotent per calendar day; every other call site
-        (notes, habits, memories, events) is untouched.
-     2. POLISH: short, transform/opacity-only micro-interactions (tab fade-in,
-        hover lift on desktop, checkbox/button press states, streak-badge
-        glow on extend), consistent radii and soft shadows, refined empty
-        states, better dark-theme checkbox contrast, keyboard focus rings,
-        larger delete hit-target, safe-area bottom padding. Additive CSS
-        block at the end of css/styles.css; reduced-motion respected.
-     3. QUALITY: double-submit guard on quick-add (Enter while saving),
-        collision-proof task ids, null-guarded streak animation, error
-        logging on failed task saves, task checkboxes are now keyboard
-        accessible (role=checkbox, Enter/Space) and labelled.
-     No data structures, storage keys, encryption or Telegram integration
-     changed.
-     ============================================================
-     (previous release notes follow)
--->
-<!-- ============================================================
-     DailyBookimix v9.0 — FIRE STREAK + CUSTOM ACHIEVEMENTS EDITION
-
-     WHAT CHANGED (v8.2 → v9.0)
-     1. NEW: Custom (user-created) achievements. Inside the Achievements
-        modal there is now a separate "My Achievements" section where
-        anyone can create their own achievement — an emoji icon, a title,
-        and an optional description — and mark it completed themselves
-        whenever they like (no automatic progress tracking, by design).
-        Custom achievements can be edited or deleted, are visually
-        distinct (violet accent vs. the system achievements' gold), and
-        are stored completely separately from the built-in system
-        achievements under their own dedicated key (custom_achievements_v1
-        — see js/achievements.js, js/storage.js). The existing system
-        achievements (auto-unlock via AchievementsUI.recalculate()) are
-        completely untouched. Full English + Russian translations.
-     2. NEW: Opening the Daily Tasks tab now counts toward the fire streak
-        the same way saving a note/habit/memory/event already did — see
-        diary.switchTab()/updateStreak() in js/diary.js. updateStreak() was
-        already a per-day-idempotent no-op once the streak had been
-        updated for today, so this required no changes to the underlying
-        streak-calculation logic, storage keys, or fire animation — only
-        one additional call site.
-     3. FIX: Notes/Habits/Archive rendered user-entered free text (titles,
-        content, descriptions, partner names, event text) directly into
-        innerHTML, unescaped — typing something like "<b>" or "a & b"
-        broke the layout instead of showing literally. Daily Tasks already
-        escaped its text for exactly this reason; the same escaping
-        (Util.escHtml, js/util.js) is now applied everywhere free text is
-        rendered, including the new custom achievements.
-     4. FIX: switching language (applyLang()) never refreshed the Daily
-        Tasks tab — its quick-add placeholder, mood labels, calendar month
-        name, "Today" button, and stats chips stayed in the old language
-        until the tab was closed and reopened. applyLang() now also calls
-        TaskManager.render().
-     5. FIX: an achievement's "earned on" date was parsed with
-        `new Date('YYYY-MM-DD')`, which reads as UTC while the date is
-        then displayed in local time — for anyone west of UTC this could
-        silently show the day *before* the one actually recorded. Now
-        parsed with the same local-date helper (Util.parseLocalDate) the
-        rest of the app already uses to avoid exactly this bug.
-     6. Deleting all data ("Delete everything" / "Start fresh") now also
-        clears custom_achievements_v1, consistent with how it already
-        clears the system achievements' state.
-     7. FIX: the new custom-achievement create/edit modal (#customAchModal)
-        is opened from inside the Achievements screen (#achievementsModal,
-        z-index 10002) but only had the shared .modal-overlay z-index
-        (8000) — the exact same layering bug already fixed once in v8.2 for
-        #startFreshConfirmModal vs. #encryptionLock. Caught and fixed with
-        the same kind of single targeted CSS rule before shipping, so it
-        never reached a "dead button" state for anyone.
-     No other behavior, data structures, encryption, storage, or Telegram
-     integration changed.
-     ============================================================
-     DailyBookimix v8.2 — BUGFIX RELEASE
-
-     WHAT CHANGED (v8.1 → v8.2)
-     1. FIX: the "I forgot the password / I don't have my code — delete all
-        data & start fresh" button on the lock screen appeared completely
-        unresponsive (pressed state showed, nothing happened). Root cause:
-        its confirmation dialog (#startFreshConfirmModal) uses the shared
-        .modal-overlay z-index (8000), while #encryptionLock — the lock
-        screen the button lives on — sits at z-index 99999. The modal WAS
-        opening, just rendered invisibly behind the lock screen. Fixed with
-        a single targeted CSS rule (#startFreshConfirmModal.open) raising
-        only that modal above the lock screen; no JS logic was touched.
-
-     ============================================================
-     DailyBookimix v8.1 — GLOBAL SEARCH EDITION (previous release notes below)
-
-     WHAT CHANGED (v8.0 → v8.1)
-     1. Added a real-time, as-you-type search to the Daily Tasks section
-        (js/task-manager.js, TaskManager._matchesTaskSearch/render) — the
-        only section that didn't already have one. Notes, Habits, and
-        Archive already had search bars; all four now share the same
-        search-wrap look, and their filtering was broadened to also match
-        category/type labels, dates, and (for habits) completion status —
-        not just the title/name and body text.
-     2. Search results are now visually highlighted (see Util.highlightMatch
-        in js/util.js and the `.search-hl` style in css/styles.css) while
-        staying fully interactive — every card's edit/delete/pin/complete
-        controls work exactly as before, since only the *displayed* text is
-        wrapped for highlighting; the underlying data is untouched.
-     3. Removed the redundant secondary "🔥 streak" chip from the Daily
-        Tasks stats bar. The app already has one fire-streak indicator (the
-        main streak in the header) — this second one in Tasks was
-        redundant and has been deleted. The streak *calculation* underneath
-        it (TaskManager._stats.currentStreak) is kept as-is, since it also
-        feeds the existing "3-day task streak" achievement — only the
-        visual chip is gone.
-     No other behavior, data structures, encryption, storage, achievements,
-     translations, or Telegram integration changed.
-     ============================================================
-     DailyBookimix v8.0 — BRIDGE RELIABILITY EDITION
-
-     WHAT CHANGED (v7.7 → v8.0)
-     1. Fixed the iOS "stuck on Unlocking… forever" bug: TGPlatform's
-        CloudStorage/DeviceStorage/SecureStorage calls had no timeout, so a
-        native bridge callback that silently never fired (seen on some iOS
-        Telegram client versions for the newer SecureStorage/DeviceStorage
-        APIs) hung boot() indefinitely. Every bridge call is now bounded by
-        TGPlatform.BRIDGE_TIMEOUT_MS and resolves as a normal failure instead
-        of hanging — see js/tg-platform.js.
-     2. Added a hard boot() watchdog (js/boot.js) as a second, independent
-        safety net so no future unguarded await can strand anyone again.
-     3. Cache-busting on all local script/style tags below, so a redeploy
-        can no longer get stuck behind a stale cached bundle in Telegram's
-        WebView (this was the actual cause of the "missing delete-my-data
-        button" report — that button already existed in v7.7's code, it
-        just wasn't reaching some users).
-     ============================================================
-     DailyBookimix v7.7 — AUTH REDESIGN + POLISH EDITION
-     ============================================================
-
-     WHY THIS VERSION EXISTS
-     v7.6's authentication system had grown into five separate lock-
-     screen tiers (Welcome → Show Recovery → Enter Recovery → Migrate
-     v5 → Legacy Password → Error). That complexity directly caused two
-     real bugs:
-       • A brand-new Telegram account could be asked for a password or
-         recovery code that never existed, because a single slow or
-         ambiguous CloudStorage read on cold start was treated the same
-         as "we truly cannot tell if this account is new."
-       • A device that had just unlocked successfully with a recovery
-         code could be asked for that same code again on its very next
-         launch, because the Master Key was written to only one storage
-         tier (SecureStorage) and that write's success was never
-         verified.
-
-     WHAT CHANGED (v7 → v7.7)
-     1. AUTHENTICATION REDESIGNED FROM SCRATCH (see the big comment
-        above `const EncryptionManager` further down for the full
-        architecture write-up). In short:
-          - Returning device with a locally-stored Master Key → instant,
-            silent unlock. No screen, no typing, ever.
-          - Confirmed brand-new account (nothing local, nothing in
-            CloudStorage, no legacy password vault) → the vault is
-            created SILENTLY and the app unlocks immediately; a
-            dismissible one-time "save your recovery code" notice is
-            shown on top of the already-unlocked app, not as a gate.
-          - Genuinely new device on an account that already has a vault
-            → the ONLY real credential prompt left: enter the recovery
-            code once.
-          - Existing password-only (legacy) accounts keep working via a
-            one-time, transparent upgrade to the instant-unlock scheme.
-          - Every ambiguous/flaky network condition is retried with
-            backoff before any decision is made, and if Telegram's
-            cloud/secure storage is genuinely unreachable the app
-            degrades to a local-only vault instead of blocking the
-            person behind a credential screen — it reconciles with the
-            cloud automatically once connectivity returns.
-          - The Master Key is now written to and verified against every
-            available local storage tier (SecureStorage, DeviceStorage,
-            localStorage), instead of a single unchecked write, so a
-            partial failure can no longer strand a device on the
-            recovery screen forever.
-          - Recovery code can be re-viewed any time from Sidebar →
-            Backup & recovery.
-        Crypto itself is unchanged and still sound: one random 256-bit
-        Master Key per account, AES-256-GCM via Web Crypto, the Master
-        Key never leaves the device in plaintext, and CloudStorage only
-        ever stores encrypted blobs + a recovery-code-wrapped copy of
-        the key. Telegram cannot read plaintext notes, tasks, habits,
-        or memories at any point.
-     2. LANGUAGE SWITCHING pass: verified every visible surface (tabs,
-        buttons, placeholders, toasts, empty states, modals, sidebar,
-        achievements, lock screens, mood labels, archive labels) reads
-        from a translation table and updates on `diary.applyLang()`
-        instead of holding a hard-coded string.
-     3. LIGHT THEME contrast pass: card borders, input borders, and
-        text contrast were strengthened in the `:root` (orange) theme
-        variables so content reads clearly without weakening the dark
-        theme.
-     4. Added extra micro-interactions (task-complete checkmark pop,
-        achievement-unlock burst) alongside the existing button-press,
-        card, tab, toast, streak, and modal animations, all built from
-        CSS transforms/opacity and gated behind `prefers-reduced-motion`.
-     5. General bug pass while rewriting (see inline `FIX:` comments).
-
-     All functionality from v7.6 is preserved: Notes, Habits, Daily
-     Tasks (quick-add, important flag, mood, 30-day archive, carry-
-     over, streaks), Memory/Archive (books, movies, series, games,
-     relationships), the 13-achievement system, sidebar (nickname,
-     achievements, recovery code, delete all data), theme + language
-     switchers, fire streak, and full end-to-end encryption.
-============================================================ -->
-<html lang="ru" class="h-full">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>DailyBookimix</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f4efe8">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#ff4500">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23e8590c'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle'%3E%F0%9F%93%96%3C/text%3E%3C/svg%3E">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="css/styles.css?v=9.5">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Fonts are optional: the stylesheet has system-font fallbacks, so a slow or blocked request never delays first paint. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Syne:wght@700;800&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Syne:wght@700;800&display=swap"></noscript>
+    <link rel="stylesheet" href="css/styles.css?v=10.0">
 </head>
-<body class="font-sans">
+<body>
 
 <!-- ══════════════ ENCRYPTION LOCK SCREEN (v7 — see AUTH ARCHITECTURE comment) ══════════════
      v7 shows a real, interactive screen ONLY in the two cases that genuinely require
@@ -312,8 +39,8 @@
         <div class="lock-title" id="recoveryShowTitle">Save your recovery code</div>
         <div class="lock-desc" id="recoveryShowDesc">Your journal is already unlocked and end-to-end encrypted — no password needed on this device. Save this code once, just in case you ever set up a new device or reinstall.</div>
         <div class="recovery-code-display" id="recoveryCodeDisplay">XXXX-XXXX-XXXX-XXXX-XXXX</div>
-        <button class="lock-btn" style="background:rgba(255,255,255,0.22);color:white;margin-top:10px;box-shadow:none" id="recoveryCopyBtn" onclick="EncryptionManager.copyRecoveryCode()">📋 Copy code</button>
-        <label class="recovery-confirm-row">
+        <button class="lock-btn lock-btn-secondary" id="recoveryCopyBtn" onclick="EncryptionManager.copyRecoveryCode()">📋 Copy code</button>
+        <label for="recoverySavedCheck" class="recovery-confirm-row">
             <input type="checkbox" id="recoverySavedCheck" onchange="EncryptionManager.onRecoveryCheckChanged()">
             <span id="recoverySavedLabel">I've saved this somewhere safe</span>
         </label>
@@ -364,33 +91,33 @@
 </div>
 
 <div id="appContent" style="display:none">
-<div class="max-w-[480px] mx-auto min-h-screen px-4 pt-4 pb-24 flex flex-col gap-4">
+<div class="app-shell">
 
     <!-- ══════════════ HEADER (minimal: hamburger + fire streak only) ══════════════ -->
     <header class="app-header px-4 py-3 flex items-center justify-between gap-3">
-        <button class="hamburger-btn" id="hamburgerBtn" onclick="SidebarUI.open()" aria-label="Menu">
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="SidebarUI.open()" data-aria-key="aria-menu" aria-label="Menu">
             <span></span><span></span><span></span>
         </button>
-        <div id="streakBadge" class="streak-badge flex-shrink-0" onclick="diary.showStreakCalendar()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();diary.showStreakCalendar();}" role="button" tabindex="0" aria-label="Streak history">
-            <span id="fireEmoji" class="text-xl">🔥</span>
-            <span id="fireStreakHeader" class="text-xl font-bold text-amber-300">0</span>
+        <div id="streakBadge" class="streak-badge" onclick="diary.showStreakCalendar()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();diary.showStreakCalendar();}" role="button" tabindex="0" aria-label="Streak history">
+            <span id="fireEmoji" class="streak-fire">🔥</span>
+            <span id="fireStreakHeader" class="streak-num">0</span>
             <span id="freezeChip" class="freeze-chip" aria-hidden="true">❄️<span id="freezeCountHeader">2</span></span>
         </div>
     </header>
 
     <!-- ══════════════ TAB BAR ══════════════ -->
-    <div class="glass rounded-[20px] p-1.5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
-        <div class="tab-bar">
-            <button id="notesTab"   class="tab-btn active" onclick="diary.switchTab('notes')">
+    <div class="panel panel-tabs">
+        <div class="tab-bar" role="tablist">
+            <button id="notesTab"   class="tab-btn active" role="tab" aria-selected="true" onclick="diary.switchTab('notes')">
                 <span class="tab-icon">📝</span><span id="tab-notes">Notes</span>
             </button>
-            <button id="habitsTab"  class="tab-btn" onclick="diary.switchTab('habits')">
+            <button id="habitsTab"  class="tab-btn" role="tab" aria-selected="false" onclick="diary.switchTab('habits')">
                 <span class="tab-icon">🔥</span><span id="tab-habits">Habits</span>
             </button>
-            <button id="tasksTabBtn" class="tab-btn" onclick="diary.switchTab('tasks')">
+            <button id="tasksTabBtn" class="tab-btn" role="tab" aria-selected="false" onclick="diary.switchTab('tasks')">
                 <span class="tab-icon">✅</span><span id="tab-tasks">Tasks</span>
             </button>
-            <button id="memoryTab"  class="tab-btn" onclick="diary.switchTab('memory')">
+            <button id="memoryTab"  class="tab-btn" role="tab" aria-selected="false" onclick="diary.switchTab('memory')">
                 <span class="tab-icon">📦</span><span id="tab-memory">Archive</span>
             </button>
         </div>
@@ -399,33 +126,33 @@
     <!-- ══════════════ SETTINGS BAR ══════════════ -->
     <div class="settings-bar">
         <button class="settings-btn" onclick="diary.openSheet('lang')">
-            <span class="text-xl">🌐</span><span id="lang-btn-label">Language</span>
+            <span class="settings-ico" aria-hidden="true">🌐</span><span id="lang-btn-label">Language</span>
         </button>
         <button class="settings-btn" onclick="diary.openSheet('theme')">
-            <span id="theme-icon" class="text-xl">☀️</span><span id="theme-btn-label">Theme</span>
+            <span id="theme-icon" class="settings-ico" aria-hidden="true">☀️</span><span id="theme-btn-label">Theme</span>
         </button>
     </div>
 
     <!-- ══════════════ SECTIONS ══════════════ -->
 
     <!-- ── NOTES SECTION ── -->
-    <div id="notesSection" class="flex flex-col gap-4">
-        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+    <div id="notesSection" role="tabpanel" class="flex flex-col gap-4">
+        <div class="panel">
             <div class="section-header">
                 <span id="noteFormIcon">✍️</span><span id="noteFormTitle">New note</span>
             </div>
             <form id="noteForm" class="flex flex-col gap-3">
                 <input type="hidden" id="noteId">
                 <div>
-                    <label class="fi-label" id="lbl-note-title">Title</label>
+                    <label for="noteTitle" class="fi-label" id="lbl-note-title">Title</label>
                     <input id="noteTitle" type="text" class="fi" required>
                 </div>
                 <div>
-                    <label class="fi-label" id="lbl-note-cat">Category</label>
+                    <label for="noteCategory" class="fi-label" id="lbl-note-cat">Category</label>
                     <select id="noteCategory" class="fi"></select>
                 </div>
                 <div>
-                    <label class="fi-label" id="lbl-note-content">Content</label>
+                    <label for="noteContent" class="fi-label" id="lbl-note-content">Content</label>
                     <textarea id="noteContent" class="fi" rows="5" required></textarea>
                 </div>
                 <button type="submit" class="btn-primary" id="save-note-btn">
@@ -433,18 +160,18 @@
                 </button>
             </form>
         </div>
-        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+        <div class="panel">
             <div class="flex items-center justify-between mb-4">
-                <div class="section-header" style="margin-bottom:0">
+                <div class="section-header section-header-flush">
                     <span>📖</span><span id="my-notes-title">My notes</span>
                 </div>
-                <button id="clearAll" class="btn-ghost btn-danger" style="padding:8px 14px;font-size:13px">
+                <button id="clearAll" class="btn-ghost btn-danger btn-sm" type="button">
                     <span id="clear-all-txt">Clear all</span>
                 </button>
             </div>
             <div class="search-wrap mb-3">
                 <span class="search-icon">🔍</span>
-                <input id="notesSearch" type="text" class="fi" oninput="diary.renderNotes()">
+                <input id="notesSearch" type="search" enterkeyhint="search" autocomplete="off" class="fi" oninput="diary.onSearch('notes')">
             </div>
             <select id="filterCategory" class="fi mb-4" onchange="diary.renderNotes()"></select>
             <div id="notesList" class="scrollable"></div>
@@ -452,31 +179,31 @@
     </div>
 
     <!-- ── HABITS SECTION ── -->
-    <div id="habitsSection" class="hidden flex flex-col gap-4">
-        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+    <div id="habitsSection" role="tabpanel" class="hidden flex flex-col gap-4">
+        <div class="panel">
             <div class="section-header"><span>🔥</span><span id="habitFormTitle">New habit</span></div>
             <form id="habitForm" class="flex flex-col gap-3">
                 <input type="hidden" id="habitId">
                 <div>
-                    <label class="fi-label" id="lbl-habit-name">Habit name</label>
+                    <label for="habitName" class="fi-label" id="lbl-habit-name">Habit name</label>
                     <input id="habitName" type="text" class="fi" required>
                 </div>
                 <div class="date-row">
                     <div>
-                        <label class="fi-label" id="lbl-start-date">Start date</label>
+                        <label for="habitStartDate" class="fi-label" id="lbl-start-date">Start date</label>
                         <input id="habitStartDate" type="date" class="fi" required>
                     </div>
                     <div>
-                        <label class="fi-label" id="lbl-end-date">End date</label>
+                        <label for="habitEndDate" class="fi-label" id="lbl-end-date">End date</label>
                         <input id="habitEndDate" type="date" class="fi">
                     </div>
                 </div>
                 <div>
-                    <label class="fi-label" id="lbl-goal-days">Goal (days)</label>
+                    <label for="habitGoal" class="fi-label" id="lbl-goal-days">Goal (days)</label>
                     <input id="habitGoal" type="number" value="30" min="1" class="fi" required>
                 </div>
                 <div>
-                    <label class="fi-label" id="lbl-habit-desc">Description</label>
+                    <label for="habitDescription" class="fi-label" id="lbl-habit-desc">Description</label>
                     <textarea id="habitDescription" class="fi" rows="3"></textarea>
                 </div>
                 <button type="submit" class="btn-primary" id="start-habit-btn">
@@ -484,21 +211,21 @@
                 </button>
             </form>
         </div>
-        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+        <div class="panel">
             <div class="section-header"><span>📊</span><span id="my-habits-title">My habits</span></div>
             <div class="search-wrap mb-4">
                 <span class="search-icon">🔍</span>
-                <input id="habitsSearch" type="text" class="fi" oninput="diary.renderHabits()">
+                <input id="habitsSearch" type="search" enterkeyhint="search" autocomplete="off" class="fi" oninput="diary.onSearch('habits')">
             </div>
             <div id="habitsList" class="scrollable"></div>
         </div>
     </div>
 
     <!-- ── DAILY TASKS SECTION ── -->
-    <div id="tasksSection" class="hidden flex flex-col gap-4">
+    <div id="tasksSection" role="tabpanel" class="hidden flex flex-col gap-4">
 
         <!-- Stats bar -->
-        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+        <div class="panel">
             <div class="section-header"><span>✅</span><span id="tasks-section-title">Daily Tasks</span></div>
 
             <!-- Quick add -->
@@ -514,7 +241,7 @@
             <!-- v8.1: real-time task search (title/text + status keywords) -->
             <div class="search-wrap mb-4">
                 <span class="search-icon">🔍</span>
-                <input id="tasksSearch" type="text" class="fi" oninput="TaskManager.render()">
+                <input id="tasksSearch" type="search" enterkeyhint="search" autocomplete="off" class="fi" oninput="diary.onSearch('tasks')">
             </div>
 
             <!-- Monthly calendar (replaces the old fixed 30-day scroller) -->
@@ -533,13 +260,13 @@
             <div id="tasksList"></div>
 
             <!-- Mood row (today only) -->
-            <div id="taskMoodSection" style="margin-top:14px">
-                <div style="font-size:12px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px" id="tasks-mood-label">Mood of the day</div>
+            <div id="taskMoodSection" class="mt-3">
+                <div class="eyebrow mb-2" id="tasks-mood-label">Mood of the day</div>
                 <div class="mood-row" id="moodRow"></div>
             </div>
 
             <!-- Carry-over button (today only, shown when incomplete tasks exist) -->
-            <div id="taskCarryoverSection" style="margin-top:12px;display:none">
+            <div id="taskCarryoverSection" class="mt-3" style="display:none">
                 <button class="carryover-btn" onclick="TaskManager.carryOver()" id="carryover-btn">
                     <span>⏭️</span><span id="carryover-btn-txt">Carry over unfinished to tomorrow</span>
                 </button>
@@ -548,35 +275,35 @@
     </div>
 
     <!-- ── MEMORY / ARCHIVE SECTION ── -->
-    <div id="memorySection" class="hidden flex flex-col gap-4">
-        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+    <div id="memorySection" role="tabpanel" class="hidden flex flex-col gap-4">
+        <div class="panel">
             <div class="section-header"><span>✨</span><span id="memoryFormTitle">New memory</span></div>
             <form id="memoryForm" class="flex flex-col gap-3">
                 <input type="hidden" id="memoryId">
                 <div>
-                    <label class="fi-label" id="lbl-mem-title">Title</label>
+                    <label for="memoryTitle" class="fi-label" id="lbl-mem-title">Title</label>
                     <input id="memoryTitle" type="text" class="fi" required>
                 </div>
                 <div>
-                    <label class="fi-label" id="lbl-mem-type">Type</label>
+                    <label for="memoryType" class="fi-label" id="lbl-mem-type">Type</label>
                     <select id="memoryType" class="fi" onchange="diary.onMemoryTypeChange()"></select>
                 </div>
                 <div id="relationsFields" class="hidden">
-                    <label class="fi-label" id="lbl-partner-name">Partner name</label>
+                    <label for="partnerName" class="fi-label" id="lbl-partner-name">Partner name</label>
                     <input id="partnerName" type="text" class="fi">
                 </div>
                 <div class="date-row">
                     <div>
-                        <label class="fi-label" id="lbl-mem-start">Start date</label>
+                        <label for="memoryStartDate" class="fi-label" id="lbl-mem-start">Start date</label>
                         <input id="memoryStartDate" type="date" class="fi" required>
                     </div>
                     <div id="endDateField">
-                        <label class="fi-label" id="lbl-mem-end">End date</label>
+                        <label for="memoryEndDate" class="fi-label" id="lbl-mem-end">End date</label>
                         <input id="memoryEndDate" type="date" class="fi">
                     </div>
                 </div>
                 <div>
-                    <label class="fi-label" id="lbl-mem-notes">Notes</label>
+                    <label for="memoryNotes" class="fi-label" id="lbl-mem-notes">Notes</label>
                     <textarea id="memoryNotes" class="fi" rows="4"></textarea>
                 </div>
                 <button type="submit" class="btn-primary" id="save-memory-btn">
@@ -584,11 +311,11 @@
                 </button>
             </form>
         </div>
-        <div class="glass rounded-[22px] p-5" style="background:var(--glass-bg);border:1px solid var(--glass-border)">
+        <div class="panel">
             <div class="section-header"><span>🗃️</span><span id="my-memories-title">Archive</span></div>
             <div class="search-wrap mb-3">
                 <span class="search-icon">🔍</span>
-                <input id="memoriesSearch" type="text" class="fi" oninput="diary.renderMemories()">
+                <input id="memoriesSearch" type="search" enterkeyhint="search" autocomplete="off" class="fi" oninput="diary.onSearch('memories')">
             </div>
             <!-- v9.5: type filter chips — filled by diary._renderMemoryFilter() (labels are translated) -->
             <div id="memoriesTypeFilter" class="type-filter mb-4" role="group" aria-label="Filter by type"></div>
@@ -597,20 +324,19 @@
     </div>
 
     <!-- ══════════════ FOOTER STATS ══════════════ -->
-    <footer class="glass rounded-[20px] px-5 py-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-center"
-            style="background:var(--footer-bg);border:1px solid var(--glass-border)">
-        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
-            📝 <span id="stat-notes-lbl">Notes</span>: <span id="notesCount" style="color:var(--text-primary)">0</span>
+    <footer class="app-footer">
+        <div class="foot-stat">
+            📝 <span id="stat-notes-lbl">Notes</span>: <span id="notesCount" class="foot-num">0</span>
         </div>
-        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
-            🔥 <span id="stat-habits-lbl">Habits</span>: <span id="habitsCount" style="color:var(--text-primary)">0</span>
-            <span style="font-size:11px;opacity:.7">(<span id="activeHabitsCount">0</span>)</span>
+        <div class="foot-stat">
+            🔥 <span id="stat-habits-lbl">Habits</span>: <span id="habitsCount" class="foot-num">0</span>
+            <span class="foot-sub">(<span id="activeHabitsCount">0</span>)</span>
         </div>
-        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
-            ✅ <span id="stat-tasks-lbl">Tasks</span>: <span id="tasksCount" style="color:var(--text-primary)">0</span>
+        <div class="foot-stat">
+            ✅ <span id="stat-tasks-lbl">Tasks</span>: <span id="tasksCount" class="foot-num">0</span>
         </div>
-        <div style="color:var(--text-muted);font-size:13px;font-weight:700">
-            📦 <span id="stat-mem-lbl">Memories</span>: <span id="memoriesCount" style="color:var(--text-primary)">0</span>
+        <div class="foot-stat">
+            📦 <span id="stat-mem-lbl">Memories</span>: <span id="memoriesCount" class="foot-num">0</span>
         </div>
     </footer>
 
@@ -625,7 +351,7 @@
     <div id="sheetThemeSection">
         <div class="sheet-title" id="sheet-theme-title">Choose Theme</div>
         <div class="sheet-option" id="sheetOptOrange" onclick="diary.applyTheme('orange')">
-            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#ff4500,#ff8c42)">🌅</div>
+            <div class="sheet-option-icon tone-amber">🌅</div>
             <div>
                 <div class="sheet-option-label" id="sheet-theme-orange">Classic Orange</div>
                 <div class="sheet-option-sub" id="sheet-theme-orange-sub">Warm & energetic</div>
@@ -633,7 +359,7 @@
             <div class="sheet-check">✓</div>
         </div>
         <div class="sheet-option" id="sheetOptDark" onclick="diary.applyTheme('dark')">
-            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#0d1117,#1f2937)">🌙</div>
+            <div class="sheet-option-icon tone-slate">🌙</div>
             <div>
                 <div class="sheet-option-label" id="sheet-theme-dark">Midnight Dark</div>
                 <div class="sheet-option-sub" id="sheet-theme-dark-sub">Easy on the eyes</div>
@@ -644,12 +370,12 @@
     <div id="sheetLangSection">
         <div class="sheet-title" id="sheet-lang-title">Choose Language</div>
         <div class="sheet-option" id="sheetOptEn" onclick="diary.applyLang('en')">
-            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);font-size:26px">🇬🇧</div>
+            <div class="sheet-option-icon tone-blue">🇬🇧</div>
             <div><div class="sheet-option-label">English</div><div class="sheet-option-sub">English</div></div>
             <div class="sheet-check">✓</div>
         </div>
         <div class="sheet-option" id="sheetOptRu" onclick="diary.applyLang('ru')">
-            <div class="sheet-option-icon" style="background:linear-gradient(135deg,#dc2626,#1d4ed8);font-size:26px">🇷🇺</div>
+            <div class="sheet-option-icon tone-red">🇷🇺</div>
             <div><div class="sheet-option-label">Русский</div><div class="sheet-option-sub">Russian</div></div>
             <div class="sheet-check">✓</div>
         </div>
@@ -658,11 +384,11 @@
 
 
 <!-- ══════════════ MODALS ══════════════ -->
-<div id="calendarModal" class="modal-overlay">
+<div id="calendarModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
             <span class="modal-title" id="calendarTitle"></span>
-            <button class="modal-close" onclick="diary.closeModals()">×</button>
+            <button type="button" class="modal-close" onclick="diary.closeModals()" data-aria-key="aria-close" aria-label="Close">×</button>
         </div>
         <div class="cal-nav-row">
             <button class="cal-nav-btn" onclick="diary.calHabitPrevMonth()" aria-label="Previous month">‹</button>
@@ -673,17 +399,17 @@
             <button class="cal-nav-btn" onclick="diary.calHabitNextMonth()" aria-label="Next month">›</button>
         </div>
         <table id="calendarTable"></table>
-        <p id="calendar-hint" class="text-center text-xs mt-4" style="color:#9ca3af">Tap a day to toggle</p>
+        <p id="calendar-hint" class="hint-text text-center mt-4">Tap a day to toggle</p>
     </div>
 </div>
 
-<div id="endHabitModal" class="modal-overlay">
+<div id="endHabitModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
             <span class="modal-title" id="end-habit-title">End habit</span>
-            <button class="modal-close" onclick="diary.closeModals()">×</button>
+            <button type="button" class="modal-close" onclick="diary.closeModals()" data-aria-key="aria-close" aria-label="Close">×</button>
         </div>
-        <p id="endHabitName" class="mb-4 font-semibold" style="color:var(--modal-text)"></p>
+        <p id="endHabitName" class="mb-4 font-semibold dlg-strong"></p>
         <input id="endHabitDate" type="date" class="fi mb-6">
         <div class="flex gap-3">
             <button class="btn-ghost flex-1" onclick="diary.closeModals()" id="cancel-btn-1">Cancel</button>
@@ -692,21 +418,21 @@
     </div>
 </div>
 
-<div id="eventModal" class="modal-overlay">
+<div id="eventModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
             <span class="modal-title" id="add-event-title">Add event</span>
-            <button class="modal-close" onclick="diary.closeModals()">×</button>
+            <button type="button" class="modal-close" onclick="diary.closeModals()" data-aria-key="aria-close" aria-label="Close">×</button>
         </div>
         <form id="eventForm" class="flex flex-col gap-3">
             <input type="hidden" id="eventMemoryId">
             <input type="hidden" id="editEventIdx" value="">
             <div>
-                <label class="fi-label" id="lbl-event-date">Date</label>
+                <label for="eventDate" class="fi-label" id="lbl-event-date">Date</label>
                 <input id="eventDate" type="date" class="fi" required>
             </div>
             <div>
-                <label class="fi-label" id="lbl-event-desc">What happened?</label>
+                <label for="eventDesc" class="fi-label" id="lbl-event-desc">What happened?</label>
                 <textarea id="eventDesc" class="fi" rows="4" required></textarea>
             </div>
             <div class="flex gap-3">
@@ -719,13 +445,13 @@
     </div>
 </div>
 
-<div id="endRelationsModal" class="modal-overlay">
+<div id="endRelationsModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
             <span class="modal-title" id="end-relations-title">💔 We broke up</span>
-            <button class="modal-close" onclick="diary.closeModals()">×</button>
+            <button type="button" class="modal-close" onclick="diary.closeModals()" data-aria-key="aria-close" aria-label="Close">×</button>
         </div>
-        <div class="mb-4" style="color:var(--modal-text);font-size:14px;font-weight:600" id="end-relations-hint">
+        <div class="mb-4 dlg-strong" id="end-relations-hint">
             Choose the date you parted ways.
         </div>
         <input id="endRelationsDate" type="date" class="fi mb-6">
@@ -738,26 +464,26 @@
 
 
 <!-- ══════════════ START FRESH CONFIRMATION (forgotten recovery code) ══════════════ -->
-<div id="startFreshConfirmModal" class="modal-overlay">
+<div id="startFreshConfirmModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="delete-modal-box">
         <div class="delete-modal-icon">⚠️</div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="sfConfirmTitle">Start fresh?</h2>
-        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:24px" id="sfConfirmDesc">
+        <h2 class="dlg-title" id="sfConfirmTitle">Start fresh?</h2>
+        <p class="dlg-desc" id="sfConfirmDesc">
             Without the recovery code, your old encrypted data can never be recovered. This will permanently delete it from this Telegram account and create a brand-new, empty vault. This cannot be undone.
         </p>
         <div class="flex gap-3">
-            <button class="btn-ghost flex-1" onclick="EncryptionManager.cancelStartFresh()" id="sfConfirmCancelBtn" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
+            <button class="btn-ghost flex-1" onclick="EncryptionManager.cancelStartFresh()" id="sfConfirmCancelBtn">Cancel</button>
             <button class="btn-ghost btn-danger flex-1" onclick="EncryptionManager.executeStartFresh()" id="sfConfirmExecuteBtn">Yes, delete everything &amp; start fresh</button>
         </div>
     </div>
 </div>
 
 <!-- ══════════════ FIRE STREAK CALENDAR ══════════════ -->
-<div id="streakCalendarModal" class="modal-overlay">
+<div id="streakCalendarModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
             <span class="modal-title" id="streak-cal-title">🔥 Streak history</span>
-            <button class="modal-close" onclick="diary.closeModals()">×</button>
+            <button type="button" class="modal-close" onclick="diary.closeModals()" data-aria-key="aria-close" aria-label="Close">×</button>
         </div>
         <div class="streak-cal-summary">
             <div class="streak-cal-count" id="streakCalCount">0</div>
@@ -773,8 +499,8 @@
             <button class="cal-nav-btn" onclick="diary.streakCalNextMonth()" aria-label="Next month">›</button>
         </div>
         <table id="streakCalTable"></table>
-        <p id="streak-cal-hint" class="streak-cal-hint text-center text-xs mt-4">Days that kept your streak alive</p>
-        <p id="streak-cal-hint-freeze" class="streak-cal-hint text-center text-xs mt-1"></p>
+        <p id="streak-cal-hint" class="streak-cal-hint text-center mt-4">Days that kept your streak alive</p>
+        <p id="streak-cal-hint-freeze" class="streak-cal-hint text-center mt-1"></p>
     </div>
 </div>
 
@@ -794,59 +520,59 @@
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-menu">Menu</div>
         <div class="sidebar-item" onclick="SidebarUI.openAchievements()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(251,191,36,0.2),rgba(245,158,11,0.15));border:1px solid rgba(251,191,36,0.3)">🏆</div>
+            <div class="sidebar-item-icon tone-amber">🏆</div>
             <div class="sidebar-item-label" id="sb-item-achievements">Achievements</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
         <div class="sidebar-item" onclick="SidebarUI.openRecoveryModal()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(79,70,229,0.15));border:1px solid rgba(99,102,241,0.3)">🔑</div>
+            <div class="sidebar-item-icon tone-indigo">🔑</div>
             <div class="sidebar-item-label" id="sb-item-recovery">Backup &amp; recovery</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-data">Data</div>
         <div class="sidebar-item" id="sbExportRow" onclick="BackupManager.exportData()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(16,185,129,0.2),rgba(5,150,105,0.15));border:1px solid rgba(16,185,129,0.3)">📤</div>
+            <div class="sidebar-item-icon tone-green">📤</div>
             <div class="sidebar-item-label" id="sb-item-export">Export data</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
         <div class="sidebar-item" id="sbImportRow" onclick="BackupManager.pickFile()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(59,130,246,0.2),rgba(37,99,235,0.15));border:1px solid rgba(59,130,246,0.3)">📥</div>
+            <div class="sidebar-item-icon tone-blue">📥</div>
             <div class="sidebar-item-label" id="sb-item-import">Import data</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
         <div class="sidebar-item" onclick="ActionHistoryUI.open()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(168,85,247,0.2),rgba(126,34,206,0.15));border:1px solid rgba(168,85,247,0.3)">🕘</div>
+            <div class="sidebar-item-icon tone-purple">🕘</div>
             <div class="sidebar-item-label" id="sb-item-history">Action history</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
         <p class="sidebar-hint" id="sb-data-hint">Backup files are not encrypted — keep them private.</p>
-        <input type="file" id="importFileInput" accept=".json,application/json" style="display:none" onchange="BackupManager.onFileChosen(this)">
+        <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="BackupManager.onFileChosen(this)">
         <div class="sidebar-divider"></div>
         <div class="sidebar-section-label" id="sb-lbl-danger">Privacy</div>
         <div class="sidebar-item" onclick="SidebarUI.openPrivacyPolicy()">
-            <div class="sidebar-item-icon" style="background:linear-gradient(135deg,rgba(148,163,184,0.25),rgba(100,116,139,0.15));border:1px solid rgba(148,163,184,0.3)">📄</div>
+            <div class="sidebar-item-icon tone-slate">📄</div>
             <div class="sidebar-item-label" id="sb-item-privacy">Privacy Policy</div>
             <div class="sidebar-item-arrow">›</div>
         </div>
         <div class="sidebar-item danger" onclick="SidebarUI.confirmDeleteAccount()">
-            <div class="sidebar-item-icon" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2)">🗑️</div>
+            <div class="sidebar-item-icon tone-red">🗑️</div>
             <div class="sidebar-item-label" id="sb-item-delete">Delete account &amp; all data</div>
-            <div class="sidebar-item-arrow" style="color:#ef4444">›</div>
+            <div class="sidebar-item-arrow is-danger">›</div>
         </div>
     </div>
 </div>
 
 <div id="recoveryModal">
     <div class="delete-modal-box">
-        <div class="delete-modal-icon" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.25)">🔑</div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="recoveryModalTitle">Backup &amp; recovery</h2>
-        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:18px" id="recoveryModalDesc">
+        <div class="delete-modal-icon tone-indigo">🔑</div>
+        <h2 class="dlg-title" id="recoveryModalTitle">Backup &amp; recovery</h2>
+        <p class="dlg-desc" id="recoveryModalDesc">
             Your recovery code is shown only once, when it's created, and never stored anywhere in readable form — not even here. If you've lost it, generate a new one below; the old code will stop working.
         </p>
-        <div class="recovery-code-display" id="recoveryModalCode" style="color:var(--modal-text);background:rgba(99,102,241,0.08);border-color:rgba(99,102,241,0.3)">••••-••••-••••-••••-••••</div>
-        <button class="btn-ghost" style="width:100%;margin-top:14px" id="recoveryModalGenerateBtn" onclick="SidebarUI.generateNewRecoveryCode()">Generate new code</button>
-        <button class="btn-ghost" style="width:100%;margin-top:10px;color:var(--modal-text);border-color:rgba(0,0,0,0.1)" onclick="SidebarUI.closeRecoveryModal()" id="recoveryModalCloseBtn">Close</button>
+        <div class="recovery-code-display" id="recoveryModalCode">••••-••••-••••-••••-••••</div>
+        <button class="btn-ghost btn-block mt-3" id="recoveryModalGenerateBtn" onclick="SidebarUI.generateNewRecoveryCode()">Generate new code</button>
+        <button class="btn-ghost btn-block mt-2" onclick="SidebarUI.closeRecoveryModal()" id="recoveryModalCloseBtn">Close</button>
     </div>
 </div>
 
@@ -860,8 +586,8 @@
         </div>
         <div class="ach-progress-card">
             <div class="ach-progress-label" id="ach-progress-label">Unlocked achievements</div>
-            <div class="ach-progress-count"><span id="ach-unlocked-count">0</span><span id="ach-total-count" style="font-size:18px;opacity:0.6"> / 13</span></div>
-            <div class="ach-prog-track"><div class="ach-prog-fill" id="ach-prog-fill" style="width:0%"></div></div>
+            <div class="ach-progress-count"><span id="ach-unlocked-count">0</span><span id="ach-total-count" class="ach-total"> / 13</span></div>
+            <div class="ach-prog-track"><div class="ach-prog-fill" id="ach-prog-fill"></div></div>
         </div>
         <div class="ach-grid" id="achGrid"></div>
 
@@ -886,24 +612,24 @@
 </div>
 
 <!-- ══════════════ v9.0: CREATE / EDIT CUSTOM ACHIEVEMENT ══════════════ -->
-<div id="customAchModal" class="modal-overlay">
+<div id="customAchModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-box">
         <div class="flex items-center justify-between mb-5">
             <span class="modal-title" id="customAchFormTitle">New achievement</span>
-            <button class="modal-close" onclick="AchievementsUI.closeCustomForm()">×</button>
+            <button type="button" class="modal-close" onclick="AchievementsUI.closeCustomForm()" data-aria-key="aria-close" aria-label="Close">×</button>
         </div>
         <form id="customAchForm" onsubmit="AchievementsUI.saveCustomForm(event)" class="flex flex-col gap-3">
             <input type="hidden" id="customAchId">
             <div>
-                <label class="fi-label" id="lbl-custom-ach-icon">Icon (emoji)</label>
+                <label for="customAchIcon" class="fi-label" id="lbl-custom-ach-icon">Icon (emoji)</label>
                 <input id="customAchIcon" type="text" class="fi ach-icon-input" maxlength="8" required placeholder="🏅">
             </div>
             <div>
-                <label class="fi-label" id="lbl-custom-ach-title">Title</label>
+                <label for="customAchTitle" class="fi-label" id="lbl-custom-ach-title">Title</label>
                 <input id="customAchTitle" type="text" class="fi" maxlength="60" required placeholder="e.g. Ran my first 5K">
             </div>
             <div>
-                <label class="fi-label" id="lbl-custom-ach-desc">Description (optional)</label>
+                <label for="customAchDesc" class="fi-label" id="lbl-custom-ach-desc">Description (optional)</label>
                 <textarea id="customAchDesc" class="fi" rows="3" maxlength="200" placeholder="Say a bit more about it..."></textarea>
             </div>
             <button type="submit" class="btn-primary" id="customAchSaveBtn">
@@ -927,11 +653,11 @@
 <div id="dataConfirmModal" onclick="if(event.target===this)DataDialog.onCancel()">
     <div class="delete-modal-box">
         <div class="delete-modal-icon" id="dcIcon">⚠️</div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="dcTitle"></h2>
-        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:16px" id="dcDesc"></p>
+        <h2 class="dlg-title" id="dcTitle"></h2>
+        <p class="dlg-desc" id="dcDesc"></p>
         <div class="dc-details" id="dcDetails" style="display:none"></div>
         <div class="flex gap-3">
-            <button class="btn-ghost flex-1" id="dcCancel" onclick="DataDialog.onCancel()" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
+            <button class="btn-ghost flex-1" id="dcCancel" onclick="DataDialog.onCancel()">Cancel</button>
             <button class="btn-ghost btn-danger flex-1" id="dcConfirm" onclick="DataDialog.onConfirm()">OK</button>
         </div>
     </div>
@@ -940,14 +666,14 @@
 <!-- ══════════════ v9.2: ACTION HISTORY ══════════════ -->
 <div id="actionHistoryModal" onclick="if(event.target===this)ActionHistoryUI.close()">
     <div class="delete-modal-box ah-box">
-        <div class="flex items-center justify-between mb-3" style="display:flex;align-items:center;justify-content:space-between">
-            <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text)" id="ahTitle">Action history</h2>
-            <button class="modal-close" onclick="ActionHistoryUI.close()" aria-label="Close">×</button>
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="dlg-title dlg-title-left" id="ahTitle">Action history</h2>
+            <button type="button" class="modal-close" onclick="ActionHistoryUI.close()" data-aria-key="aria-close" aria-label="Close">×</button>
         </div>
-        <p style="font-size:13px;color:#6b7280;line-height:1.5;margin-bottom:12px" id="ahDesc"></p>
+        <p class="dlg-desc dlg-desc-left" id="ahDesc"></p>
         <div class="ah-list" id="ahList"></div>
         <div class="ah-empty" id="ahEmpty" style="display:none"></div>
-        <button class="btn-ghost btn-danger" id="ahClearBtn" style="width:100%;margin-top:14px" onclick="ActionHistoryUI.requestClear()">Clear history</button>
+        <button class="btn-ghost btn-danger btn-block mt-3" id="ahClearBtn" onclick="ActionHistoryUI.requestClear()">Clear history</button>
     </div>
 </div>
 
@@ -955,29 +681,29 @@
 <div id="deleteAccountModal">
     <div class="delete-modal-box">
         <div class="delete-modal-icon">⚠️</div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--modal-text);text-align:center;margin-bottom:12px" id="del-modal-title">Delete all data?</h2>
-        <p style="font-size:14px;color:#6b7280;text-align:center;line-height:1.6;margin-bottom:24px" id="del-modal-desc">
+        <h2 class="dlg-title" id="del-modal-title">Delete all data?</h2>
+        <p class="dlg-desc" id="del-modal-desc">
             This will permanently erase all your notes, habits, memories, and profile data.
         </p>
         <div class="flex gap-3">
-            <button class="btn-ghost flex-1" onclick="SidebarUI.cancelDeleteAccount()" id="del-cancel-btn" style="color:var(--modal-text);border-color:rgba(0,0,0,0.1)">Cancel</button>
+            <button class="btn-ghost flex-1" onclick="SidebarUI.cancelDeleteAccount()" id="del-cancel-btn">Cancel</button>
             <button class="btn-ghost btn-danger flex-1" onclick="SidebarUI.executeDeleteAccount()" id="del-confirm-btn">Delete everything</button>
         </div>
     </div>
 </div>
 
 
-<script src="js/util.js?v=9.5"></script>
-<script src="js/tg-platform.js?v=9.5"></script>
-<script src="js/encryption.js?v=9.5"></script>
-<script src="js/storage.js?v=9.5"></script>
-<script src="js/translations.js?v=9.5"></script>
-<script src="js/action-log.js?v=9.5"></script>
-<script src="js/task-manager.js?v=9.5"></script>
-<script src="js/diary.js?v=9.5"></script>
-<script src="js/sidebar.js?v=9.5"></script>
-<script src="js/achievements.js?v=9.5"></script>
-<script src="js/backup.js?v=9.5"></script>
-<script src="js/boot.js?v=9.5"></script>
+<script src="js/util.js?v=10.0"></script>
+<script src="js/tg-platform.js?v=10.0"></script>
+<script src="js/encryption.js?v=10.0"></script>
+<script src="js/storage.js?v=10.0"></script>
+<script src="js/translations.js?v=10.0"></script>
+<script src="js/action-log.js?v=10.0"></script>
+<script src="js/task-manager.js?v=10.0"></script>
+<script src="js/diary.js?v=10.0"></script>
+<script src="js/sidebar.js?v=10.0"></script>
+<script src="js/achievements.js?v=10.0"></script>
+<script src="js/backup.js?v=10.0"></script>
+<script src="js/boot.js?v=10.0"></script>
 </body>
 </html>
