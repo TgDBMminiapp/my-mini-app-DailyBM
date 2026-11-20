@@ -1,75 +1,30 @@
 // @ts-check
 // ================================================================
-//  ENCRYPTION MANAGER v7 — "zero-friction" Master-Key architecture.
+//  ENCRYPTION MANAGER — Master-Key architecture
 //
-//  ── WHY v6 WAS REPLACED ──
-//  v6 introduced a random Master Key (MK) + recovery code, which was
-//  the right cryptographic shape, but the BOOT flow around it grew
-//  into five separate tiers (Welcome → Show Recovery → Enter Recovery
-//  → Migrate v5 → Legacy Password → Error), each independently
-//  deciding what to show. Two concrete bugs came directly from that:
+//  One random 256-bit AES-GCM Master Key (MK) per account, generated once with
+//  crypto.getRandomValues. It never leaves the device in plaintext.
+//    • CloudStorage  — stores only an encrypted sentinel and a copy of the MK
+//      wrapped with a key derived (PBKDF2, 600k iterations) from the recovery
+//      code. This is how a genuinely new device learns the account has a vault.
+//    • SecureStorage — OS keychain/keystore; primary per-device home of the MK
+//      for instant unlock.
+//    • DeviceStorage / localStorage — second and third local copies of the MK.
+//      _persistMKEverywhere() writes every available tier and verifies each by
+//      reading it back, so one failed write cannot strand the person.
 //
-//   BUG A — "brand-new account is asked for a password/recovery code":
-//     boot() treated ANY non-ok CloudStorage read (including a slow
-//     first read right after the Mini App opens, before Telegram has
-//     finished warming up CloudStorage) as "ambiguous" and jumped
-//     straight to a blocking error / credential screen instead of
-//     just retrying. A transient hiccup on the very first launch was
-//     indistinguishable, to the old code, from "we can't tell if this
-//     is a new or existing account" — so it played it "safe" by
-//     asking the user for something that never existed.
-//
-//   BUG B — "new device asks for the recovery code again next time":
-//     unlockWithRecoveryCode() wrote the freshly-recovered MK with
-//     `if (supportsSecure) TGPlatform.secureSet('mk', mkB64)` and NEVER
-//     checked whether that write actually succeeded, and never wrote
-//     a fallback copy anywhere else. If that single SecureStorage
-//     write silently failed (quota, OS keychain prompt dismissed,
-//     older client, etc.) there was no second copy anywhere on the
-//     device, so next launch's Tier-1 check found nothing local and
-//     fell right back to "enter your recovery code" — forever.
-//
-//  ── v7 DESIGN ──
-//  Same crypto as v6 (untouched, still correct): one random 256-bit
-//  AES-256-GCM Master Key per account, generated once with
-//  crypto.getRandomValues, that never leaves the device in plaintext.
-//    • CloudStorage  — stores ONLY: an encrypted sentinel + a
-//      recovery-code-wrapped copy of the MK. Syncs per Telegram
-//      account, so it is what lets a genuinely new device discover
-//      "yes, this account already has a vault".
-//    • SecureStorage — OS Keychain/Keystore, per-device. Primary home
-//      for the plaintext-to-Telegram (but still just ciphertext bytes
-//      to us) MK so unlock is instant with no server round-trip.
-//    • DeviceStorage / localStorage — best-effort SECOND and THIRD
-//      copies of the same MK on the same device. Purely a durability
-//      hedge: `_persistMKEverywhere()` writes to every tier available
-//      and verifies each write by reading it back, so a single failed
-//      write (BUG B) can no longer strand the user.
-//
-//  Only TWO situations ever show the person something to do:
-//    1. First-ever run of a brand-new account → we generate the vault
-//       SILENTLY and unlock immediately, then show a dismissible,
-//       one-time "here's your recovery code, save it" notice. This is
-//       informational, not a gate — the app underneath is already
-//       unlocked.
-//    2. A genuinely new device on an account that already has a vault
-//       (CloudStorage confirms a recovery blob exists, but nothing is
-//       stored locally) → the recovery-code screen. This is the only
-//       real "credential" prompt left in the whole app.
-//  Every other combination — returning device, temporarily offline,
-//  SecureStorage unsupported, etc. — is resolved automatically:
-//    • Ambiguous/failed cloud or secure reads are retried with a short
-//      backoff (`_withRetries`) before anything is decided.
-//    • If still unreachable after retries, v7 does NOT block the
-//      person behind an error screen by default — it degrades to a
-//      local-only vault (generated + stored in whatever local tier IS
-//      available) and quietly retries publishing the cloud recovery
-//      blob on a timer / on next boot, only surfacing the error screen
-//      if even local storage is unusable.
-//    • Existing v5 (password-only) and v6 (already-migrated) accounts
-//      keep working exactly as before — the legacy/migration paths are
-//      preserved verbatim, just re-ordered so they only ever trigger
-//      for accounts that genuinely have that history.
+//  Boot decision tree (see boot()):
+//    1. A local MK exists                       → unlock silently.
+//    2. No Telegram storage at all              → device-local vault.
+//    3. Cloud confirms a vault, nothing local   → ask for the recovery code
+//       (the only real credential prompt).
+//    4. Cloud confirms nothing anywhere         → create a vault silently and show a
+//       dismissible "save your recovery code" notice over the unlocked app.
+//    5. Cloud unreachable after retries         → work locally and reconcile in the
+//       background; never block the person behind a credential screen.
+//  Legacy password-based accounts (v5) keep working via migrateFromV5() /
+//  legacyUnlock(); the PBKDF2 iteration counts below must not change or old data
+//  would stop decrypting.
 // ================================================================
 const SENTINEL_NEW    = 'DBMIX_V6_OK';       // shared sentinel value, unchanged since v6 so
 const SENTINEL_LEGACY = 'DAILYBOOKMIX_V5';   // existing encrypted data keeps decrypting fine.
@@ -129,7 +84,10 @@ const EncryptionManager = {
         try {
             if (typeof ciphertext !== 'string' || !ciphertext.includes(':')) return ciphertext; // not encrypted
             return await this._decryptWithKey(this._key, ciphertext);
-        } catch (e) { return ciphertext; }
+        } catch (e) {
+            if (!this._decryptWarned) { this._decryptWarned = true; DBLog.warn('Security', 'Some stored data could not be decrypted with the current key.'); }
+            return ciphertext;
+        }
     },
 
     // ---------- small retry helper: turns "one flaky read" into a real answer ----------
@@ -208,13 +166,14 @@ const EncryptionManager = {
         // instant "Unlocking…" flash.
         const localMK = await this._readMKAnywhere();
         if (localMK) {
-            if (await this._finishUnlockWithMK(localMK)) return;
-            // Corrupted/mismatched local copy — fall through and treat as absent.
+            if (await this._finishUnlockWithMK(localMK)) { DBLog.info('Security', 'Encrypted vault unlocked.'); return; }
+            DBLog.warn('Security', 'The stored key did not match this account\'s data. Treating this device as new.');
         }
 
         // ── No Telegram storage APIs at all (old client, or testing outside
         // Telegram in a plain browser). Everything stays device-local. ──
         if (!TGPlatform.supportsSecure && !TGPlatform.supportsCloud && !TGPlatform.supportsDevice) {
+            DBLog.warn('Telegram', 'Native storage is unavailable. Using local fallback.');
             return this._bootLocalOnlyFallback();
         }
 
@@ -242,6 +201,7 @@ const EncryptionManager = {
             // Cloud genuinely unreachable after retries — do not block the person on a
             // credential screen. Degrade gracefully: work locally now, keep trying to
             // reconcile with the cloud in the background.
+            DBLog.warn('Telegram', 'Cloud storage did not respond. Continuing offline and retrying in the background.');
             return this._bootDegraded();
         }
 
@@ -295,7 +255,7 @@ const EncryptionManager = {
             await this._enterApp();
             this._presentRecoveryNotice(code);
         } catch (e) {
-            console.error('[EncryptionManager] _silentCreateVault failed:', e);
+            DBLog.error('Security', 'Could not create the encrypted vault. Falling back to device-local storage.', e);
             // Even vault creation failing shouldn't lock the person out of their own
             // fresh, empty journal — fall back to a purely local vault.
             return this._bootLocalOnlyFallback();
@@ -340,7 +300,15 @@ const EncryptionManager = {
     _scheduleCloudReconcile() {
         if (this._reconcileTimer) return;
         this._reconcileTimer = setInterval(async () => {
-            if (!TGPlatform.supportsCloud || !this._rawMK) return;
+            if (!TGPlatform.supportsCloud || !this._rawMK || this._reconciling) return;
+            this._reconciling = true;
+            try { await this._reconcileOnce(); } catch (e) { DBLog.warn('Sync', 'Background reconciliation failed. Will retry.', e); }
+            finally { this._reconciling = false; }
+        }, 20000);
+    },
+
+    async _reconcileOnce() {
+        {
             const rec = await TGPlatform.cloudGet('enc_mk_recovery');
             if (rec.ok && !rec.value) {
                 // Cloud is reachable now and confirmed still empty — publish this
@@ -357,6 +325,7 @@ const EncryptionManager = {
                 clearInterval(this._reconcileTimer);
                 this._reconcileTimer = null;
                 this._pendingRecoveryCode = code;
+                DBLog.info('Sync', 'Synchronization completed. Recovery data published.');
                 this._presentRecoveryNotice(code);
             } else if (rec.ok && rec.value) {
                 // Cloud came back AND another device already published a vault first —
@@ -368,7 +337,7 @@ const EncryptionManager = {
                 clearInterval(this._reconcileTimer);
                 this._reconcileTimer = null;
             }
-        }, 20000);
+        }
     },
 
     // ---------- zero Telegram storage APIs available (old client / plain browser) ----------
@@ -398,7 +367,7 @@ const EncryptionManager = {
             localStorage.setItem('dbmix_sentinel', enc);
             await this._enterApp();
         } catch (e) {
-            console.error('[EncryptionManager] local-only fallback failed:', e);
+            DBLog.error('Security', 'Device-local vault could not be created.', e);
             this._showBlockingError();
         }
     },
@@ -447,7 +416,8 @@ const EncryptionManager = {
     async _enterApp() {
         document.getElementById('encryptionLock').classList.remove('open');
         document.getElementById('appContent').style.display = 'block';
-        await diary.init();
+        await diary.init(); // idempotent: safe to call again after "start fresh" or a retry
+        DBLog.info('App', 'Initialization completed.');
     },
 
     _showToastOnApp(msg) {
@@ -466,12 +436,21 @@ const EncryptionManager = {
         const code = (document.getElementById('recoveryCodeDisplay') || {}).textContent || '';
         const btn = document.getElementById('recoveryCopyBtn');
         const orig = btn ? btn.textContent : '';
-        try {
-            await navigator.clipboard.writeText(code);
-            if (btn) { btn.textContent = this._t('recoveryCopyBtn-copied'); setTimeout(() => { btn.textContent = orig; }, 1500); }
-        } catch (e) {
-            if (btn) { btn.textContent = this._t('recoveryCopyBtn-failed'); setTimeout(() => { btn.textContent = orig; }, 2000); }
+        let ok = false;
+        try { await navigator.clipboard.writeText(code); ok = true; }
+        catch (e) { ok = this._legacyCopy(code); } // clipboard API is blocked in some WebViews
+        if (btn) {
+            btn.textContent = this._t(ok ? 'recoveryCopyBtn-copied' : 'recoveryCopyBtn-failed');
+            setTimeout(() => { btn.textContent = orig; }, ok ? 1500 : 2000);
         }
+    },
+    _legacyCopy(text) {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.setAttribute('readonly', ''); ta.className = 'offscreen-input';
+            document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+            const ok = document.execCommand('copy'); ta.remove(); return ok;
+        } catch (e) { return false; }
     },
 
     // Dismisses the one-time recovery notice. The app was already unlocked before
@@ -511,6 +490,7 @@ const EncryptionManager = {
             // single unchecked SecureStorage write.
             const persisted = await this._persistMKEverywhere(mkB64);
             await this._enterApp();
+            DBLog.info('Security', 'Encrypted vault unlocked with the recovery code.');
             if (!persisted) {
                 // Extremely rare (every local tier failed) — still unlocked for this
                 // session; warn so the person knows to try again on next launch.
@@ -518,6 +498,7 @@ const EncryptionManager = {
             }
         } catch (e) {
             this._key = null;
+            DBLog.warn('Security', 'Recovery code was not accepted or recovery data was unreachable.');
             if (btn) { btn.disabled = false; btn.textContent = this._t('enterRecoveryBtn'); }
             this._flashInputError(input);
         }
@@ -597,7 +578,10 @@ const EncryptionManager = {
                 AchievementsUI._state = {};
                 AchievementsUI._custom = [];
             }
-        } catch (e) {}
+            if (typeof ActionLog !== 'undefined') await ActionLog.clear();
+            if (typeof SidebarUI !== 'undefined') SidebarUI.profile.nickname = '';
+        } catch (e) { DBLog.warn('Security', 'Some old data could not be cleared while starting fresh.', e); }
+        DBLog.info('Security', 'Identity reset. Creating a new encrypted vault.');
         // Immediately create a brand-new vault silently instead of showing a
         // "welcome" screen that asks for anything — starting fresh means the
         // person gets a working, unlocked, empty journal right away.
@@ -729,7 +713,7 @@ const EncryptionManager = {
             await TGPlatform.cloudSet('enc_mk_recovery', wrapped);
             return code;
         } catch (e) {
-            console.error('[EncryptionManager] regenerateRecoveryCode failed:', e);
+            DBLog.error('Security', 'Could not generate a new recovery code.', e);
             return null;
         }
     },
@@ -750,9 +734,8 @@ const EncryptionManager = {
     continueOffline() { this._bootDegraded(); },
     _flashInputError(input) {
         if (!input) return;
-        input.style.borderColor = '#f87171';
-        input.style.boxShadow = '0 0 0 4px rgba(248,113,113,0.2)';
-        setTimeout(() => { input.style.borderColor = ''; input.style.boxShadow = ''; }, 1200);
+        input.classList.add('input-error');
+        setTimeout(() => input.classList.remove('input-error'), 1200);
         input.focus();
     },
     onRecoveryInputChange() {

@@ -1,5 +1,46 @@
 // @ts-check
 // ================================================================
+//  LOG — small, consistent logger.
+//  Output format:  [Module] Human-readable message.
+//  Levels: info / warn / error. Only a short, sanitised description of an
+//  error is ever printed (its name and, for non-parse errors, a trimmed
+//  message) — never stored data, keys, codes or note text. The last
+//  LOG_KEEP entries are kept in memory (not persisted, not transmitted) so
+//  `DBLog.history()` can be pasted from a console when troubleshooting.
+// ================================================================
+const DBLog = (() => {
+    const KEEP = 60;
+    const ring = [];
+    const describe = (err) => {
+        if (err == null) return '';
+        if (typeof err === 'string') return err.slice(0, 80);
+        const name = err.name || 'Error';
+        // JSON.parse messages quote a fragment of the parsed text — never print those.
+        if (name === 'SyntaxError') return name;
+        return (name + (err.message ? ': ' + String(err.message).slice(0, 120) : '')).trim();
+    };
+    const emit = (level, mod, msg, err) => {
+        const detail = describe(err);
+        const line = `[${mod}] ${msg}${detail ? ' (' + detail + ')' : ''}`;
+        ring.push({ t: Date.now(), level, line });
+        if (ring.length > KEEP) ring.shift();
+        try { console[level](line); } catch (e) { /* console unavailable */ }
+    };
+    return {
+        info(mod, msg)       { emit('info', mod, msg); },
+        warn(mod, msg, err)  { emit('warn', mod, msg, err); },
+        error(mod, msg, err) { emit('error', mod, msg, err); },
+        history()            { return ring.map(r => new Date(r.t).toISOString() + ' ' + r.line); },
+        describe,
+    };
+})();
+
+// Last-resort handlers so nothing fails silently. They only log a sanitised
+// description; the default browser behaviour is left untouched.
+window.addEventListener('unhandledrejection', (e) => DBLog.error('App', 'An operation failed unexpectedly.', e.reason));
+window.addEventListener('error', (e) => { if (e && e.message) DBLog.error('App', 'A script error occurred.', { name: 'Error', message: e.message }); });
+
+// ================================================================
 //  UTIL — small shared helpers used across the app.
 //  FIX: every date computation in v5 used `Date#toISOString()`, which
 //  is UTC, not the user's local date. Anyone not in UTC got tasks,
@@ -37,11 +78,21 @@ const Util = {
         return new Date(y, m - 1, d);
     },
 
+    // Chunked on purpose: String.fromCharCode(...bytes) throws RangeError once the
+    // array is large (JavaScriptCore, used by Telegram iOS, caps arguments near 64k).
     b64encode(buf) {
-        return btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const bytes = new Uint8Array(buf);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(bin);
     },
     b64decode(str) {
-        return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)));
+        const bin = atob(str);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
     },
 
     // ── Recovery code: Crockford base32 (excludes I, L, O, U — no ambiguous chars) ──
@@ -70,14 +121,23 @@ const Util = {
 
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
-    // ── v9.0 BUG FIX: notes/habits/memories rendered user-entered text
-    // (title, content, description, notes, partner name, event text)
-    // directly into innerHTML. TaskManager already escaped task text for
-    // exactly this reason, but the other three sections didn't — typing
-    // something like "<b>" or "a & b" into a note title/content broke the
-    // layout (interpreted as real HTML) instead of showing literally.
-    // Centralizing the same escaping TaskManager already used here so
-    // every section can share it consistently.
+    /** Trailing-edge debounce (used for search-as-you-type so each keystroke doesn't re-render lists). */
+    debounce(fn, ms) {
+        let t = null;
+        const wrapped = (...args) => { clearTimeout(t); t = setTimeout(() => { t = null; fn(...args); }, ms); };
+        wrapped.cancel = () => { clearTimeout(t); t = null; };
+        return wrapped;
+    },
+
+    /** Whole local calendar days between two YYYY-MM-DD strings (b - a). DST-safe. */
+    daysBetween(a, b) {
+        const da = this.parseLocalDate(a), db = this.parseLocalDate(b);
+        return Math.round((Date.UTC(db.getFullYear(), db.getMonth(), db.getDate()) -
+                           Date.UTC(da.getFullYear(), da.getMonth(), da.getDate())) / 86400000);
+    },
+
+    // HTML-escapes user-entered text before it is placed in innerHTML.
+    // Every render path that interpolates stored text must go through this.
     escHtml(str) {
         if (str == null) return '';
         return String(str)
@@ -87,13 +147,9 @@ const Util = {
             .replace(/"/g, '&quot;');
     },
 
-    // ── v8.1: global search highlighting ──────────────────────────────
-    // Wraps every case-insensitive occurrence of `query` inside `text` with
-    // a <mark class="search-hl"> span so active search results are visually
-    // highlighted while staying fully interactive (the wrapped text is only
-    // used for display — all click/edit/delete handlers still read the
-    // original, un-highlighted data fields). Safe no-op when the query is
-    // empty or contains only regex-special characters that fail to compile.
+    // Search highlighting: wraps case-insensitive matches of `query` in an
+    // already-escaped `text` with <mark class="search-hl">. Display-only —
+    // handlers always read the original data. No-op for an empty query.
     highlightMatch(text, query) {
         const str = text == null ? '' : String(text);
         const q = (query == null ? '' : String(query)).trim();

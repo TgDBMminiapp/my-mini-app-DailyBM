@@ -35,16 +35,16 @@ const SidebarUI = {
                     this.profile.photoUrl = u.photo_url || '';
                 }
             }
-        } catch(e) {}
+        } catch(e) { DBLog.warn('Telegram', 'Profile data is unavailable.', e); }
 
         StorageManager.getItem('userNickname').then(nick => {
             if (nick) { this.profile.nickname = nick; this._updateHeaderDisplay(); }
-        }).catch(() => {});
+        }).catch(e => DBLog.warn('Storage', 'Nickname could not be loaded.', e));
 
         StorageManager.getItem('userId').then(uid => {
             if (uid && !this.profile.userId) this.profile.userId = uid;
             this._updateHeaderDisplay();
-        }).catch(() => {});
+        }).catch(e => DBLog.warn('Storage', 'Profile data could not be loaded.', e));
 
         this._updateHeaderDisplay();
         this.applyTranslations(diary.lang || 'en');
@@ -62,15 +62,27 @@ const SidebarUI = {
 
         const elAva = document.getElementById('sidebarAvatar');
         if (elAva) {
-            if (this.profile.photoUrl) {
-                elAva.innerHTML = `<img src="${this.profile.photoUrl}" alt="avatar" onerror="this.parentElement.textContent='👤'">`;
+            // Built with DOM APIs / textContent: names and the photo URL are never parsed as HTML.
+            elAva.textContent = '';
+            const photo = this._safePhotoUrl(this.profile.photoUrl);
+            if (photo) {
+                const img = document.createElement('img');
+                img.alt = ''; img.referrerPolicy = 'no-referrer'; img.src = photo;
+                img.addEventListener('error', () => { elAva.textContent = '👤'; }, { once: true });
+                elAva.appendChild(img);
             } else if (name && name !== strs.defaultUser) {
-                const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-                elAva.innerHTML = `<span style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:white">${initials}</span>`;
+                const span = document.createElement('span');
+                span.className = 'avatar-initials';
+                span.textContent = name.split(/\s+/).filter(Boolean).map(w => Array.from(w)[0]).join('').toUpperCase().slice(0, 2);
+                elAva.appendChild(span);
             } else {
                 elAva.textContent = '👤';
             }
         }
+    },
+
+    _safePhotoUrl(u) {
+        try { const url = new URL(u); return url.protocol === 'https:' ? url.href : ''; } catch (e) { return ''; }
     },
 
     applyTranslations(lang) {
@@ -99,6 +111,8 @@ const SidebarUI = {
         set('recoveryModalGenerateBtn',diary.t('recoveryModalGenerateBtn'));
         set('recoveryModalCloseBtn',   diary.t('recoveryModalCloseBtn'));
         set('ach-modal-title', AchievementsUI._strings[lang]?.title || 'Achievements');
+        // Accessible names for icon-only controls
+        document.querySelectorAll('[data-aria-key]').forEach(el => el.setAttribute('aria-label', diary.t(el.dataset.ariaKey)));
         BackupManager.applyTranslations(); // v9.2: Data section, dialogs, action history
         setPh('sidebarNickInput',  strs.nickPlaceholder);
         this._updateHeaderDisplay();
@@ -121,7 +135,7 @@ const SidebarUI = {
         if (!input) return;
         const nick = input.value.trim();
         this.profile.nickname = nick;
-        StorageManager.setItem('userNickname', nick).catch(() => {});
+        StorageManager.setItem('userNickname', nick).catch(e => { DBLog.error('Storage', 'Nickname could not be saved.', e); diary.toast(diary.t('err-save'), 'error'); });
         this._updateHeaderDisplay();
         diary.toast((this._strings[diary.lang] || this._strings.en).nickSaved);
         AchievementsUI.recalculate(); // profile_custom achievement
@@ -144,7 +158,7 @@ const SidebarUI = {
 
     confirmDeleteAccount() {
         this.close();
-        setTimeout(() => { document.getElementById('deleteAccountModal').classList.add('open'); }, 320);
+        setTimeout(() => { document.getElementById('deleteAccountModal').classList.add('open'); }, 260);
     },
 
     cancelDeleteAccount() {
@@ -194,9 +208,10 @@ const SidebarUI = {
             AchievementsUI._renderCustom();
 
             document.getElementById('deleteAccountModal').classList.remove('open');
+            DBLog.info('Storage', 'All account data deleted.');
             diary.toast(diary.t('toast-all-data-deleted'));
         } catch (e) {
-            console.error('[SidebarUI] executeDeleteAccount failed:', e);
+            DBLog.error('Storage', 'Deleting all data did not complete.', e);
             diary.toast(diary.t('err-delete-account'), 'error');
         } finally {
             if (btn) { btn.disabled = false; btn.textContent = diary.t('del-confirm-btn'); }
@@ -205,7 +220,7 @@ const SidebarUI = {
 
     openAchievements() {
         this.close();
-        setTimeout(() => { AchievementsUI.open(); }, 300);
+        setTimeout(() => { AchievementsUI.open(); }, 260);
     },
 
     // ---------- Backup & Recovery: regenerate a fresh recovery code on demand ----------
@@ -215,17 +230,18 @@ const SidebarUI = {
             const disp = document.getElementById('recoveryModalCode');
             if (disp) disp.textContent = '••••-••••-••••-••••-••••';
             document.getElementById('recoveryModal').classList.add('open');
-        }, 300);
+        }, 260);
     },
     closeRecoveryModal() {
         document.getElementById('recoveryModal').classList.remove('open');
     },
     async generateNewRecoveryCode() {
-        if (!confirm(diary.t('recoveryModalRegenConfirm'))) return;
+        if (!(await DataDialog.confirm({ icon: '🔑', title: diary.t('dlg-confirm-title'), desc: diary.t('recoveryModalRegenConfirm'), confirmLabel: diary.t('recoveryModalGenerateBtn') }))) return;
         const btn = document.getElementById('recoveryModalGenerateBtn');
         if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
         const code = await EncryptionManager.regenerateRecoveryCode();
         if (btn) { btn.disabled = false; btn.textContent = diary.t('recoveryModalGenerateBtn'); }
+        if (code) DBLog.info('Security', 'A new recovery code was generated.');
         const disp = document.getElementById('recoveryModalCode');
         if (code) {
             if (disp) disp.textContent = code;

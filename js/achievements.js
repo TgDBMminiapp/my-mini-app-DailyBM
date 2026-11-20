@@ -129,7 +129,8 @@ const AchievementsUI = {
             } catch(e) { /* keep current _state unchanged */ }
             this._loaded = true;
             this.recalculate();
-        }).catch(() => {
+        }).catch(e => {
+            DBLog.warn('Storage', 'Achievements could not be loaded.', e);
             this._loaded = true;
             this.recalculate();
         });
@@ -139,22 +140,24 @@ const AchievementsUI = {
 
     // ---------- v9.0: Custom achievements — load / save ----------
     _initCustom() {
-        StorageManager.getItem('custom_achievements_v1').then(raw => {
+        this._customReady = StorageManager.getItem('custom_achievements_v1').then(raw => {
             try {
                 this._custom = raw ? JSON.parse(raw) : [];
                 if (!Array.isArray(this._custom)) this._custom = [];
             } catch (e) { this._custom = []; }
             this._customLoaded = true;
             if (document.getElementById('achievementsModal').classList.contains('open')) this._renderCustom();
-        }).catch(() => { this._customLoaded = true; });
+        }).catch(e => { this._customLoaded = true; DBLog.warn('Storage', 'Custom achievements could not be loaded.', e); });
     },
 
-    _saveCustom() {
-        const data = JSON.stringify(this._custom);
-        StorageManager.setItem('custom_achievements_v1', data).catch(() => {
-            // Retry once, same durability pattern as system achievements' _save().
-            setTimeout(() => StorageManager.setItem('custom_achievements_v1', data).catch(() => {}), 1500);
-        });
+    _saveCustom() { return this._persist('custom_achievements_v1', JSON.stringify(this._custom)); },
+
+    /** Saves with one delayed retry; reports a persistent failure instead of swallowing it. */
+    async _persist(key, data) {
+        try { await StorageManager.setItem(key, data); return; } catch (e) { DBLog.warn('Storage', 'Achievements save failed. Retrying once.', e); }
+        await Util.sleep(1500);
+        try { await StorageManager.setItem(key, data); }
+        catch (e) { DBLog.error('Storage', 'Achievements could not be saved.', e); diary.toast(diary.t('err-save'), 'error'); }
     },
 
     _customStrings() {
@@ -181,8 +184,9 @@ const AchievementsUI = {
         document.getElementById('customAchModal').classList.remove('open');
     },
 
-    saveCustomForm(e) {
+    async saveCustomForm(e) {
         if (e) e.preventDefault();
+        if (this._customReady) await this._customReady; // never save over a list that is still loading
         const idRaw = document.getElementById('customAchId').value;
         const icon  = document.getElementById('customAchIcon').value.trim();
         const title = document.getElementById('customAchTitle').value.trim();
@@ -209,25 +213,27 @@ const AchievementsUI = {
         diary.toast(this._customStrings().customSavedToast);
     },
 
-    deleteCustom(id, e) {
+    /** @returns {Promise<boolean>} whether the achievement was deleted */
+    async deleteCustom(id, e) {
         if (e) e.stopPropagation();
-        if (!confirm(this._customStrings().confirmDeleteCustom)) return;
+        const ok = await DataDialog.confirm({
+            icon: '🗑️', title: diary.t('dlg-confirm-title'), desc: this._customStrings().confirmDeleteCustom, confirmLabel: diary.t('lbl-delete'),
+        });
+        if (!ok) return false;
         this._custom = this._custom.filter(a => a.id !== id);
         this._saveCustom();
         this._renderCustom();
         diary.toast(this._customStrings().customDeletedToast);
+        return true;
     },
 
     // Delete button inside the edit form itself — only closes the form if the
     // deletion was actually confirmed (deleteCustom() returns silently if the
     // person cancels the confirm() dialog, leaving the form open).
-    deleteCustomFromForm() {
+    async deleteCustomFromForm() {
         const idRaw = document.getElementById('customAchId').value;
         if (!idRaw) return;
-        const id = +idRaw;
-        const before = this._custom.length;
-        this.deleteCustom(id);
-        if (this._custom.length < before) this.closeCustomForm();
+        if (await this.deleteCustom(+idRaw)) this.closeCustomForm();
     },
 
     // Users mark their own custom achievements complete/incomplete manually —
@@ -258,13 +264,7 @@ const AchievementsUI = {
         diary.toast(`${ach.icon} ${strs.customUnlockedPrefix} ${ach.title}`.trim(), 'achievement');
     },
 
-    _save() {
-        // Persist achievements state — retry once on failure to prevent data loss
-        const data = JSON.stringify(this._state);
-        StorageManager.setItem('achievements_v1', data).catch(() => {
-            setTimeout(() => StorageManager.setItem('achievements_v1', data).catch(() => {}), 1500);
-        });
-    },
+    _save() { return this._persist('achievements_v1', JSON.stringify(this._state)); },
 
     // ONLY sets earnedDate on FIRST unlock — never overwrites it
     _unlock(id) {
@@ -465,7 +465,7 @@ const AchievementsUI = {
             <div class="ach-card ${unlocked ? 'unlocked' : 'locked'}" style="animation-delay:${delay}s">
                 <div class="ach-icon-wrap">
                     <span>${ach.icon}</span>
-                    ${!unlocked ? '<div class="ach-lock-overlay">🔒</div>' : ''}
+                    ${!unlocked ? '<div class="ach-lock-overlay" aria-hidden="true">🔒</div>' : ''}
                 </div>
                 <div class="ach-card-body">
                     <div class="ach-card-title">${ach.title}</div>
@@ -520,16 +520,16 @@ const AchievementsUI = {
             <div class="ach-card custom ${unlocked ? 'unlocked' : 'locked'}" style="animation-delay:${delay}s">
                 <div class="ach-icon-wrap custom-icon">
                     <span>${icon}</span>
-                    ${!unlocked ? '<div class="ach-lock-overlay">🔒</div>' : ''}
+                    ${!unlocked ? '<div class="ach-lock-overlay" aria-hidden="true">🔒</div>' : ''}
                 </div>
                 <div class="ach-card-body">
                     <div class="ach-card-title">${title}</div>
                     ${desc ? `<div class="ach-card-desc">${desc}</div>` : ''}
                     <div class="ach-card-date">${dateText}</div>
                     <div class="ach-custom-actions">
-                        <button class="ach-custom-btn" onclick="AchievementsUI.toggleCustomComplete(${ach.id},event)">${unlocked ? strs.markIncomplete : strs.markComplete}</button>
-                        <button class="ach-custom-btn icon-only" title="${diary.t('lbl-edit')}" onclick="AchievementsUI.openCustomForm(${ach.id})">✏️</button>
-                        <button class="ach-custom-btn icon-only danger" title="${diary.t('lbl-delete')}" onclick="AchievementsUI.deleteCustom(${ach.id},event)">🗑️</button>
+                        <button type="button" class="ach-custom-btn" onclick="AchievementsUI.toggleCustomComplete(${ach.id},event)">${unlocked ? strs.markIncomplete : strs.markComplete}</button>
+                        <button type="button" class="ach-custom-btn icon-only" aria-label="${Util.escHtml(diary.t('lbl-edit'))}" title="${diary.t('lbl-edit')}" onclick="AchievementsUI.openCustomForm(${ach.id})">✏️</button>
+                        <button type="button" class="ach-custom-btn icon-only danger" aria-label="${Util.escHtml(diary.t('lbl-delete'))}" title="${diary.t('lbl-delete')}" onclick="AchievementsUI.deleteCustom(${ach.id},event)">🗑️</button>
                     </div>
                 </div>
                 <div class="ach-badge custom-badge" title="${strs.customBadgeLabel}">${unlocked ? '⭐' : '—'}</div>

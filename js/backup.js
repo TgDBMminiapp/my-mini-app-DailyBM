@@ -1,6 +1,6 @@
 // @ts-check
 // ================================================================
-//  BACKUP — account data export / import (v9.2; v9.3 adds streak freezes; v9.5 only bumps APP_VERSION)
+//  BACKUP — account data export / import
 //
 //  FILE FORMAT (JSON, "format": 1)
 //    { app, format, appVersion, exportedAt, data: {
@@ -34,7 +34,7 @@
 const BackupManager = {
     APP_ID: 'dailybookimix',
     FORMAT_VERSION: 1,
-    APP_VERSION: '9.5',
+    APP_VERSION: '10.0',
     MAX_FILE_BYTES: 10 * 1024 * 1024,
 
     _busy: false,
@@ -90,9 +90,10 @@ const BackupManager = {
             const outcome = await this._deliver(json, filename);
             if (outcome === 'cancelled') return; // user dismissed the share sheet — not an error
             ActionLog.record('data_exported');
+            DBLog.info('Backup', 'Backup exported successfully.');
             diary.toast(diary.t('export-toast-ok'));
         } catch (e) {
-            console.error('[BackupManager] export failed:', e);
+            DBLog.error('Backup', 'Export failed.', e);
             diary.toast(diary.t('err-export'), 'error');
         } finally {
             this._busy = false;
@@ -161,7 +162,7 @@ const BackupManager = {
                 run: () => this._runImport(parsed.data),
             });
         } catch (e) {
-            console.error('[BackupManager] import failed:', e);
+            DBLog.error('Backup', 'Import failed while reading the file.', e);
             diary.toast(diary.t('err-import-read'), 'error');
         } finally {
             this._busy = false;
@@ -362,7 +363,7 @@ const BackupManager = {
         try {
             snapshot = (await this.collect()).data;
         } catch (e) {
-            console.error('[BackupManager] could not snapshot current data; import aborted:', e);
+            DBLog.error('Backup', 'Current data could not be snapshotted. Import aborted; nothing was changed.', e);
             diary.toast(diary.t('err-import-generic'), 'error');
             return;
         }
@@ -371,14 +372,16 @@ const BackupManager = {
             await this._apply(data);
             ActionLog._muted = false;
             ActionLog.record('data_imported');
+            DBLog.info('Backup', 'Backup restored successfully.');
             diary.toast(diary.t('import-toast-ok'));
         } catch (e) {
-            console.error('[BackupManager] apply failed, rolling back:', e);
+            DBLog.error('Backup', 'Import failed while applying data. Restoring the previous data.', e);
             try {
                 await this._apply(this._sanitize(snapshot));
+                DBLog.info('Backup', 'Previous data restored after the failed import.');
                 diary.toast(diary.t('err-import-apply'), 'error');
             } catch (e2) {
-                console.error('[BackupManager] rollback failed:', e2);
+                DBLog.error('Backup', 'Rollback failed. Data may be incomplete; export a backup if possible.', e2);
                 diary.toast(diary.t('err-import-fatal'), 'error');
             }
         } finally {
@@ -412,7 +415,7 @@ const BackupManager = {
         await TaskManager.wipeAll();
         const dates = Object.keys(d.tasks.days);
         dates.forEach(date => {
-            TaskManager._data[date] = d.tasks.days[date];
+            TaskManager._setDay(date, d.tasks.days[date]);
             TaskManager._recomputeSummaryFor(date);
         });
         TaskManager._stats = { ...d.tasks.stats };
@@ -460,6 +463,7 @@ const BackupManager = {
         const row = document.getElementById(rowId);
         if (!row) return;
         row.classList.toggle('is-busy', busy);
+        row.setAttribute('aria-busy', busy ? 'true' : 'false');
         const arrow = row.querySelector('.sidebar-item-arrow');
         if (arrow) arrow.textContent = busy ? '⏳' : '›';
     },
@@ -519,7 +523,7 @@ const DataDialog = {
             this._running = true;
             const label = ok.textContent;
             ok.disabled = true; cancel.disabled = true; ok.textContent = '⏳';
-            try { await this._run(); } catch (e) { console.error('[DataDialog] job failed:', e); }
+            try { await this._run(); } catch (e) { DBLog.error('Backup', 'A confirmed action failed.', e); }
             this._running = false;
             ok.textContent = label;
         }

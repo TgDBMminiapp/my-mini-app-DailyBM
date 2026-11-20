@@ -1,38 +1,20 @@
 // @ts-check
 // ================================================================
-//  TASK MANAGER v6 — Daily Tasks  (v9.1: fire-streak hooks, see below)
+//  TASK MANAGER — Daily Tasks
 //
-//  v9.1: the FIRE streak (diary.updateStreak) is extended from exactly
-//  two places in this file, and only after the save succeeded:
-//    • quickAdd()   — a new task was created
-//    • toggleTask() — a task became COMPLETED (un-completing, deleting,
-//                     carrying over and merely viewing the tab never do)
-//  updateStreak() is idempotent per calendar day, so repeat calls are safe.
+//  Storage layout: one small shard per DAY (`task_day_YYYY-MM-DD`), a tiny
+//  per-day summary index (`task_index`, {done,total}) that drives the calendar
+//  without loading every day, and lifetime aggregates (`task_stats`) updated
+//  incrementally so pruning old day-shards never loses streaks/totals.
+//  Dates are LOCAL calendar dates (Util.localDateStr), never UTC.
 //
-//  WHAT CHANGED FROM v5 AND WHY (this tab had the worst bugs):
-//   1. v5 stored EVERY day you'd ever used the app in one ever-
-//      growing object, serialized whole and re-uploaded on every
-//      single checkbox tap. Once that blob crossed CloudStorage's
-//      per-value cap, every future save started silently failing —
-//      "I check a task and it un-checks itself a moment later" was
-//      this bug. v6 stores one small shard per DAY (`task_day_X`),
-//      so a single save only ever touches the day that changed.
-//   2. v5 computed "today" with `toISOString()`, which is UTC — so
-//      for anyone not in UTC, tasks/streaks/mood got filed under the
-//      wrong calendar day for hours around their local midnight.
-//      v6 uses `Util.localDateStr()` everywhere.
-//   3. v5 never pruned old days, so storage grew forever. v6 keeps a
-//      rolling window of raw day-shards (`_retentionDays`) and tracks
-//      lifetime achievement stats in a small separate aggregate
-//      (`task_stats`) that's updated incrementally on every change —
-//      so pruning old days never loses streaks/totals/achievements.
-//   4. The 30-day archive scroller used to require every day to be
-//      loaded into memory. It now reads from a tiny per-day summary
-//      index (`task_index`, just {done,total} per date) so opening
-//      the app only ever fetches *today's* shard, not 30 of them.
+//  The FIRE streak (diary.updateStreak) is extended from exactly two places,
+//  and only after the save succeeded: quickAdd() and toggleTask() (when a task
+//  becomes completed). updateStreak() is idempotent per calendar day.
 // ================================================================
 const TaskManager = {
-    _data: {},          // cache of LOADED day objects: { 'YYYY-MM-DD': {tasks, mood, countedActive, countedPerfect} }
+    _data: {},          // cache of day objects: { 'YYYY-MM-DD': {tasks, mood, countedActive, countedPerfect} }
+    _loaded: new Set(), // days whose stored shard has really been read (dayData() may create an empty placeholder that is NOT in here)
     _summary: {},        // lightweight {done,total} per date, drives the archive scroller without loading full days
     _stats: {
         totalCompletedAllTime: 0, totalTasksAddedAllTime: 0, maxCompletedInSingleDay: 0,
@@ -54,12 +36,12 @@ const TaskManager = {
             StorageManager.getItem('task_stats'),
         ]);
         try { this._summary = summaryRaw ? JSON.parse(summaryRaw) : {}; } catch (e) { this._summary = {}; }
-        try { this._stats = statsRaw ? JSON.parse(statsRaw) : this._stats; } catch (e) {}
+        try { if (statsRaw) this._stats = { ...this._stats, ...JSON.parse(statsRaw) }; } catch (e) { /* keep defaults */ }
 
         if (summaryRaw === null) await this._migrateFromLegacyBlob();
 
         await this._loadDay(this.today());
-        this._prune().catch(() => {}); // best-effort, never blocks the UI
+        this._prune().catch(e => DBLog.warn('Tasks', 'Old task days could not be cleaned up.', e)); // best-effort, never blocks the UI
     },
 
     async _migrateFromLegacyBlob() {
@@ -71,7 +53,7 @@ const TaskManager = {
         for (const ds of dates) {
             const day = legacy[ds] || { tasks: [], mood: '' };
             day.countedActive = false; day.countedPerfect = false;
-            this._data[ds] = day;
+            this._setDay(ds, day);
             this._recomputeSummaryFor(ds);
             this._bumpAchievementFlags(ds);
             await StorageManager.setItem('task_day_' + ds, JSON.stringify(day));
@@ -82,13 +64,25 @@ const TaskManager = {
     },
 
     async _loadDay(dateStr) {
-        if (this._data[dateStr]) return this._data[dateStr];
+        if (this._loaded.has(dateStr) && this._data[dateStr]) return this._data[dateStr];
         const raw = await StorageManager.getItem('task_day_' + dateStr);
         let day;
         try { day = raw ? JSON.parse(raw) : null; } catch (e) { day = null; }
-        if (!day) day = { tasks: [], mood: '', countedActive: false, countedPerfect: false };
-        this._data[dateStr] = day;
-        return day;
+        if (!day || !Array.isArray(day.tasks)) day = { tasks: [], mood: '', countedActive: false, countedPerfect: false };
+        // Never replace a day object the UI already mutated while the read was in flight.
+        if (!this._loaded.has(dateStr)) this._data[dateStr] = day;
+        this._loaded.add(dateStr);
+        return this._data[dateStr];
+    },
+    /** Installs a day object that is authoritative in memory (backup import / migration). */
+    _setDay(dateStr, day) { this._data[dateStr] = day; this._loaded.add(dateStr); },
+
+    /** Called when the app comes back after midnight: load the new "today" from storage (it may hold
+     *  tasks carried over yesterday), then redraw. Without this the stored shard would stay invisible. */
+    async onDateRollover() {
+        await this._loadDay(this.today());
+        if (!this._viewDate) { this._calYear = null; this._calMonth = null; }
+        this.render();
     },
 
     // Synchronous accessor — safe for already-loaded days (today is always
@@ -103,7 +97,7 @@ const TaskManager = {
         const stale = Object.keys(this._summary).filter(d => d < cutoff);
         if (!stale.length) return;
         await Promise.all(stale.map(d => StorageManager.removeItem('task_day_' + d)));
-        stale.forEach(d => { delete this._summary[d]; delete this._data[d]; });
+        stale.forEach(d => { delete this._summary[d]; delete this._data[d]; this._loaded.delete(d); });
         await StorageManager.setItem('task_index', JSON.stringify(this._summary));
     },
 
@@ -113,7 +107,7 @@ const TaskManager = {
         await StorageManager.removeItem('task_index');
         await StorageManager.removeItem('task_stats');
         await StorageManager.removeItem('tasks_v1');
-        this._data = {}; this._summary = {};
+        this._data = {}; this._summary = {}; this._loaded = new Set();
         this._stats = { totalCompletedAllTime: 0, totalTasksAddedAllTime: 0, maxCompletedInSingleDay: 0, activeDaysCount: 0, hadPerfectDay: false, currentStreak: 0, longestStreak: 0, lastStreakDate: '' };
     },
 
@@ -165,7 +159,7 @@ const TaskManager = {
     toggleNewImp() {
         this._newTaskImp = !this._newTaskImp;
         const btn = document.getElementById('taskImpToggle');
-        if (btn) btn.classList.toggle('active', this._newTaskImp);
+        if (btn) { btn.classList.toggle('active', this._newTaskImp); btn.setAttribute('aria-pressed', String(this._newTaskImp)); }
     },
 
     async quickAdd() {
@@ -179,6 +173,7 @@ const TaskManager = {
         if (addBtn) addBtn.disabled = true;
 
         const dateStr = this._viewDate || this.today();
+        await this._loadDay(dateStr); // never build on an empty placeholder: a save would overwrite stored tasks
         const snap = this._snapshotFor(dateStr);
         const day = this.dayData(dateStr);
 
@@ -212,7 +207,7 @@ const TaskManager = {
             input.value = text;
             this.render();
             diary.toast(diary.t('err-task-save'), 'error');
-            console.error('[TaskManager] quickAdd save failed:', e);
+            DBLog.error('Tasks', 'A new task could not be saved.', e);
         } finally {
             this._adding = false;
             if (addBtn) addBtn.disabled = false;
@@ -234,6 +229,7 @@ const TaskManager = {
     },
 
     async toggleTask(dateStr, taskId) {
+        await this._loadDay(dateStr);
         const day = this.dayData(dateStr);
         const task = day.tasks.find(t => t.id === taskId);
         if (!task) return;
@@ -257,11 +253,12 @@ const TaskManager = {
             this._restoreSnapshot(dateStr, snap);
             this.render();
             diary.toast(diary.t('err-save'), 'error');
-            console.error('[TaskManager] toggleTask save failed:', e);
+            DBLog.error('Tasks', 'A task change could not be saved.', e);
         }
     },
 
     async deleteTask(dateStr, taskId) {
+        await this._loadDay(dateStr);
         const day = this.dayData(dateStr);
         const removed = day.tasks.find(t => t.id === taskId);
         const snap = this._snapshotFor(dateStr);
@@ -277,7 +274,7 @@ const TaskManager = {
             this._restoreSnapshot(dateStr, snap);
             this.render();
             diary.toast(diary.t('err-delete'), 'error');
-            console.error('[TaskManager] deleteTask save failed:', e);
+            DBLog.error('Tasks', 'A task could not be deleted.', e);
         }
     },
 
@@ -290,6 +287,7 @@ const TaskManager = {
     },
 
     async setMood(dateStr, mood) {
+        await this._loadDay(dateStr);
         const day = this.dayData(dateStr);
         const prevMood = day.mood;
         day.mood = (day.mood === mood) ? '' : mood;
@@ -299,12 +297,14 @@ const TaskManager = {
         } catch (e) {
             day.mood = prevMood;
             this.render();
+            DBLog.error('Tasks', 'The mood could not be saved.', e);
             diary.toast(diary.t('err-mood-save'), 'error');
         }
     },
 
     async carryOver() {
         const todayStr = this.today();
+        await this._loadDay(todayStr);
         const day = this.dayData(todayStr);
         const incomplete = day.tasks.filter(t => !t.completed);
         if (!incomplete.length) return;
@@ -332,6 +332,7 @@ const TaskManager = {
             diary.toast(diary.t('tasks-toast-carried'));
         } catch (e) {
             this._restoreSnapshot(tomorrowStr, snap);
+            DBLog.error('Tasks', 'Unfinished tasks could not be carried over.', e);
             diary.toast(diary.t('err-carryover'), 'error');
         }
     },
@@ -344,7 +345,6 @@ const TaskManager = {
 
     // ---------- rendering (same markup/behavior as v5) ----------
     render() {
-        const lang = diary.lang || 'en';
         const dateStr = this._viewDate || this.today();
         const today = this.today();
         const isToday = (dateStr === today);
@@ -354,18 +354,13 @@ const TaskManager = {
 
         this._renderCalendar(dateStr);
 
-        // NOTE (v8.1): the secondary "🔥 streak" chip that used to appear
-        // here has been removed — the app already has one fire streak
-        // indicator (the main streak in the header). The underlying streak
-        // calculation (`completionStreak()` / `_stats.currentStreak`) is
-        // NOT removed, since it also drives the "3-day task streak"
-        // achievement in achievements.js — only this redundant visual is gone.
+        // The streak itself lives in the header (diary.updateStreak); this bar shows only the selected day.
         const statsBar = document.getElementById('taskStatsBar');
         if (statsBar) {
             const sum = this._summary[dateStr] || { done: 0, total: 0 };
             statsBar.innerHTML = `
-                <div class="task-stat-chip">✅ <b>${sum.done}</b> ${diary.t('tasks-stat-done')}</div>
-                <div class="task-stat-chip">📋 <b>${sum.total}</b> ${diary.t('tasks-stat-total')}</div>
+                <div class="task-stat-chip"><span aria-hidden="true">✅</span> <b>${sum.done}</b> ${diary.t('tasks-stat-done')}</div>
+                <div class="task-stat-chip"><span aria-hidden="true">📋</span> <b>${sum.total}</b> ${diary.t('tasks-stat-total')}</div>
             `;
         }
 
@@ -373,9 +368,7 @@ const TaskManager = {
         const dayData = this.dayData(dateStr);
         const tasks = dayData.tasks;
 
-        // v8.1: real-time task search — matches task text, plus a few
-        // localized status keywords (done / pending / important), so a task
-        // can also be found by its completion state, not just its wording.
+        // Real-time search: task text, plus localized status keywords (done / pending / important).
         const searchInput = document.getElementById('tasksSearch');
         const searchRaw   = searchInput ? (searchInput.value || '') : '';
         const search      = searchRaw.trim().toLowerCase();
@@ -383,24 +376,28 @@ const TaskManager = {
 
         if (list) {
             if (!tasks.length) {
-                list.innerHTML = `<div class="empty-state"><div class="empty-icon" aria-hidden="true">✅</div><p>${diary.t('tasks-empty')}</p></div>`;
+                list._key = null;
+                list.innerHTML = diary._emptyState('✅', diary.t('tasks-empty'));
             } else if (!visibleTasks.length) {
-                list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>${diary.t('search-empty')}</p></div>`;
+                list._key = null;
+                list.innerHTML = diary._emptyState('🔍', diary.t('search-empty'));
             } else {
+                // Entrance animation only when the set of tasks changes, not on every tick/toggle.
+                diary._setListKey(list, dateStr + '|' + search + '|' + visibleTasks.map(t => t.id).sort().join(','));
+                const delLabel = Util.escHtml(diary.t('aria-del-task'));
                 list.innerHTML = visibleTasks.map((task, i) => {
-                    const delay = Math.min(i * 0.03, 0.2);
-                    const text = search ? Util.highlightMatch(this._escHtml(task.text), searchRaw) : this._escHtml(task.text);
+                    const id = Number(task.id);
+                    const text = diary._hl(task.text, search, searchRaw);
                     return `
-                    <div class="task-item ${task.important ? 'important' : ''} ${task.completed ? 'completed' : ''}"
-                         style="animation-delay:${delay}s">
+                    <div class="task-item ${task.important ? 'important' : ''} ${task.completed ? 'completed' : ''}" style="--i:${Math.min(i, 8)}">
                         <div class="task-check" role="checkbox" tabindex="0" aria-checked="${task.completed ? 'true' : 'false'}"
-                             onclick="TaskManager.toggleTask('${dateStr}',${task.id})"
-                             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();TaskManager.toggleTask('${dateStr}',${task.id});}">
-                            <span class="task-check-inner">✓</span>
+                             onclick="TaskManager.toggleTask('${dateStr}',${id})"
+                             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();TaskManager.toggleTask('${dateStr}',${id});}">
+                            <span class="task-check-inner" aria-hidden="true">✓</span>
                         </div>
                         <span class="task-text">${text}</span>
-                        ${task.important ? '<span class="task-star">⭐</span>' : ''}
-                        <button class="task-del-btn" aria-label="Delete task" onclick="TaskManager.deleteTask('${dateStr}',${task.id})">✕</button>
+                        ${task.important ? '<span class="task-star" aria-hidden="true">⭐</span>' : ''}
+                        <button type="button" class="task-del-btn" aria-label="${delLabel}" onclick="TaskManager.deleteTask('${dateStr}',${id})"><span aria-hidden="true">✕</span></button>
                     </div>`;
                 }).join('');
             }
@@ -421,9 +418,9 @@ const TaskManager = {
             ];
             const curMood = dayData.mood || '';
             moodRow.innerHTML = moods.map(m => `
-                <button class="mood-btn ${curMood === m.key ? 'selected' : ''}"
+                <button type="button" class="mood-btn ${curMood === m.key ? 'selected' : ''}" aria-pressed="${curMood === m.key}"
                         onclick="TaskManager.setMood('${dateStr}','${m.key}')">
-                    ${m.icon}<span class="mood-label">${m.label}</span>
+                    <span class="mood-emoji" aria-hidden="true">${m.icon}</span><span class="mood-label">${m.label}</span>
                 </button>`).join('');
         }
 
@@ -514,15 +511,11 @@ const TaskManager = {
             if (ds === selectedDateStr) classes.push('selected');
             if (total > 0) classes.push(done >= total ? 'has-tasks-done' : 'has-tasks');
             const badge = total > 0 ? `<span class="task-cal-badge">${done}/${total}</span>` : '';
-            html += `<div class="${classes.join(' ')}" onclick="TaskManager.viewDate('${ds}')">
+            html += `<button type="button" class="${classes.join(' ')}" aria-label="${ds}${total ? ' (' + done + '/' + total + ')' : ''}" aria-pressed="${ds === selectedDateStr}" onclick="TaskManager.viewDate('${ds}')">
                         <span class="task-cal-daynum">${d}</span>${badge}
-                     </div>`;
+                     </button>`;
         }
         grid.innerHTML = html;
-    },
-
-    _escHtml(str) {
-        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     },
 
     // ---------- v8.1: real-time task search ----------

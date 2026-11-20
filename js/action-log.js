@@ -113,7 +113,7 @@ const ActionLog = {
 
     /** Serialises writes so a clear() can never be undone by an older in-flight flush. */
     _enqueue(fn) {
-        this._chain = this._chain.then(fn).catch(e => console.warn('[ActionLog] storage write failed:', e));
+        this._chain = this._chain.then(fn).catch(e => DBLog.warn('ActionLog', 'Action history could not be saved.', e));
         return this._chain;
     },
 };
@@ -128,7 +128,7 @@ const ActionHistoryUI = {
         setTimeout(() => {
             this.render();
             document.getElementById('actionHistoryModal').classList.add('open');
-        }, 300);
+        }, 260);
     },
 
     close() {
@@ -185,7 +185,7 @@ const ActionHistoryUI = {
             this.render();
             diary.toast(diary.t('ah-cleared'));
         } catch (e) {
-            console.error('[ActionHistoryUI] clear failed:', e);
+            DBLog.error('ActionLog', 'Action history could not be cleared.', e);
             diary.toast(diary.t('err-ah-clear'), 'error');
             this.render();
         }

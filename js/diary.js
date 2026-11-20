@@ -1,5 +1,6 @@
 // ================================================================
-//  DIARY APP
+//  DIARY — notes, habits, archive (memories), streaks, theme and language.
+//  Rendering, form handling and persistence for the main app surface.
 // ================================================================
 const diary = {
     notes:          [],
@@ -31,7 +32,14 @@ const diary = {
     _calMonth:      null,  // 0-indexed month shown in the habit calendar modal
     _streakCalYear:  null,  // year shown in the fire-streak calendar modal
     _streakCalMonth: null,  // 0-indexed month shown in the fire-streak calendar modal
-    _habitTimerInterval: null, // live countdown ticker, only runs while the Habits tab is open
+    _habitTimerInterval: null, // live countdown ticker, only runs while the Habits tab is open and the app is visible
+    NOTE_CATS:      ['personal','work','ideas'],
+    // Page background per theme (must equal --bg in css/styles.css) — used to colour Telegram's own header/bar.
+    THEME_CHROME:   { orange: '#f4efe8', dark: '#121419' },
+    _themeExplicit: false, // true once the person (or a saved setting) chose a theme; until then Telegram's scheme is followed
+    _inited:        false, // one-time event wiring done (init() can run again after a vault reset)
+    _toastTimer:    null,
+    _tab:           'notes',
 
     t(key) { return (T[this.lang] || T.en)[key] || key; },
     today() { return Util.localDateStr(); }, // FIX: was toISOString() (UTC) — see Util comment
@@ -49,11 +57,21 @@ const diary = {
 
     toast(text, type = 'success') {
         document.querySelectorAll('.toast-msg').forEach(t => t.remove());
+        clearTimeout(this._toastTimer);
         const el = document.createElement('div');
         el.className = `toast-msg toast-${type}`;
+        el.setAttribute('role', type === 'error' ? 'alert' : 'status');
         el.textContent = text;
         document.body.appendChild(el);
-        setTimeout(() => el.remove(), 2700);
+        this._toastTimer = setTimeout(() => el.remove(), 2700);
+    },
+
+    /** In-app confirmation (replaces window.confirm, which some WebViews suppress or style inconsistently).
+     *  @returns {Promise<boolean>} */
+    ask(messageKey, { icon = '🗑️', confirmKey = 'lbl-delete' } = {}) {
+        return DataDialog.confirm({
+            icon, title: this.t('dlg-confirm-title'), desc: this.t(messageKey), confirmLabel: this.t(confirmKey),
+        });
     },
 
     closeModals() {
@@ -86,32 +104,38 @@ const diary = {
         });
     },
 
-    applyTheme(theme) {
-        if (theme !== this.theme) ActionLog.record('theme_changed');
+    /** Paints the theme: body class, browser/Telegram chrome colours, and the (non-sensitive) lock-screen hint. */
+    _paintTheme() {
+        document.body.classList.toggle('theme-dark', this.theme === 'dark');
+        try { localStorage.setItem('dbmix_theme_hint', this.theme); } catch (e) { /* storage blocked */ }
+        TGPlatform.syncChrome(this.THEME_CHROME[this.theme] || this.THEME_CHROME.orange);
+    },
+
+    applyTheme(theme, { silent = false } = {}) {
+        if (theme !== 'dark') theme = 'orange';
+        if (theme !== this.theme && !silent) ActionLog.record('theme_changed');
         this.theme = theme;
-        document.body.classList.remove('theme-dark');
-        if (theme === 'dark') document.body.classList.add('theme-dark');
-        StorageManager.setItem('theme', theme);
+        this._paintTheme();
+        if (!silent) {
+            this._themeExplicit = true;
+            StorageManager.setItem('theme', theme).catch(e => DBLog.warn('Storage', 'Theme preference could not be saved.', e));
+        }
         this._updateSheetChecks();
         this._updateSettingsBar();
         this.closeSheet();
     },
 
     applyLang(lang) {
+        if (lang !== 'ru') lang = 'en';
         if (lang !== this.lang) ActionLog.record('language_changed');
         this.lang = lang;
         document.documentElement.lang = lang;
-        StorageManager.setItem('lang', lang);
+        try { localStorage.setItem('dbmix_lang_hint', lang); } catch (e) { /* storage blocked */ }
+        StorageManager.setItem('lang', lang).catch(e => DBLog.warn('Storage', 'Language preference could not be saved.', e));
         this._updateSheetChecks();
         this.applyTranslations();
         this.renderAll();
-        // v9.0 BUG FIX: switching language never refreshed the Daily Tasks tab
-        // (quick-add placeholder, mood labels, calendar month name, "Today"
-        // button, stats chips, carry-over button) — renderAll() only covers
-        // Notes/Habits/Archive. If Tasks was the currently-open tab, all of
-        // that stayed in the old language until the person switched away and
-        // back. TaskManager.render() is cheap and safe to call unconditionally.
-        TaskManager.render();
+        TaskManager.render(); // the Tasks tab has its own labels (placeholder, mood, calendar, stats)
         this.closeSheet();
         SidebarUI.applyTranslations(lang);
         AchievementsUI.applyTranslations(lang);
@@ -120,7 +144,8 @@ const diary = {
 
     _updateSettingsBar() {
         const icons = { orange: '☀️', dark: '🌙' };
-        document.getElementById('theme-icon').textContent = icons[this.theme] || '☀️';
+        const el = document.getElementById('theme-icon');
+        if (el) el.textContent = icons[this.theme] || '☀️';
     },
 
     applyTranslations() {
@@ -213,8 +238,9 @@ const diary = {
         this.habits    = this._sortPinned(habitsArr);
         this.memories  = this._sortPinned(memoriesArr);
 
-        if (data.lang)  this.lang  = data.lang;
-        if (data.theme) this.theme = data.theme;
+        if (data.lang)  this.lang  = data.lang === 'ru' ? 'ru' : 'en';
+        if (data.theme) { this.theme = data.theme === 'dark' ? 'dark' : 'orange'; this._themeExplicit = true; }
+        else if (TGPlatform.colorScheme() === 'dark') this.theme = 'dark'; // first launch: follow Telegram until the person chooses
         // v9.3 null-guard: parseInt('garbage') is NaN, which would render "NaN" in the
         // header and poison every later `fireStreak + 1`.
         this.fireStreak     = parseInt(data.fireStreak || '0', 10) || 0;
@@ -227,12 +253,12 @@ const diary = {
         let rawFreezeLog = [];
         try { rawFreezeLog = data.freezeLog ? JSON.parse(data.freezeLog) : []; } catch (e) { rawFreezeLog = []; }
         if (this._setFreezeState(data.freezeCount, data.freezeMonth, rawFreezeLog)) {
-            this._saveFreezes().catch(e => console.warn('[diary] freeze save failed:', e));
+            this._saveFreezes().catch(e => DBLog.warn('Streak', 'Freeze allowance could not be saved.', e));
         }
 
-        document.body.classList.remove('theme-dark');
-        if (this.theme === 'dark') document.body.classList.add('theme-dark');
+        this._paintTheme();
         document.documentElement.lang = this.lang;
+        try { localStorage.setItem('dbmix_lang_hint', this.lang); } catch (e) { /* storage blocked */ }
 
         this.applyTranslations();
         this._updateSheetChecks();
@@ -242,6 +268,7 @@ const diary = {
         // Load tasks
         await TaskManager.load();
         TaskManager.render();
+        DBLog.info('Storage', 'Local data loaded successfully.');
     },
 
     _sortPinned(arr) {
@@ -266,18 +293,26 @@ const diary = {
         return !!h.endDate && h.endDate < this.today();
     },
 
-    async saveNotes()    { await StorageManager.saveCollection('notes',    this.notes);    this.renderNotes();    this.updateFooter(); },
-    async saveHabits()   { await StorageManager.saveCollection('habits',   this.habits);   this.renderHabits();   this.updateFooter(); },
-    async saveMemories() { await StorageManager.saveCollection('memories', this.memories); this.renderMemories(); this.updateFooter(); },
+    // Each save* persists one collection, ALWAYS re-renders (so the screen matches memory), and returns
+    // whether the write succeeded. A failed write is reported to the person and retried on the next save.
+    _saveFailed(e) { DBLog.error('Storage', 'Changes could not be saved.', e); this.toast(this.t('err-save'), 'error'); },
+    async _saveCollection(category, items, render) {
+        try { await StorageManager.saveCollection(category, items); return true; }
+        catch (e) { this._saveFailed(e); return false; }
+        finally { render.call(this); this.updateFooter(); }
+    },
+    saveNotes()    { return this._saveCollection('notes',    this.notes,    this.renderNotes); },
+    saveHabits()   { return this._saveCollection('habits',   this.habits,   this.renderHabits); },
+    saveMemories() { return this._saveCollection('memories', this.memories, this.renderMemories); },
 
+    TAB_BUTTONS: { notes: 'notesTab', habits: 'habitsTab', tasks: 'tasksTabBtn', memory: 'memoryTab' },
     switchTab(tab) {
-        ['notes','habits','tasks','memory'].forEach(t => {
+        if (!this.TAB_BUTTONS[tab]) return;
+        this._tab = tab;
+        Object.keys(this.TAB_BUTTONS).forEach(t => {
             document.getElementById(t + 'Section').classList.toggle('hidden', t !== tab);
-            const btn = document.getElementById(
-                t === 'notes' ? 'notesTab' : t === 'habits' ? 'habitsTab' :
-                t === 'tasks' ? 'tasksTabBtn' : 'memoryTab'
-            );
-            if (btn) btn.classList.toggle('active', t === tab);
+            const btn = document.getElementById(this.TAB_BUTTONS[t]);
+            if (btn) { btn.classList.toggle('active', t === tab); btn.setAttribute('aria-selected', t === tab ? 'true' : 'false'); btn.tabIndex = t === tab ? 0 : -1; }
         });
         // Refresh tasks when switching to that tab
         if (tab === 'tasks') {
@@ -297,6 +332,7 @@ const diary = {
     // ---------- live countdown timers for active habits (no endDate) ----------
     _startHabitTimers() {
         this._stopHabitTimers();
+        if (document.visibilityState === 'hidden') return; // resumed by the visibility handler
         this._tickHabitTimers();
         this._habitTimerInterval = setInterval(() => this._tickHabitTimers(), 1000);
     },
@@ -364,17 +400,44 @@ const diary = {
         this.updateFooter();
     },
 
-    togglePin(type, id, event) {
+    // ---------- shared render helpers ----------
+    _emptyState(icon, msg) {
+        return `<div class="empty-state"><div class="empty-icon" aria-hidden="true">${icon}</div><p>${msg}</p></div>`;
+    },
+    /** Escapes text for innerHTML and wraps search matches in <mark>. */
+    _hl(text, search, raw) {
+        const esc = Util.escHtml(text);
+        return search ? Util.highlightMatch(esc, raw) : esc;
+    },
+    /** Card entrance animation plays only when the visible set of cards changes — NOT when a
+     *  card is merely expanded/collapsed (which used to replay the animation on every card). */
+    _setListKey(container, key) {
+        const changed = container._key !== key;
+        container._key = key;
+        container.classList.toggle('list-enter', changed);
+    },
+    _onSearch: {},
+    /** Debounced search-as-you-type: one re-render per pause instead of one per keystroke. */
+    onSearch(kind) {
+        if (!this._onSearch[kind]) {
+            const fn = { notes: () => this.renderNotes(), habits: () => this.renderHabits(), memories: () => this.renderMemories(), tasks: () => TaskManager.render() }[kind];
+            this._onSearch[kind] = Util.debounce(fn, 120);
+        }
+        this._onSearch[kind]();
+    },
+
+    async togglePin(type, id, event) {
         if (event) event.stopPropagation();
         const list = type === 'note' ? this.notes : type === 'habit' ? this.habits : this.memories;
         const item = list.find(x => x.id === id);
         if (!item) return;
         item.pinned = !item.pinned;
         const sorted = this._sortPinned(list);
-        if (type === 'note')   { this.notes    = sorted; this.saveNotes(); }
-        if (type === 'habit')  { this.habits   = sorted; this.saveHabits(); }
-        if (type === 'memory') { this.memories = sorted; this.saveMemories(); }
-        this.toast(item.pinned ? this.t('toast-pinned') : this.t('toast-unpinned'));
+        let ok;
+        if (type === 'note')   { this.notes    = sorted; ok = await this.saveNotes(); }
+        if (type === 'habit')  { this.habits   = sorted; ok = await this.saveHabits(); }
+        if (type === 'memory') { this.memories = sorted; ok = await this.saveMemories(); }
+        if (ok) this.toast(item.pinned ? this.t('toast-pinned') : this.t('toast-unpinned'));
     },
 
     toggleNoteDetail(id)   { this.openNoteDetail   = this.openNoteDetail   === id ? null : id; this.renderNotes(); },
@@ -383,45 +446,63 @@ const diary = {
 
     async saveNote(e) {
         e.preventDefault();
-        const id      = document.getElementById('noteId').value ? +document.getElementById('noteId').value : Date.now();
+        if (this._submitting.note) return;
+        const idRaw   = document.getElementById('noteId').value;
+        const id      = idRaw ? +idRaw : Date.now();
         const title   = document.getElementById('noteTitle').value.trim();
         const category= document.getElementById('noteCategory').value;
         const content = document.getElementById('noteContent').value.trim();
         if (!title || !content) return this.toast(this.t('toast-fill-fields'), 'error');
 
-        const note = {
-            id, title, category, content,
-            date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-GB'),
-            pinned: false
-        };
-        const existing = this.notes.findIndex(n => n.id === id);
-        const isNewNote = existing < 0;
-        if (existing >= 0) { note.pinned = this.notes[existing].pinned; this.notes[existing] = note; }
-        else this.notes.unshift(note);
+        this._submitting.note = true;
+        const prev = this.notes.slice();
+        try {
+            const note = {
+                id, title, category: this.NOTE_CATS.includes(category) ? category : 'personal', content,
+                date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-GB'),
+                pinned: false
+            };
+            const existing = this.notes.findIndex(n => n.id === id);
+            const isNewNote = existing < 0;
+            if (existing >= 0) { note.pinned = this.notes[existing].pinned; this.notes[existing] = note; }
+            else this.notes.unshift(note);
 
-        this.notes = this._sortPinned(this.notes);
-        await this.saveNotes();
-        ActionLog.record(isNewNote ? 'note_created' : 'note_updated');
-        this.updateStreak();
-        this._resetNoteForm();
-        this.toast(this.t('toast-note-saved'));
+            this.notes = this._sortPinned(this.notes);
+            if (!(await this.saveNotes())) { this.notes = prev; this.renderNotes(); this.updateFooter(); return; }
+            ActionLog.record(isNewNote ? 'note_created' : 'note_updated');
+            this.updateStreak();
+            this._resetNoteForm();
+            this.toast(this.t('toast-note-saved'));
+            DBLog.info('Diary', 'Changes saved successfully.');
+        } finally { this._submitting.note = false; }
     },
 
+    _submitting: {},
+
     _loadNoteToForm(note) {
+        if (!note) return;
         document.getElementById('noteId').value      = note.id;
         document.getElementById('noteTitle').value   = note.title;
         document.getElementById('noteCategory').value= note.category;
         document.getElementById('noteContent').value = note.content;
         document.getElementById('noteFormTitle').textContent = this.t('noteFormTitle-edit');
         document.getElementById('noteFormIcon').textContent  = '✏️';
-        document.getElementById('notesSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('notesSection').scrollIntoView({ behavior: this._motion(), block: 'start' });
     },
+    editNote(id, e) {
+        if (e) e.stopPropagation();
+        this._loadNoteToForm(this.notes.find(n => n.id === id));
+        this.openNoteDetail = null; this.renderNotes();
+    },
+    /** 'smooth' unless the person prefers reduced motion. */
+    _motion() { return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'; },
 
     async deleteNote(id, e) {
         if (e) e.stopPropagation();
-        if (!confirm(this.t('confirm-delete-note'))) return;
+        if (!(await this.ask('confirm-delete-note'))) return;
+        const prev = this.notes;
         this.notes = this.notes.filter(n => n.id !== id);
-        await this.saveNotes();
+        if (!(await this.saveNotes())) { this.notes = prev; this.renderNotes(); this.updateFooter(); return; }
         ActionLog.record('note_deleted');
         this.toast(this.t('toast-note-deleted'));
     },
@@ -430,13 +511,11 @@ const diary = {
         const container  = document.getElementById('notesList');
         const searchRaw  = document.getElementById('notesSearch').value || '';
         const search     = searchRaw.trim().toLowerCase();
-        const cat        = document.getElementById('filterCategory').value;
+        const cat        = document.getElementById('filterCategory').value || 'all';
 
-        let list = [...this.notes];
+        let list = this.notes;
         if (cat !== 'all') list = list.filter(n => n.category === cat);
-        // v8.1: search now matches title, content, category label, and date —
-        // not just title/content — so a note can also be found by typing its
-        // category or the date it was written on.
+        // Search matches title, content, category label and the saved date.
         if (search) list = list.filter(n =>
             n.title.toLowerCase().includes(search) ||
             n.content.toLowerCase().includes(search) ||
@@ -444,45 +523,32 @@ const diary = {
             (n.date || '').toLowerCase().includes(search));
 
         if (!list.length) {
-            container.innerHTML = search
-                ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>${this.t('search-empty')}</p></div>`
-                : `<div class="empty-state"><div class="empty-icon">📝</div><p>${this.t('notes-empty')}</p></div>`;
+            container._key = null;
+            container.innerHTML = search ? this._emptyState('🔍', this.t('search-empty')) : this._emptyState('📝', this.t('notes-empty'));
             return;
         }
+        this._setListKey(container, list.map(n => n.id).join(',') + '|' + search + '|' + cat);
 
-        const catClass = { personal:'cat-personal', work:'cat-work', ideas:'cat-ideas' };
         container.innerHTML = list.map((note, i) => {
+            const id       = Number(note.id);
             const isOpen   = this.openNoteDetail === note.id;
-            const delay    = Math.min(i * 0.04, 0.25);
+            const catKey   = this.NOTE_CATS.includes(note.category) ? note.category : 'personal';
             const pinLabel = note.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-            // v9.0 FIX: escape user-entered text before it goes into innerHTML
-            // (previously unescaped — see Util.escHtml comment for the bug).
-            const title    = search ? Util.highlightMatch(Util.escHtml(note.title), searchRaw)   : Util.escHtml(note.title);
-            const content  = search ? Util.highlightMatch(Util.escHtml(note.content), searchRaw) : Util.escHtml(note.content);
             return `
-            <div class="record-card ${note.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleNoteDetail(${note.id})">
-                ${note.pinned ? '<span class="pin-badge">📌</span>' : ''}
-                <div class="flex items-start justify-between gap-3 mb-2">
-                    <span class="cat-pill ${catClass[note.category] || 'cat-personal'}">${this.t('cat-' + note.category)}</span>
-                    <span style="font-size:11px;color:var(--text-label);white-space:nowrap">${note.date}</span>
+            <div class="record-card ${note.pinned ? 'pinned' : ''}" style="--i:${Math.min(i, 8)}" role="button" tabindex="0" aria-expanded="${isOpen}" onclick="diary.toggleNoteDetail(${id})">
+                ${note.pinned ? '<span class="pin-badge" aria-hidden="true">📌</span>' : ''}
+                <div class="rc-head">
+                    <span class="cat-pill cat-${catKey}">${this.t('cat-' + catKey)}</span>
+                    <span class="rc-date">${Util.escHtml(note.date)}</span>
                 </div>
-                <div class="font-bold text-[16px] mb-1" style="color:var(--text-primary)">${title}</div>
-                <div style="font-size:14px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:${isOpen?'none':'3'};-webkit-box-orient:vertical;overflow:hidden">
-                    ${content}
-                </div>
+                <h3 class="rc-title">${this._hl(note.title, search, searchRaw)}</h3>
+                <div class="rc-text${isOpen ? ' open' : ''}">${this._hl(note.content, search, searchRaw)}</div>
                 ${isOpen ? `
-                <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
-                    <div class="flex gap-2 flex-wrap" style="padding:14px">
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px"
-                            onclick="diary._loadNoteToForm(diary.notes.find(n=>n.id===${note.id}));diary.openNoteDetail=null;diary.renderNotes()">
-                            ${this.t('lbl-edit')}
-                        </button>
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('note',${note.id},event)">
-                            ${pinLabel}
-                        </button>
-                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteNote(${note.id},event)">
-                            ${this.t('lbl-delete')}
-                        </button>
+                <div class="detail-panel" onclick="event.stopPropagation()">
+                    <div class="action-row">
+                        <button type="button" class="btn-ghost btn-sm" onclick="diary.editNote(${id},event)">${this.t('lbl-edit')}</button>
+                        <button type="button" class="btn-ghost btn-sm" onclick="diary.togglePin('note',${id},event)">${pinLabel}</button>
+                        <button type="button" class="btn-ghost btn-sm btn-danger" onclick="diary.deleteNote(${id},event)">${this.t('lbl-delete')}</button>
                     </div>
                 </div>` : ''}
             </div>`;
@@ -498,32 +564,38 @@ const diary = {
 
     async saveHabit(e) {
         e.preventDefault();
-        const id   = document.getElementById('habitId').value ? +document.getElementById('habitId').value : Date.now();
+        if (this._submitting.habit) return;
+        const idRaw= document.getElementById('habitId').value;
+        const id   = idRaw ? +idRaw : Date.now();
         const name = document.getElementById('habitName').value.trim();
         const start= document.getElementById('habitStartDate').value;
         const end  = document.getElementById('habitEndDate').value || null;
-        const goal = +document.getElementById('habitGoal').value;
+        const goal = Math.floor(+document.getElementById('habitGoal').value);
         const desc = document.getElementById('habitDescription').value.trim();
-        if (!name || !start || !goal) return this.toast(this.t('toast-fill-fields'), 'error');
+        if (!name || !start || !(goal >= 1)) return this.toast(this.t('toast-fill-fields'), 'error');
+        if (end && end < start) return this.toast(this.t('toast-bad-dates'), 'error');
 
-        const existing = this.habits.find(h => h.id === id);
-        const habit = {
-            id, name, startDate: start, endDate: end, goal, description: desc,
-            completedDays: existing ? existing.completedDays : [],
-            pinned: existing ? existing.pinned : false
-        };
+        this._submitting.habit = true;
+        const prev = this.habits.slice();
+        try {
+            const existing = this.habits.find(h => h.id === id);
+            const habit = {
+                id, name, startDate: start, endDate: end, goal, description: desc,
+                completedDays: existing ? existing.completedDays : [],
+                pinned: existing ? existing.pinned : false
+            };
+            const idx = this.habits.findIndex(h => h.id === id);
+            const isNewHabit = idx < 0;
+            if (idx >= 0) this.habits[idx] = habit;
+            else this.habits.unshift(habit);
 
-        const idx = this.habits.findIndex(h => h.id === id);
-        const isNewHabit = idx < 0;
-        if (idx >= 0) this.habits[idx] = habit;
-        else this.habits.unshift(habit);
-
-        this.habits = this._sortPinned(this.habits);
-        await this.saveHabits();
-        ActionLog.record(isNewHabit ? 'habit_created' : 'habit_updated');
-        this.updateStreak();
-        this._resetHabitForm();
-        this.toast(this.t('toast-habit-added'));
+            this.habits = this._sortPinned(this.habits);
+            if (!(await this.saveHabits())) { this.habits = prev; this.renderHabits(); this.updateFooter(); return; }
+            ActionLog.record(isNewHabit ? 'habit_created' : 'habit_updated');
+            this.updateStreak();
+            this._resetHabitForm();
+            this.toast(this.t('toast-habit-added'));
+        } finally { this._submitting.habit = false; }
     },
 
     _loadHabitToForm(habit) {
@@ -537,27 +609,36 @@ const diary = {
         document.getElementById('habitsSection').scrollIntoView({ behavior:'smooth', block:'start' });
     },
 
+    editHabit(id, e) {
+        if (e) e.stopPropagation();
+        this._loadHabitToForm(this.habits.find(h => h.id === id));
+        this.openHabitDetail = null; this.renderHabits();
+    },
+
     async deleteHabit(id, e) {
         if (e) e.stopPropagation();
-        if (!confirm(this.t('confirm-delete-habit'))) return;
+        if (!(await this.ask('confirm-delete-habit'))) return;
+        const prev = this.habits;
         this.habits = this.habits.filter(h => h.id !== id);
-        await this.saveHabits();
+        if (!(await this.saveHabits())) { this.habits = prev; this.renderHabits(); this.updateFooter(); return; }
         ActionLog.record('habit_deleted');
         this.toast(this.t('toast-habit-deleted'));
     },
 
-    toggleDay(id, date, e) {
+    async toggleDay(id, date, e) {
         if (e) e.stopPropagation();
         const h = this.habits.find(h => h.id === id);
         if (!h || this.isHabitFinished(h)) return;
+        const prevDays = h.completedDays.slice(), prevEnd = h.endDate;
         const s = new Set(h.completedDays);
         const wasChecked = s.has(date);
         wasChecked ? s.delete(date) : s.add(date);
         h.completedDays = Array.from(s);
         if (h.completedDays.length >= h.goal) h.endDate = date;
-        this.saveHabits();
-        ActionLog.record(wasChecked ? 'habit_unchecked' : 'habit_checked');
-        this.updateStreak();
+        const ok = await this.saveHabits();
+        if (!ok) { h.completedDays = prevDays; h.endDate = prevEnd; this.renderHabits(); this.updateFooter(); }
+        else { ActionLog.record(wasChecked ? 'habit_unchecked' : 'habit_checked'); this.updateStreak(); }
+        if (this._calHabitId === id && document.getElementById('calendarModal').classList.contains('open')) this._renderHabitCalendar();
     },
 
     endHabit(id, e) {
@@ -570,16 +651,18 @@ const diary = {
         document.getElementById('endHabitModal').classList.add('open');
     },
 
-    confirmEndHabit() {
+    async confirmEndHabit() {
         const h = this.habits.find(h => h.id === this.tempEndHabitId);
-        if (h) h.endDate = document.getElementById('endHabitDate').value;
-        this.saveHabits();
+        const date = document.getElementById('endHabitDate').value || this.today();
+        if (!h) return this.closeModals();
+        if (date < h.startDate) return this.toast(this.t('toast-bad-dates'), 'error');
+        const prev = h.endDate;
+        h.endDate = date;
+        if (!(await this.saveHabits())) { h.endDate = prev; this.renderHabits(); return; }
         this.closeModals();
     },
 
-    // Full month/year-navigable calendar for a habit (replaces the old
-    // start-date-to-now-only table). Lets the person browse any past or
-    // future month/year while reviewing/toggling that habit's history.
+    // Month/year-navigable calendar for one habit; lets the person review and toggle any month.
     showCalendar(id, e) {
         if (e) e.stopPropagation();
         const habit = this.habits.find(h => h.id === id);
@@ -658,7 +741,9 @@ const diary = {
             // finished (goal reached, or the end date has passed).
             const clickable = inRange && !finished;
             const cls = [done ? 'done' : '', ds === todayStr ? 'today' : ''].filter(Boolean).join(' ');
-            html += `<td class="${cls}" ${clickable ? `onclick="diary.toggleDay(${habit.id},'${ds}',event);diary._renderHabitCalendar()"` : 'style="opacity:0.35;cursor:default"'}>${d}</td>`;
+            html += clickable
+                ? `<td class="${cls}"><button type="button" class="cal-cell" aria-pressed="${done}" aria-label="${ds}" onclick="diary.toggleDay(${habit.id},'${ds}',event);diary._renderHabitCalendar()">${d}</button></td>`
+                : `<td class="${cls} off"><span class="cal-cell">${d}</span></td>`;
         }
         html += '</tr>';
         table.innerHTML = header + html;
@@ -668,8 +753,7 @@ const diary = {
         const container = document.getElementById('habitsList');
         const searchRaw = document.getElementById('habitsSearch').value || '';
         const search    = searchRaw.trim().toLowerCase();
-        // v8.1: search now matches name, description, start/end date, and
-        // completion status (e.g. typing "completed" surfaces finished habits).
+        // Search matches name, description, start/end date and the "completed" status label.
         const list = this.habits.filter(h => {
             if (!search) return true;
             if (h.name.toLowerCase().includes(search)) return true;
@@ -681,70 +765,59 @@ const diary = {
         });
 
         if (!list.length) {
-            container.innerHTML = search
-                ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>${this.t('search-empty')}</p></div>`
-                : `<div class="empty-state"><div class="empty-icon">🔥</div><p>${this.t('habits-empty')}</p></div>`;
+            container._key = null;
+            container.innerHTML = search ? this._emptyState('🔍', this.t('search-empty')) : this._emptyState('🔥', this.t('habits-empty'));
             return;
         }
+        this._setListKey(container, list.map(h => h.id).join(',') + '|' + search);
 
         const todayStr = this.today();
         container.innerHTML = list.map((h, i) => {
+            const id        = Number(h.id);
             const done      = h.completedDays.length;
             const progress  = Math.min(Math.round(done / h.goal * 100), 100);
             const ended     = this.isHabitFinished(h);
             const todayDone = h.completedDays.includes(todayStr);
             const isOpen    = this.openHabitDetail === h.id;
-            const delay     = Math.min(i * 0.04, 0.25);
             const pinLabel  = h.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-            // v9.0 FIX: escape user-entered text before it goes into innerHTML.
-            const name        = search ? Util.highlightMatch(Util.escHtml(h.name), searchRaw) : Util.escHtml(h.name);
-            const description = h.description ? (search ? Util.highlightMatch(Util.escHtml(h.description), searchRaw) : Util.escHtml(h.description)) : '';
 
             return `
-            <div class="record-card ${h.pinned ? 'pinned' : ''} ${ended ? 'opacity-80' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleHabitDetail(${h.id})">
-                ${h.pinned ? '<span class="pin-badge">📌</span>' : ''}
-                <div class="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                        <div class="font-bold text-[16px]" style="color:var(--text-primary)">${name}</div>
-                        ${description ? `<div style="font-size:13px;color:var(--text-muted);margin-top:2px">${description}</div>` : ''}
+            <div class="record-card ${h.pinned ? 'pinned' : ''} ${ended ? 'is-finished' : ''}" style="--i:${Math.min(i, 8)}" role="button" tabindex="0" aria-expanded="${isOpen}" onclick="diary.toggleHabitDetail(${id})">
+                ${h.pinned ? '<span class="pin-badge" aria-hidden="true">📌</span>' : ''}
+                <div class="rc-head">
+                    <div class="hb-heading">
+                        <h3 class="rc-title">${this._hl(h.name, search, searchRaw)}</h3>
+                        ${h.description ? `<div class="hb-desc">${this._hl(h.description, search, searchRaw)}</div>` : ''}
                     </div>
                     ${ended ? `<span class="chip green">${this.t('lbl-completed')}</span>` : ''}
                 </div>
-                <div class="flex justify-between text-center mt-3 mb-2">
-                    <div>
-                        <div style="font-size:22px;font-weight:900;color:#34d399">${done}</div>
-                        <div style="font-size:11px;color:var(--text-label)">${this.t('lbl-done')}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:22px;font-weight:900;color:var(--text-primary)">${h.goal}</div>
-                        <div style="font-size:11px;color:var(--text-label)">${this.t('lbl-goal')}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:22px;font-weight:900;color:#fbbf24">${progress}%</div>
-                        <div style="font-size:11px;color:var(--text-label)">${this.t('lbl-progress')}</div>
-                    </div>
+                <div class="hb-stats">
+                    <div class="hb-stat"><div class="hb-stat-val is-done">${done}</div><div class="hb-stat-lbl">${this.t('lbl-done')}</div></div>
+                    <div class="hb-stat"><div class="hb-stat-val">${h.goal}</div><div class="hb-stat-lbl">${this.t('lbl-goal')}</div></div>
+                    <div class="hb-stat"><div class="hb-stat-val is-pct">${progress}%</div><div class="hb-stat-lbl">${this.t('lbl-progress')}</div></div>
                 </div>
-                <div class="prog-track mb-3"><div class="prog-fill" style="width:${progress}%"></div></div>
+                <div class="prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><div class="prog-fill" style="width:${progress}%"></div></div>
                 ${this._renderHabitCountdown(h)}
                 ${isOpen ? `
                 <div class="detail-panel" onclick="event.stopPropagation()">
-                    <div class="flex gap-2 flex-wrap mb-3">
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.showCalendar(${h.id},event)">${this.t('lbl-calendar')}</button>
+                    <div class="action-row">
+                        <button type="button" class="btn-ghost btn-sm" onclick="diary.showCalendar(${id},event)">${this.t('lbl-calendar')}</button>
                         ${!ended ? `
-                        <button class="btn-ghost ${todayDone ? 'btn-success' : ''}" style="flex:1;min-width:0;font-size:13px" onclick="diary.toggleDay(${h.id},'${todayStr}',event)">
+                        <button type="button" class="btn-ghost btn-sm ${todayDone ? 'btn-success' : ''}" onclick="diary.toggleDay(${id},'${todayStr}',event)">
                             ${todayDone ? this.t('lbl-done-today') : this.t('lbl-mark-today')}
                         </button>` : `
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px;opacity:0.6" disabled>${this.t('habit-countdown-ended')}</button>`}
+                        <button type="button" class="btn-ghost btn-sm" disabled>${this.t('habit-countdown-ended')}</button>`}
                     </div>
-                    <div class="flex gap-2 flex-wrap">
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary._loadHabitToForm(diary.habits.find(h=>h.id===${h.id}));diary.openHabitDetail=null;diary.renderHabits()">${this.t('lbl-edit')}</button>
-                        ${!ended ? `<button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.endHabit(${h.id},event)">${this.t('lbl-end-habit')}</button>` : ''}
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('habit',${h.id},event)">${pinLabel}</button>
-                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteHabit(${h.id},event)">${this.t('lbl-delete')}</button>
+                    <div class="action-row">
+                        <button type="button" class="btn-ghost btn-sm" onclick="diary.editHabit(${id},event)">${this.t('lbl-edit')}</button>
+                        ${!ended ? `<button type="button" class="btn-ghost btn-sm" onclick="diary.endHabit(${id},event)">${this.t('lbl-end-habit')}</button>` : ''}
+                        <button type="button" class="btn-ghost btn-sm" onclick="diary.togglePin('habit',${id},event)">${pinLabel}</button>
+                        <button type="button" class="btn-ghost btn-sm btn-danger" onclick="diary.deleteHabit(${id},event)">${this.t('lbl-delete')}</button>
                     </div>
                 </div>` : ''}
             </div>`;
         }).join('');
+        if (this._tab === 'habits') this._tickHabitTimers();
     },
 
     _resetHabitForm() {
@@ -756,36 +829,45 @@ const diary = {
 
     async saveMemory(e) {
         e.preventDefault();
-        const id     = document.getElementById('memoryId').value ? +document.getElementById('memoryId').value : Date.now();
+        if (this._submitting.memory) return;
+        const idRaw  = document.getElementById('memoryId').value;
+        const id     = idRaw ? +idRaw : Date.now();
         const title  = document.getElementById('memoryTitle').value.trim();
         const type   = document.getElementById('memoryType').value;
         const start  = document.getElementById('memoryStartDate').value;
-        const end    = document.getElementById('memoryEndDate').value || null;
+        const end    = type === 'relations' ? null : (document.getElementById('memoryEndDate').value || null);
         const notes  = document.getElementById('memoryNotes').value.trim();
         const partner= type === 'relations' ? document.getElementById('partnerName').value.trim() : '';
+        if (!title || !start) return this.toast(this.t('toast-fill-fields'), 'error');
+        if (end && end < start) return this.toast(this.t('toast-bad-dates'), 'error');
 
-        const existing = this.memories.find(m => m.id === id);
-        const memory = {
-            id, title, type, startDate: start, endDate: end, notes, partnerName: partner,
-            events: existing ? existing.events : [],
-            date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-GB'),
-            pinned: existing ? existing.pinned : false
-        };
+        this._submitting.memory = true;
+        const prev = this.memories.slice();
+        try {
+            const existing = this.memories.find(m => m.id === id);
+            const memory = {
+                id, title, type: this.MEMORY_TYPES.includes(type) ? type : 'other', startDate: start,
+                // A relationship's end date is set through "We broke up", not this form: keep what is stored.
+                endDate: type === 'relations' ? (existing ? existing.endDate || null : null) : end,
+                notes, partnerName: partner,
+                events: existing ? existing.events : [],
+                date: new Date().toLocaleString(this.lang === 'ru' ? 'ru-RU' : 'en-GB'),
+                pinned: existing ? existing.pinned : false
+            };
+            const idx = this.memories.findIndex(m => m.id === id);
+            const isNewMemory = idx < 0;
+            if (idx >= 0) this.memories[idx] = memory;
+            else this.memories.unshift(memory);
 
-        const idx = this.memories.findIndex(m => m.id === id);
-        const isNewMemory = idx < 0;
-        if (idx >= 0) this.memories[idx] = memory;
-        else this.memories.unshift(memory);
-
-        this.memories = this._sortPinned(this.memories);
-        // v9.5: an active type filter must not hide the entry that was just saved
-        // (it would look like the save failed) — fall back to "All".
-        if (this.memoryFilter !== 'all' && this.memoryFilter !== type) this._syncMemoryFilterUI('all');
-        await this.saveMemories();
-        ActionLog.record(isNewMemory ? 'memory_created' : 'memory_updated');
-        this.updateStreak();
-        this._resetMemoryForm();
-        this.toast(this.t('toast-memory-saved'));
+            this.memories = this._sortPinned(this.memories);
+            // An active type filter must not hide the entry that was just saved (it would look like the save failed).
+            if (this.memoryFilter !== 'all' && this.memoryFilter !== memory.type) this._syncMemoryFilterUI('all');
+            if (!(await this.saveMemories())) { this.memories = prev; this.renderMemories(); this.updateFooter(); return; }
+            ActionLog.record(isNewMemory ? 'memory_created' : 'memory_updated');
+            this.updateStreak();
+            this._resetMemoryForm();
+            this.toast(this.t('toast-memory-saved'));
+        } finally { this._submitting.memory = false; }
     },
 
     _loadMemoryToForm(mem) {
@@ -807,11 +889,18 @@ const diary = {
         document.getElementById('endDateField').classList.toggle('hidden', isRel);
     },
 
+    editMemory(id, e) {
+        if (e) e.stopPropagation();
+        this._loadMemoryToForm(this.memories.find(m => m.id === id));
+        this.openMemoryDetail = null; this.renderMemories();
+    },
+
     async deleteMemory(id, e) {
         if (e) e.stopPropagation();
-        if (!confirm(this.t('confirm-delete-memory'))) return;
+        if (!(await this.ask('confirm-delete-memory'))) return;
+        const prev = this.memories;
         this.memories = this.memories.filter(m => m.id !== id);
-        await this.saveMemories();
+        if (!(await this.saveMemories())) { this.memories = prev; this.renderMemories(); this.updateFooter(); return; }
         ActionLog.record('memory_deleted');
         this.toast(this.t('toast-memory-deleted'));
     },
@@ -821,12 +910,13 @@ const diary = {
         document.getElementById('eventMemoryId').value = memId;
         document.getElementById('editEventIdx').value  = editIdx !== undefined ? editIdx : '';
         const mem = this.memories.find(m => m.id === memId);
-        if (editIdx !== undefined && editIdx !== '' && mem) {
-            const ev = mem.events[editIdx];
+        const ev = (editIdx !== undefined && editIdx !== '' && mem && mem.events) ? mem.events[editIdx] : null;
+        if (ev) {
             document.getElementById('eventDate').value = ev.date;
             document.getElementById('eventDesc').value = ev.desc;
             document.getElementById('add-event-title').textContent = this.t('lbl-edit');
         } else {
+            document.getElementById('editEventIdx').value = '';
             document.getElementById('eventDate').value = this.today();
             document.getElementById('eventDesc').value = '';
             document.getElementById('add-event-title').textContent = this.t('add-event-title');
@@ -836,44 +926,56 @@ const diary = {
 
     async saveEvent(e) {
         e.preventDefault();
+        if (this._submitting.event) return;
         const memId   = +document.getElementById('eventMemoryId').value;
         const editIdx = document.getElementById('editEventIdx').value;
         const date    = document.getElementById('eventDate').value;
         const desc    = document.getElementById('eventDesc').value.trim();
         const mem     = this.memories.find(m => m.id === memId);
         if (!mem) return;
-        if (editIdx !== '') { mem.events[+editIdx] = { date, desc }; }
-        else {
+        if (!date || !desc) return this.toast(this.t('toast-fill-fields'), 'error');
+
+        this._submitting.event = true;
+        const prev = (mem.events || []).slice();
+        try {
             if (!mem.events) mem.events = [];
-            mem.events.push({ date, desc });
-            mem.events.sort((a,b) => new Date(a.date) - new Date(b.date));
-        }
-        await this.saveMemories();
-        this.updateStreak();
-        this.closeModals();
-        this.toast(this.t('toast-event-saved'));
+            if (editIdx !== '' && mem.events[+editIdx]) mem.events[+editIdx] = { date, desc };
+            else mem.events.push({ date, desc });
+            mem.events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)); // YYYY-MM-DD sorts lexically
+            if (!(await this.saveMemories())) { mem.events = prev; this.renderMemories(); return; }
+            this.updateStreak();
+            this.closeModals();
+            this.toast(this.t('toast-event-saved'));
+        } finally { this._submitting.event = false; }
     },
 
     async deleteEvent(memId, idx, e) {
         if (e) e.stopPropagation();
-        if (!confirm(this.t('confirm-delete-event'))) return;
         const mem = this.memories.find(m => m.id === memId);
-        if (mem) { mem.events.splice(idx, 1); await this.saveMemories(); }
+        if (!mem || !mem.events || !mem.events[idx]) return;
+        if (!(await this.ask('confirm-delete-event'))) return;
+        const removed = mem.events.splice(idx, 1);
+        if (!(await this.saveMemories())) { mem.events.splice(idx, 0, ...removed); this.renderMemories(); return; }
         this.toast(this.t('toast-event-deleted'));
     },
 
     endRelations(id, e) {
         if (e) e.stopPropagation();
-        this.tempEndRelationsId = id;
         const m = this.memories.find(m => m.id === id);
+        if (!m) return;
+        this.tempEndRelationsId = id;
         document.getElementById('endRelationsDate').value = m.endDate || this.today();
         document.getElementById('endRelationsModal').classList.add('open');
     },
 
-    confirmEndRelations() {
+    async confirmEndRelations() {
         const m = this.memories.find(m => m.id === this.tempEndRelationsId);
-        if (m) m.endDate = document.getElementById('endRelationsDate').value;
-        this.saveMemories();
+        const date = document.getElementById('endRelationsDate').value || this.today();
+        if (!m) return this.closeModals();
+        if (m.startDate && date < m.startDate) return this.toast(this.t('toast-bad-dates'), 'error');
+        const prev = m.endDate;
+        m.endDate = date;
+        if (!(await this.saveMemories())) { m.endDate = prev; this.renderMemories(); return; }
         this.closeModals();
     },
 
@@ -915,10 +1017,7 @@ const diary = {
         const searchRaw = document.getElementById('memoriesSearch').value || '';
         const search    = searchRaw.trim().toLowerCase();
         const typeFilter = this.memoryFilter;
-        // v8.1: search now also matches the memory type label and both dates,
-        // in addition to title, notes, and partner name.
-        // v9.5: the type filter is applied first (cheap equality check), so it is
-        // type AND text query — still a single pass over the list.
+        // The type filter is applied first (cheap equality), then the text query — one pass.
         const list = this.memories.filter(m => {
             if (typeFilter !== 'all' && m.type !== typeFilter) return false;
             if (!search) return true;
@@ -932,30 +1031,27 @@ const diary = {
         });
 
         if (!list.length) {
-            // Three different "nothing to show" situations, three messages:
-            //  - the archive itself is empty            -> memories-empty
-            //  - only the type filter hides everything  -> mem-filter-empty
-            //  - a text search (with or without filter) -> search-empty
+            // Three different "nothing to show" situations, three messages.
             let icon = '🔍', msg = this.t('search-empty');
-            if (!this.memories.length)                  { icon = '📦';  msg = this.t('memories-empty'); }
-            else if (!search && typeFilter !== 'all')   { icon = '🗂️'; msg = this.t('mem-filter-empty'); }
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${msg}</p></div>`;
+            if (!this.memories.length)                { icon = '📦';  msg = this.t('memories-empty'); }
+            else if (!search && typeFilter !== 'all') { icon = '🗂️'; msg = this.t('mem-filter-empty'); }
+            container._key = null;
+            container.innerHTML = this._emptyState(icon, msg);
             return;
         }
+        this._setListKey(container, list.map(m => m.id).join(',') + '|' + search + '|' + typeFilter);
 
         container.innerHTML = list.map((m, i) => {
-            const delay    = Math.min(i * 0.04, 0.25);
+            const id       = Number(m.id);
             const isOpen   = this.openMemoryDetail === m.id;
             const pinLabel = m.pinned ? this.t('lbl-unpin') : this.t('lbl-pin');
-            if (m.type === 'relations') return this._renderRelCard(m, isOpen, delay, pinLabel, search, searchRaw);
+            if (m.type === 'relations') return this._renderRelCard(m, isOpen, Math.min(i, 8), pinLabel, search, searchRaw);
 
-            const typeLabel = this.t('type-' + m.type);
-            const typeCls   = 'mem-t-' + (this.MEMORY_TYPES.includes(m.type) ? m.type : 'other');
-            // v9.0 FIX: escape user-entered text before it goes into innerHTML.
-            const title = search ? Util.highlightMatch(Util.escHtml(m.title), searchRaw) : Util.escHtml(m.title);
-            const notes = m.notes ? (search ? Util.highlightMatch(Util.escHtml(m.notes), searchRaw) : Util.escHtml(m.notes)) : '';
-            // v9.5: start and (optional) end date as one labelled block: From -> To.
-            const dateBox = (lblKey, d) => `<div class="mem-date"><span class="mem-date-lbl">${this.t(lblKey)}</span><time class="mem-date-val" datetime="${Util.escHtml(d)}">${this.fmtDate(d)}</time></div>`;
+            const type     = this.MEMORY_TYPES.includes(m.type) ? m.type : 'other';
+            const title    = this._hl(m.title, search, searchRaw);
+            const notes    = m.notes ? this._hl(m.notes, search, searchRaw) : '';
+            // Start and (optional) end date as one labelled block: From → To.
+            const dateBox = (lblKey, d) => `<div class="mem-date"><span class="mem-date-lbl">${this.t(lblKey)}</span><time class="mem-date-val" datetime="${Util.escHtml(d)}">${Util.escHtml(this.fmtDate(d))}</time></div>`;
             const dates = (m.startDate || m.endDate) ? `
                 <div class="mem-dates${m.endDate ? ' has-end' : ''}">
                     ${m.startDate ? dateBox('mem-date-from', m.startDate) : ''}
@@ -963,86 +1059,83 @@ const diary = {
                     ${m.endDate ? dateBox('mem-date-to', m.endDate) : ''}
                 </div>` : '';
             return `
-            <div class="record-card mem-card ${typeCls} ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
-                ${m.pinned ? '<span class="pin-badge">📌</span>' : ''}
-                <div class="mem-top"><span class="mem-chip">${typeLabel}</span></div>
-                <div class="mem-title">${title}</div>
+            <div class="record-card mem-card mem-t-${type} ${m.pinned ? 'pinned' : ''}" style="--i:${Math.min(i, 8)}" role="button" tabindex="0" aria-expanded="${isOpen}" onclick="diary.toggleMemoryDetail(${id})">
+                ${m.pinned ? '<span class="pin-badge" aria-hidden="true">📌</span>' : ''}
+                <div class="mem-top"><span class="mem-chip">${this.t('type-' + type)}</span></div>
+                <h3 class="mem-title">${title}</h3>
                 ${dates}
                 ${notes ? `<div class="mem-notes${isOpen ? ' open' : ''}">${notes}</div>` : ''}
                 ${isOpen ? `
-                <div class="detail-panel" style="margin-top:14px;padding:0" onclick="event.stopPropagation()">
-                    <div class="flex gap-2 flex-wrap" style="padding:14px">
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">${this.t('lbl-edit')}</button>
-                        <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('memory',${m.id},event)">${pinLabel}</button>
-                        <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteMemory(${m.id},event)">${this.t('lbl-delete')}</button>
+                <div class="detail-panel" onclick="event.stopPropagation()">
+                    <div class="action-row">
+                        <button type="button" class="btn-ghost btn-sm" onclick="diary.editMemory(${id},event)">${this.t('lbl-edit')}</button>
+                        <button type="button" class="btn-ghost btn-sm" onclick="diary.togglePin('memory',${id},event)">${pinLabel}</button>
+                        <button type="button" class="btn-ghost btn-sm btn-danger" onclick="diary.deleteMemory(${id},event)">${this.t('lbl-delete')}</button>
                     </div>
                 </div>` : ''}
             </div>`;
         }).join('');
     },
 
-    _renderRelCard(m, isOpen, delay, pinLabel, search, searchRaw) {
-        const msPerDay = 86400000;
-        const endMs    = m.endDate ? new Date(m.endDate).getTime() : Date.now();
-        const days     = Math.max(1, Math.floor((endMs - new Date(m.startDate).getTime()) / msPerDay) + 1);
+    _renderRelCard(m, isOpen, idx, pinLabel, search, searchRaw) {
+        const id       = Number(m.id);
         const isEnded  = !!m.endDate;
+        // Whole local calendar days, inclusive. (Parsing 'YYYY-MM-DD' with new Date() would be UTC and
+        // miscount by a day depending on the timezone.)
+        const days     = m.startDate ? Math.max(1, Util.daysBetween(m.startDate, m.endDate || this.today()) + 1) : 1;
         const events   = m.events || [];
-        // v9.0 FIX: escape user-entered text before it goes into innerHTML.
-        const title       = search ? Util.highlightMatch(Util.escHtml(m.title), searchRaw) : Util.escHtml(m.title);
-        const notes       = m.notes ? (search ? Util.highlightMatch(Util.escHtml(m.notes), searchRaw) : Util.escHtml(m.notes)) : '';
-        const partnerName = m.partnerName ? (search ? Util.highlightMatch(Util.escHtml(m.partnerName), searchRaw) : Util.escHtml(m.partnerName)) : '';
+        const title       = this._hl(m.title, search, searchRaw);
+        const notes       = m.notes ? this._hl(m.notes, search, searchRaw) : '';
+        const partnerName = m.partnerName ? this._hl(m.partnerName, search, searchRaw) : '';
 
         const eventsHtml = events.length
-            ? events.map((ev, idx) => `
+            ? events.map((ev, i) => `
                 <div class="rel-event-item">
-                    <div class="rel-event-date">${this.fmtDate(ev.date)}</div>
+                    <div class="rel-event-date">${Util.escHtml(this.fmtDate(ev.date))}</div>
                     <div class="rel-event-desc">${Util.escHtml(ev.desc)}</div>
                     <div class="rel-event-actions">
-                        <button class="rel-event-btn" onclick="diary.showAddEvent(${m.id},${idx},event)">✏️</button>
-                        <button class="rel-event-btn" onclick="diary.deleteEvent(${m.id},${idx},event)">🗑️</button>
+                        <button type="button" class="rel-event-btn" aria-label="${Util.escHtml(this.t('lbl-edit'))}" onclick="diary.showAddEvent(${id},${i},event)">✏️</button>
+                        <button type="button" class="rel-event-btn" aria-label="${Util.escHtml(this.t('lbl-delete'))}" onclick="diary.deleteEvent(${id},${i},event)">🗑️</button>
                     </div>
                 </div>`).join('')
-            : `<div style="font-size:13px;color:var(--text-label);padding:6px 0">${this.t('lbl-no-events')}</div>`;
+            : `<div class="rel-empty">${this.t('lbl-no-events')}</div>`;
 
         return `
-        <div class="rel-card ${m.pinned ? 'pinned' : ''}" style="animation-delay:${delay}s" onclick="diary.toggleMemoryDetail(${m.id})">
-            ${m.pinned ? '<span class="pin-badge" style="position:absolute;top:12px;right:12px;z-index:2">📌</span>' : ''}
+        <div class="rel-card ${m.pinned ? 'pinned' : ''}" style="--i:${idx}" role="button" tabindex="0" aria-expanded="${isOpen}" onclick="diary.toggleMemoryDetail(${id})">
+            ${m.pinned ? '<span class="pin-badge pin-on-hero" aria-hidden="true">📌</span>' : ''}
             <div class="rel-card-header">
-                <div class="flex items-start justify-between gap-2">
-                    <div>
-                        <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.75;margin-bottom:4px">❤️ ${this.t('type-relations')}</div>
-                        <div style="font-size:20px;font-weight:900;font-family:'Syne',sans-serif">${title}</div>
-                        ${partnerName ? `<div style="font-size:14px;opacity:.85;margin-top:2px">👤 ${partnerName}</div>` : ''}
+                <div class="rel-top">
+                    <div class="rel-main">
+                        <div class="rel-kicker">${this.t('type-relations')}</div>
+                        <h3 class="rel-title">${title}</h3>
+                        ${partnerName ? `<div class="rel-partner">👤 ${partnerName}</div>` : ''}
                     </div>
-                    <div style="text-align:right;flex-shrink:0">
-                        <div style="font-size:28px;font-weight:900;line-height:1">${days}</div>
-                        <div style="font-size:11px;opacity:.75">${this.t('rel-days-together')}</div>
+                    <div class="rel-days">
+                        <div class="rel-days-num">${days}</div>
+                        <div class="rel-days-lbl">${this.t('rel-days-together')}</div>
                     </div>
                 </div>
-                <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-                    <span style="background:rgba(255,255,255,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">${this.t('rel-since')} ${this.fmtDate(m.startDate)}</span>
+                <div class="rel-chips">
+                    <span class="rel-chip">${this.t('rel-since')} ${Util.escHtml(this.fmtDate(m.startDate))}</span>
                     ${isEnded
-                        ? `<span style="background:rgba(0,0,0,0.2);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">💔 ${this.fmtDate(m.endDate)}</span>`
-                        : `<span style="background:rgba(255,255,255,0.15);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700">✨ ${this.t('rel-still-together')}</span>`
-                    }
+                        ? `<span class="rel-chip is-ended">💔 ${Util.escHtml(this.fmtDate(m.endDate))}</span>`
+                        : `<span class="rel-chip is-alive">✨ ${this.t('rel-still-together')}</span>`}
                 </div>
             </div>
             <div class="rel-card-body" onclick="event.stopPropagation()">
-                ${notes ? `<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;font-style:italic">"${notes}"</div>` : ''}
-                <div style="margin-bottom:10px">
-                    <div style="font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:8px">${this.t('lbl-events')}</div>
-                    ${eventsHtml}
-                </div>
-                <div class="flex gap-2 flex-wrap" style="margin-top:10px">
-                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.showAddEvent(${m.id},undefined,event)">${this.t('lbl-add-event')}</button>
-                    ${!isEnded ? `<button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.endRelations(${m.id},event)">${this.t('lbl-broke-up')}</button>` : ''}
+                ${notes ? `<div class="rel-note">${notes}</div>` : ''}
+                <div class="rel-events-title">${this.t('lbl-events')}</div>
+                ${eventsHtml}
+                <div class="action-row">
+                    <button type="button" class="btn-ghost btn-sm" onclick="diary.showAddEvent(${id},undefined,event)">${this.t('lbl-add-event')}</button>
+                    ${!isEnded ? `<button type="button" class="btn-ghost btn-sm btn-danger" onclick="diary.endRelations(${id},event)">${this.t('lbl-broke-up')}</button>` : ''}
                 </div>
                 ${isOpen ? `
                 <div class="divider"></div>
-                <div class="flex gap-2 flex-wrap">
-                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary._loadMemoryToForm(diary.memories.find(m=>m.id===${m.id}));diary.openMemoryDetail=null;diary.renderMemories()">${this.t('lbl-edit')}</button>
-                    <button class="btn-ghost" style="flex:1;min-width:0;font-size:13px" onclick="diary.togglePin('memory',${m.id},event)">${pinLabel}</button>
-                    <button class="btn-ghost btn-danger" style="flex:1;min-width:0;font-size:13px" onclick="diary.deleteMemory(${m.id},event)">${this.t('lbl-delete')}</button>
+                <div class="action-row">
+                    <button type="button" class="btn-ghost btn-sm" onclick="diary.editMemory(${id},event)">${this.t('lbl-edit')}</button>
+                    <button type="button" class="btn-ghost btn-sm" onclick="diary.togglePin('memory',${id},event)">${pinLabel}</button>
+                    <button type="button" class="btn-ghost btn-sm btn-danger" onclick="diary.deleteMemory(${id},event)">${this.t('lbl-delete')}</button>
                 </div>` : ''}
             </div>
         </div>`;
@@ -1163,7 +1256,7 @@ const diary = {
         if (!this.streakLog.includes(todayStr)) this.streakLog.push(todayStr);
         this.streakLog = this.streakLog.slice(-90); // cap growth; plenty for any heatmap view
 
-        this._saveStreak().catch(e => console.warn('[diary] streak save failed:', e));
+        this._saveStreak().catch(e => DBLog.warn('Streak', 'Streak could not be saved.', e));
         if (this.fireStreak > old) {
             const hdr = document.getElementById('fireStreakHeader');
             const emj = document.getElementById('fireEmoji');
@@ -1304,72 +1397,136 @@ const diary = {
         if (table) table.innerHTML = header + html;
     },
 
-    async init() {
-        try {
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.ready();
-                Telegram.WebApp.expand();
-            }
-        } catch(e) {}
-
-        StorageManager.init();
-        await this.load();
-        ActionLog.init().catch(e => console.warn('[diary] action log init failed:', e)); // never blocks startup
-
-        document.getElementById('noteForm').addEventListener('submit',   e => this.saveNote(e));
-        document.getElementById('habitForm').addEventListener('submit',  e => this.saveHabit(e));
-        document.getElementById('memoryForm').addEventListener('submit', e => this.saveMemory(e));
-        document.getElementById('eventForm').addEventListener('submit',  e => this.saveEvent(e));
-
-        // Task quick-add: Enter key support + iOS-safe click handler
-        const qi = document.getElementById('taskQuickInput');
-        if (qi) {
-            qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
-            // iOS Safari: also handle 'compositionend' for IME keyboards
-            qi.addEventListener('compositionend', () => { /* allow IME to settle */ });
+    // ---------- overlays: Escape, Telegram BackButton ----------
+    // Top-most first. Each entry: [element id, close function].
+    _overlayStack() {
+        return [
+            ['dataConfirmModal',      () => DataDialog.onCancel()],
+            ['customAchModal',        () => AchievementsUI.closeCustomForm()],
+            ['actionHistoryModal',    () => ActionHistoryUI.close()],
+            ['recoveryModal',         () => SidebarUI.closeRecoveryModal()],
+            ['deleteAccountModal',    () => SidebarUI.cancelDeleteAccount()],
+            ['achievementsModal',     () => AchievementsUI.close()],
+            ['calendarModal',         () => this.closeModals()],
+            ['streakCalendarModal',   () => this.closeModals()],
+            ['endHabitModal',         () => this.closeModals()],
+            ['endRelationsModal',     () => this.closeModals()],
+            ['eventModal',            () => this.closeModals()],
+            ['bottomSheet',           () => this.closeSheet()],
+            ['sidebarPanel',          () => SidebarUI.close()],
+        ];
+    },
+    _isOpen(id) { const el = document.getElementById(id); return !!el && el.classList.contains('open'); },
+    hasOpenOverlay() { return this._overlayStack().some(([id]) => this._isOpen(id)); },
+    /** Closes the top-most open overlay. @returns {boolean} whether anything was closed */
+    closeTopOverlay() {
+        const lock = document.getElementById('encryptionLock');
+        if (lock && lock.classList.contains('open')) return false; // lock screens are not dismissible
+        for (const [id, close] of this._overlayStack()) {
+            if (this._isOpen(id)) { close(); return true; }
         }
-        // Attach add button via JS (more reliable than inline onclick on iOS Safari)
-        const taskAddBtn = document.getElementById('taskAddBtn');
-        if (taskAddBtn) {
-            // Use both click and touchend for maximum iOS compatibility
-            taskAddBtn.addEventListener('click', e => { e.preventDefault(); TaskManager.quickAdd(); });
-            taskAddBtn.addEventListener('touchend', e => { e.preventDefault(); TaskManager.quickAdd(); }, { passive: false });
-        }
+        return false;
+    },
+    _syncBackButton() {
+        TGPlatform.setBackButton(this.hasOpenOverlay(), () => this.closeTopOverlay());
+    },
 
-        document.getElementById('clearAll').addEventListener('click', async () => {
-            if (!confirm(this.t('confirm-clear-all'))) return;
+    // ---------- app lifecycle ----------
+    /** Runs when the Mini App returns to the foreground. A backgrounded Mini App can stay alive across
+     *  midnight, so "today" is re-evaluated here — otherwise tasks (including ones carried over to
+     *  tomorrow) would stay hidden and the next save could overwrite them. */
+    _onResume() {
+        if (!this._inited) return;
+        if (this._tab === 'habits') this._startHabitTimers();
+        const now = this.today();
+        if (now !== this._lastToday) {
+            this._lastToday = now;
+            DBLog.info('App', 'A new day started. Refreshing today\'s data.');
+            TaskManager.onDateRollover().catch(e => DBLog.warn('Tasks', 'Could not refresh tasks for the new day.', e));
+            this.renderHabits();
+            this.updateFooter();
+        }
+    },
+
+    // ---------- one-time event wiring ----------
+    _bindEvents() {
+        if (this._inited) return;
+        this._inited = true;
+        const $ = (id) => document.getElementById(id);
+
+        $('noteForm').addEventListener('submit',   e => this.saveNote(e));
+        $('habitForm').addEventListener('submit',  e => this.saveHabit(e));
+        $('memoryForm').addEventListener('submit', e => this.saveMemory(e));
+        $('eventForm').addEventListener('submit',  e => this.saveEvent(e));
+
+        const qi = $('taskQuickInput');
+        if (qi) qi.addEventListener('keydown', e => TaskManager.onInputKeydown(e));
+        const taskAddBtn = $('taskAddBtn');
+        if (taskAddBtn) taskAddBtn.addEventListener('click', e => { e.preventDefault(); TaskManager.quickAdd(); });
+
+        $('clearAll').addEventListener('click', async () => {
+            if (!this.notes.length) return;
+            if (!(await this.ask('confirm-clear-all', { confirmKey: 'clear-all-txt' }))) return;
+            const prev = this.notes;
             this.notes = [];
-            await this.saveNotes();
+            if (!(await this.saveNotes())) { this.notes = prev; this.renderNotes(); this.updateFooter(); return; }
             this.toast(this.t('toast-all-deleted'));
         });
 
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', e => { if (e.target === overlay) this.closeModals(); });
+            overlay.addEventListener('click', e => { if (e.target === overlay) this.closeTopOverlay(); });
         });
 
-        const sheet = document.getElementById('bottomSheet');
+        // Swipe down on the bottom sheet to dismiss it (only from the top of its scroll position).
+        const sheet = $('bottomSheet');
         let sheetStartY = 0;
         sheet.addEventListener('touchstart', e => { sheetStartY = e.touches[0].clientY; }, { passive: true });
-        sheet.addEventListener('touchend', e => { if (e.changedTouches[0].clientY - sheetStartY > 60) this.closeSheet(); }, { passive: true });
+        sheet.addEventListener('touchend', e => {
+            if (sheet.scrollTop <= 0 && e.changedTouches[0].clientY - sheetStartY > 60) this.closeSheet();
+        }, { passive: true });
 
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') {
-                this.closeModals(); this.closeSheet();
-                SidebarUI.close(); AchievementsUI.close();
-                ActionHistoryUI.close(); DataDialog.onCancel();
+            if (e.key === 'Escape') { this.closeTopOverlay(); return; }
+            // Cards are role="button" divs: make Enter / Space behave like a click when the card itself is focused.
+            if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.matches && e.target.matches('.record-card, .rel-card, .sheet-option, .sidebar-item, .lock-link')) {
+                e.preventDefault(); e.target.click();
             }
         });
 
+        // Menu rows are clickable divs: expose them to keyboards and assistive tech as buttons.
+        document.querySelectorAll('.sheet-option, .sidebar-item, .lock-link').forEach(el => { el.setAttribute('role', 'button'); el.tabIndex = 0; });
+
+        // Keep Telegram's native BackButton in step with whatever overlay is open.
+        const observer = new MutationObserver(() => this._syncBackButton());
+        this._overlayStack().forEach(([id]) => { const el = $(id); if (el) observer.observe(el, { attributes: true, attributeFilter: ['class'] }); });
+
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') this._stopHabitTimers(); });
+        TGPlatform.onResume(() => this._onResume());
+        TGPlatform.onThemeChanged(() => {
+            const cs = TGPlatform.colorScheme();
+            if (!this._themeExplicit && cs) this.applyTheme(cs === 'dark' ? 'dark' : 'orange', { silent: true });
+        });
+    },
+
+    /** Entry point after unlock. Safe to call more than once (e.g. after "start fresh"): data is
+     *  reloaded every time, but event listeners are attached only once. */
+    async init() {
+        TGPlatform.initApp(); // normally done at boot; idempotent
+        StorageManager.init();
+        await this.load();
+        this._lastToday = this.today();
+        ActionLog.init().catch(e => DBLog.warn('ActionLog', 'Action history could not be loaded.', e)); // never blocks startup
+        this._bindEvents();
+
         const todayStr = this.today();
-        document.getElementById('habitStartDate').value  = todayStr;
-        document.getElementById('memoryStartDate').value = todayStr;
-        document.getElementById('eventDate').value       = todayStr;
+        ['habitStartDate', 'memoryStartDate', 'eventDate'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el && !el.value) el.value = todayStr;
+        });
 
         SidebarUI.init();
         AchievementsUI.init();
-
-        console.log('%c✅ DailyBookimix v9.3 — Day streak freezes, light design polish', 'color:#ff8c42;font-weight:900;font-size:16px');
+        this.switchTab(this._tab);
+        this._syncBackButton();
     }
 };
-
-
